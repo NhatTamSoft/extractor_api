@@ -12,16 +12,13 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from app.services.db_service import DatabaseService
 
-# Load biến môi trường từ file .env
 load_dotenv()
 
 router = APIRouter()
 
-# Cấu hình API keys từ biến môi trường
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 openai_api_key = os.getenv('OPENAI_API_KEY')
 
-# Khởi tạo models
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 client = OpenAI(api_key=openai_api_key)
 
@@ -30,7 +27,7 @@ FIELD_MAPPING = {
     'vanBanCode': 'Mã định danh văn bản',
     'sttHoSoLuuTrupr_sd': 'Mã hồ sơ',
     'sttDuAnpr_sd': 'Mã cơ quan lưu trữ lịch sử',
-    'sttPhongLuuTrupr_sd': 'Mã phòng/công trình/sưu tập lưu trữ',
+    'maPhongLuuTru': 'Mã phòng/công trình/sưu tập lưu trữ',
     'mucLucSoNSD': 'Mục lục sổ hoặc năm hình thành hồ sơ',
     'soVaKyHieuHS': 'Số và ký hiệu hồ sơ',
     'soTTVBTrongHS': 'Số thứ tự văn bản trong hồ sơ',
@@ -81,27 +78,22 @@ def convert_date_for_sql(input_date: str) -> str:
 async def extract_image(file: UploadFile = File(...)):
     temp_file_path = None
     try:
-        # Kiểm tra file type
         if not file.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File phải là định dạng ảnh")
 
-        # Tạo thư mục tạm nếu chưa tồn tại
         temp_dir = os.getenv('TEMP_DIR', 'temp')
         os.makedirs(temp_dir, exist_ok=True)
         
-        # Lưu file tạm thời
         temp_file_path = os.path.join(temp_dir, file.filename)
         with open(temp_file_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
 
-        # Đọc ảnh và chuyển đổi sang base64
         with Image.open(temp_file_path) as img:
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
 
-        # Prompt cho AI
         promptText = """
         # Yêu cầu:
         Bạn sẽ nhận một hình ảnh chứa văn bản hành chính (có thể là Quyết định, Công văn, Thông tư, ...). Hãy đọc **chính xác 100% nội dung theo từng dòng từ trái sang phải** của tài liệu.
@@ -127,13 +119,11 @@ async def extract_image(file: UploadFile = File(...)):
         - Luôn trả về định dạng với ngôn ngữ là tiếng việt
         """
 
-        # Gửi ảnh cho AI phân tích
         response = model.generate_content([
             {'mime_type': 'image/png', 'data': img_str},
             promptText
         ])
 
-        # Lấy dữ liệu số hóa từ AI
         duLieuSoHoa = chat_with_openai_json(
             """Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước hãy giúp tôi thực hiện nhiệm vụ sau:
             - Bước 1: Đọc toàn bộ **Dữ liệu về hồ sơ quyết toán** bên dưới
@@ -166,18 +156,15 @@ async def extract_image(file: UploadFile = File(...)):
             + Nếu các thông tin ở đầu ra tôi yêu cầu mà bạn không tìm thấy cứ việc trả về giá trị là chuỗi rỗng `""`
             """)
 
-        # Parse kết quả trả về từ AI
         try:
             data_json = json.loads(duLieuSoHoa)
             thong_tin_chung = data_json.get("ThongTinChung", {})
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
 
-        # Map dữ liệu vào dict chuẩn theo FIELD_MAPPING
         mapped_data = {}
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Map các trường từ AI và các giá trị mặc định
         mapping_rules = {
             'TieuDeHoSo': ('trichYeu', lambda x: x),
             'SoVaKyHieu': ('soVaKyHieuHS', lambda x: x),
@@ -188,7 +175,7 @@ async def extract_image(file: UploadFile = File(...)):
             'ChucVuNguoiKy': ('ghiChu', lambda x: x),
             'NgonNgu': ('maNgonNgupr_sd', lambda x: x),
             'MaHoSo': ('sttHoSoLuuTrupr_sd', lambda x: x),
-            'TongSoTrang': ('soLuongTrang', lambda x: "1"),  # Ảnh chỉ có 1 trang
+            'TongSoTrang': ('soLuongTrang', lambda x: "1"), 
             'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4())),
             'VanBanCode': ('vanBanCode', lambda x: f"VB_{datetime.now().strftime('%Y%m%d%H%M%S')}"),
             'NgayThaoTac': ('ngayThaoTac', lambda x: current_time),
@@ -196,19 +183,16 @@ async def extract_image(file: UploadFile = File(...)):
             'DinhKem': ('dinhKem', lambda x: file.filename),
         }
 
-        # Áp dụng các quy tắc mapping
         for ai_field, (db_field, transform_func) in mapping_rules.items():
             if ai_field in thong_tin_chung:
                 mapped_data[db_field] = transform_func(thong_tin_chung[ai_field])
             else:
                 mapped_data[db_field] = transform_func(None)
 
-        # Đảm bảo tất cả các trường trong FIELD_MAPPING đều có mặt trong dict trả về
         for db_field in FIELD_MAPPING.keys():
             if db_field not in mapped_data:
                 mapped_data[db_field] = ""
 
-        # Thêm dữ liệu vào database
         db_result = await DatabaseService.insert_ho_so_luu_tru(mapped_data)
         
         if not db_result["success"]:
@@ -217,7 +201,6 @@ async def extract_image(file: UploadFile = File(...)):
                 error_msg += f"\nChi tiết lỗi: {db_result['error_details']}"
             raise HTTPException(status_code=500, detail=error_msg)
 
-        # Xóa file tạm
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
@@ -228,7 +211,6 @@ async def extract_image(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        # Xóa file tạm nếu có lỗi
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
         raise HTTPException(status_code=500, detail=str(e)) 

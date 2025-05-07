@@ -1,5 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import List, Dict, Any
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 import os
 import google.generativeai as genai
 import base64
@@ -33,7 +34,7 @@ FIELD_MAPPING = {
     'vanBanCode': 'Mã định danh văn bản',
     'sttHoSoLuuTrupr_sd': 'Mã hồ sơ',
     'sttDuAnpr_sd': 'Mã cơ quan lưu trữ lịch sử',
-    'sttPhongLuuTrupr_sd': 'Mã phòng/công trình/sưu tập lưu trữ',
+    'maPhongLuuTru': 'Mã phòng/công trình/sưu tập lưu trữ',
     'mucLucSoNSD': 'Mục lục sổ hoặc năm hình thành hồ sơ',
     'soVaKyHieuHS': 'Số và ký hiệu hồ sơ',
     'soTTVBTrongHS': 'Số thứ tự văn bản trong hồ sơ',
@@ -141,8 +142,14 @@ def convert_date_for_sql(input_date: str) -> str:
     except (ValueError, TypeError):
         return ""
 
+class PDFExtractRequest(BaseModel):
+    pages: Optional[List[int]] = None
+
 @router.post("/pdf_extract")
-async def extract_pdf(file: UploadFile = File(...)):
+async def extract_pdf(
+    file: UploadFile = File(...),
+    pages: Optional[List[int]] = Query(None, description="Danh sách các trang cần đọc trong file PDF")
+):
     temp_file_path = None
     try:
         temp_dir = os.getenv('TEMP_DIR', 'temp')
@@ -153,7 +160,20 @@ async def extract_pdf(file: UploadFile = File(...)):
             content = await file.read()
             buffer.write(content)
 
-        dataORC, total_pages = readTextFromPdf(temp_file_path, pages={1,2,3})
+        doc = fitz.open(temp_file_path)
+        total_pages = len(doc)
+        doc.close()
+
+        pages_to_read = None
+        if total_pages <= 3:
+            pages_to_read = set(range(1, total_pages + 1))
+        else:
+            if pages:
+                pages_to_read = set(pages)
+            else:
+                pages_to_read = {1, 2, 3}
+
+        dataORC, total_pages = readTextFromPdf(temp_file_path, pages=pages_to_read)
 
         duLieuSoHoa = chat_with_openai_json(
             """Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước hãy giúp tôi thực hiện nhiệm vụ sau:
@@ -162,7 +182,7 @@ async def extract_pdf(file: UploadFile = File(...)):
             ```
             """ + dataORC + """
             ```
-            - Bước 2: Suy luận toàn bộ **Dữ liệu hồ sơ quyết toán** và đảm bảo hiểu được chứng từ
+            - Bước 2: Suy luận toàn bộ **Dữ liệu hồ sơ quyết toán** và đảm bảo hiểu được nội dung
             - Bước 3: Trích xuất thông tin dưới định dạng JSON theo cấu trúc ở (Bước 4)
             - Bước 4: Chỉ xuất JSON, không giải thích (không định dạng markdown):
             ```
@@ -224,7 +244,6 @@ async def extract_pdf(file: UploadFile = File(...)):
             if db_field not in mapped_data:
                 mapped_data[db_field] = ""
 
-        # Thêm dữ liệu vào database
         db_result = await DatabaseService.insert_ho_so_luu_tru(mapped_data)
         
         if not db_result["success"]:
@@ -239,7 +258,9 @@ async def extract_pdf(file: UploadFile = File(...)):
         return {
             "success": True,
             "data": mapped_data,
-            "db_result": db_result
+            "db_result": db_result,
+            "total_pages": total_pages,
+            "pages_read": list(pages_to_read)
         }
 
     except Exception as e:
@@ -251,7 +272,6 @@ async def extract_pdf(file: UploadFile = File(...)):
 async def test_db_query():
     try:
         db = next(get_db())
-        # Thực hiện câu truy vấn test đơn giản
         result = db.execute(text("SELECT 1")).scalar()
         if result == 1:
             return {
