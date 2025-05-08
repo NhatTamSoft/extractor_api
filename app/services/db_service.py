@@ -45,6 +45,8 @@ class DatabaseService:
                     # Các trường khác giữ nguyên
                     processed_data[key] = value if value else None
             
+            processed_data['soHoaVanBan'] = 1
+            
             # Log dữ liệu trước khi insert
             logger.info(f"Preparing to insert data with keys: {list(processed_data.keys())}")
             

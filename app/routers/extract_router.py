@@ -64,64 +64,69 @@ FIELD_MAPPING = {
 
 def readTextFromPdf(file_path: str, pages: set = None) -> tuple:
     all_text = ""
-    doc = fitz.open(file_path)
-    total_pages = len(doc)
+    doc = None
+    try:
+        doc = fitz.open(file_path)
+        total_pages = len(doc)
 
-    if pages is None:
-        pages = {1, 2, 3}
+        if pages is None:
+            pages = {1, 2, 3}
 
-    text_found = False
+        text_found = False
 
-    for page_num in pages:
-        if 1 <= page_num <= total_pages:
-            page = doc.load_page(page_num - 1)
-            page_text = page.get_text("text")
-            if page_text:
-                text_found = True
-                all_text += page_text + "\n"
-
-    if not text_found:
         for page_num in pages:
             if 1 <= page_num <= total_pages:
-                page = doc[page_num - 1]
-                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
-                img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
-                buffered = BytesIO()
-                img.save(buffered, format="PNG")
-                img_str = base64.b64encode(buffered.getvalue()).decode()
+                page = doc.load_page(page_num - 1)
+                page_text = page.get_text("text")
+                if page_text:
+                    text_found = True
+                    all_text += page_text + "\n"
 
-                promptText = """
-                # Yêu cầu:
-                Bạn sẽ nhận một file PDF chứa văn bản hành chính (có thể là Quyết định, Công văn, Thông tư, ...). Hãy đọc **chính xác 100% nội dung theo từng dòng từ trái sang phải** của tài liệu.
+        if not text_found:
+            for page_num in pages:
+                if 1 <= page_num <= total_pages:
+                    page = doc[page_num - 1]
+                    pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                    img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
+                    buffered = BytesIO()
+                    img.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
 
-                ## I. Thông tin cần trích xuất (theo từng trường):
-                1. TieuDeHoSo: Tóm tắt ngắn gọn nội dung chính
-                2. SoVaKyHieu: Số và ký hiệu chính thức
-                3. LoaiVanBan: Quyết định, Công văn, Thông tư, Nghị định,...
-                4. NgayVanBan: Ngày ban hành (dd/mm/yyyy)
-                5. CoQuanBanHanh: Tên cơ quan, tổ chức ban hành
-                6. HoTenNguoiKy: Họ và tên đầy đủ người ký
-                7. ChucVuNguoiKy: Chức danh người ký (ví dụ: Giám đốc, Trưởng phòng,...).
-                Lưu ý: Nếu văn bản có ghi "Chủ đầu tư" thì KHÔNG coi là chức danh, mà là vai trò pháp lý trong dự án.
-                Khi đó, ChucVuNguoiKy sẽ là chức vụ theo sau vai trò pháp lý đó.
-                8. NgonNgu: Ngôn ngữ chính của văn bản
-                9. MaHoSo: Mã hồ sơ chứa văn bản
-                10. TongSoTrang: Tổng số trang trong văn bản
-                11. GhiChu: Các thông tin bổ sung khác (nếu có)
+                    promptText = """
+                    # Yêu cầu:
+                    Bạn sẽ nhận một file PDF chứa văn bản hành chính (có thể là Quyết định, Công văn, Thông tư, ...). Hãy đọc **chính xác 100% nội dung theo từng dòng từ trái sang phải** của tài liệu.
 
-                ## II. Định dạng kết quả:
-                - Trả kết quả dưới dạng **JSON** với các key như trên
-                - Nếu không đọc được trường nào, để trống hoặc ghi ""
-                - Luôn trả về định dạng với ngôn ngữ là tiếng việt
-                """
+                    ## I. Thông tin cần trích xuất (theo từng trường):
+                    1. TieuDeHoSo: Tóm tắt ngắn gọn nội dung chính
+                    2. SoVaKyHieu: Số và ký hiệu chính thức
+                    3. LoaiVanBan: Quyết định, Công văn, Thông tư, Nghị định,...
+                    4. NgayVanBan: Ngày ban hành (dd/mm/yyyy)
+                    5. CoQuanBanHanh: Tên cơ quan, tổ chức ban hành
+                    6. HoTenNguoiKy: Họ và tên đầy đủ người ký
+                    7. ChucVuNguoiKy: Chức danh người ký (ví dụ: Giám đốc, Trưởng phòng,...).
+                    Lưu ý: Nếu văn bản có ghi "Chủ đầu tư" thì KHÔNG coi là chức danh, mà là vai trò pháp lý trong dự án.
+                    Khi đó, ChucVuNguoiKy sẽ là chức vụ theo sau vai trò pháp lý đó.
+                    8. NgonNgu: Ngôn ngữ chính của văn bản
+                    9. MaHoSo: Mã hồ sơ chứa văn bản
+                    10. TongSoTrang: Tổng số trang trong văn bản
+                    11. GhiChu: Các thông tin bổ sung khác (nếu có)
 
-                response = model.generate_content([
-                    {'mime_type': 'image/png', 'data': img_str},
-                    promptText
-                ])
-                all_text += response.text + "\n"
+                    ## II. Định dạng kết quả:
+                    - Trả kết quả dưới dạng **JSON** với các key như trên
+                    - Nếu không đọc được trường nào, để trống hoặc ghi ""
+                    - Luôn trả về định dạng với ngôn ngữ là tiếng việt
+                    """
 
-    return all_text, total_pages
+                    response = model.generate_content([
+                        {'mime_type': 'image/png', 'data': img_str},
+                        promptText
+                    ])
+                    all_text += response.text + "\n"
+
+        return all_text, total_pages
+    finally:
+        if doc:
+            doc.close()  # Đảm bảo đóng file PDF trong mọi trường hợp
 
 def chat_with_openai_json(prompt: str) -> str:
     response = client.chat.completions.create(
@@ -223,8 +228,8 @@ async def extract_pdf(
             'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
             'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
             'HoTenNguoiKy': ('nguoiKy', lambda x: x),
-            'ChucVuNguoiKy': ('ghiChu', lambda x: x),
-            'NgonNgu': ('maNgonNgupr_sd', lambda x: x),
+            'ChucVuNguoiKy': ('ghiChu', lambda x: ""),
+            'NgonNgu': ('maNgonNgupr_sd', lambda x: "01"),
             'MaHoSo': ('sttHoSoLuuTrupr_sd', lambda x: x),
             'TongSoTrang': ('soLuongTrang', lambda x: str(total_pages)),
             'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4())),
