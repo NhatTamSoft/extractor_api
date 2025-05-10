@@ -117,6 +117,21 @@ async def extract_image(file: UploadFile = File(...)):
         - Trả kết quả dưới dạng **JSON** với các key như trên
         - Nếu không đọc được trường nào, để trống hoặc ghi ""
         - Luôn trả về định dạng với ngôn ngữ là tiếng việt
+
+        Ngoài các bảng dữ liệu, nếu trong tài liệu có các thông tin được trình bày dưới dạng danh sách (mỗi dòng là một trường thông tin, ví dụ:
+        - Tên trường : Giá trị
+        - Tên trường 1 : Giá trị 1
+        - Tên trường 2 : Giá trị 2
+        ...), hãy trích xuất toàn bộ các trường này thành các cặp key-value trong JSON, với key là tên trường (bỏ dấu hai chấm và khoảng trắng), value là giá trị tương ứng.
+
+        Nếu có nhiều trường, hãy gom tất cả vào một object JSON, ví dụ:
+        {
+          "ChiPhiXayDung": "1.505.489.920 đồng",
+          "ChiPhiThietBi": "400.000.000 đồng",
+          "ChiPhiQuanLyDuAn": "60.799.243 đồng"
+        }
+
+        Nếu không có trường nào, để object rỗng {}.
         """
 
         response = model.generate_content([
@@ -193,6 +208,8 @@ async def extract_image(file: UploadFile = File(...)):
             if db_field not in mapped_data:
                 mapped_data[db_field] = ""
 
+        # Tạm thời ẩn code lưu database
+        """
         db_result = await DatabaseService.insert_ho_so_luu_tru(mapped_data)
         
         if not db_result["success"]:
@@ -200,6 +217,7 @@ async def extract_image(file: UploadFile = File(...)):
             if 'error_details' in db_result:
                 error_msg += f"\nChi tiết lỗi: {db_result['error_details']}"
             raise HTTPException(status_code=500, detail=error_msg)
+        """
 
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
@@ -207,7 +225,7 @@ async def extract_image(file: UploadFile = File(...)):
         return {
             "success": True,
             "data": mapped_data,
-            "db_result": db_result
+            # "db_result": db_result  # Tạm thời ẩn kết quả lưu database
         }
 
     except Exception as e:

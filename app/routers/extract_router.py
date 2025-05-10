@@ -115,6 +115,46 @@ def readTextFromPdf(file_path: str, pages: set = None) -> tuple:
                     - Trả kết quả dưới dạng **JSON** với các key như trên
                     - Nếu không đọc được trường nào, để trống hoặc ghi ""
                     - Luôn trả về định dạng với ngôn ngữ là tiếng việt
+
+                    ## III. Xử lý dữ liệu dạng bảng:
+                    Nếu tài liệu có bảng dữ liệu (ví dụ: bảng phân công công việc, bảng dự toán...), hãy trích xuất theo quy tắc sau:
+                    1. Đọc và xác định chính xác tiêu đề các cột trong bảng
+                    2. Trích xuất dữ liệu theo từng dòng, mỗi dòng là một object trong mảng DataTable
+                    3. Đặt tên key theo quy tắc:
+                       - Chuyển tiêu đề cột thành dạng camelCase
+                       - Loại bỏ dấu và ký tự đặc biệt
+                       - Thay thế khoảng trắng bằng chữ cái viết hoa
+                       - Ví dụ: "Số thứ tự" -> "soThuTu", "Tên công việc" -> "tenCongViec"
+                    4. Giữ nguyên định dạng và đơn vị của dữ liệu gốc
+                    5. Nếu có nhiều bảng, trích xuất riêng biệt và đánh số thứ tự
+
+                    Ví dụ kết quả:
+                    {
+                      "Data": {
+                        "TieuDeHoSo": "Quyết định phê duyệt dự toán",
+                        ...
+                      },
+                      "DataTable": [
+                        {
+                            "soThuTu": "1",
+                            "noiDung": "Chi phí xây dựng",
+                            "soTien": "2.411.711.306 đồng",
+                            "ghiChu": "Theo dự toán"
+                        },
+                        {
+                            "soThuTu": "2",
+                            "noiDung": "Chi phí thiết bị",
+                            "soTien": "250.000.000 đồng",
+                            "ghiChu": "Theo dự toán"
+                        }
+                      ]
+                    }
+
+                    Lưu ý:
+                    - Nếu không có bảng dữ liệu, trả về "DataTable": []
+                    - Đảm bảo giữ nguyên định dạng số và đơn vị tiền tệ
+                    - Nếu có dấu phân cách hàng nghìn, giữ nguyên định dạng
+                    - Nếu có ghi chú hoặc chú thích, thêm vào trường tương ứng
                     """
 
                     response = model.generate_content([
@@ -126,7 +166,7 @@ def readTextFromPdf(file_path: str, pages: set = None) -> tuple:
         return all_text, total_pages
     finally:
         if doc:
-            doc.close()  # Đảm bảo đóng file PDF trong mọi trường hợp
+            doc.close()  
 
 def chat_with_openai_json(prompt: str) -> str:
     response = client.chat.completions.create(
@@ -181,7 +221,8 @@ async def extract_pdf(
         dataORC, total_pages = readTextFromPdf(temp_file_path, pages=pages_to_read)
 
         duLieuSoHoa = chat_with_openai_json(
-            """Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước hãy giúp tôi thực hiện nhiệm vụ sau:
+            """
+            Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước hãy giúp tôi thực hiện nhiệm vụ sau:
             - Bước 1: Đọc toàn bộ **Dữ liệu về hồ sơ quyết toán** bên dưới
             **Dữ liệu hồ sơ quyết toán**
             ```
@@ -192,7 +233,7 @@ async def extract_pdf(
             - Bước 4: Chỉ xuất JSON, không giải thích (không định dạng markdown):
             ```
             {
-              "ThongTinChung": {
+              "Data": {
                 "TieuDeHoSo": "Tóm tắt ngắn gọn nội dung chính của văn bản hoặc hồ sơ.",
                 "SoVaKyHieu": "Số và ký hiệu chính thức của văn bản.",
                 "LoaiVanBan": "Ví dụ: Quyết định, Công văn, Thông tư, Nghị định,...",
@@ -204,17 +245,43 @@ async def extract_pdf(
                 "MaHoSo": "Mã của hồ sơ chứa văn bản đó.",
                 "TongSoTrang": "Số lượng trang của văn bản gốc.",
                 "GhiChu": "Các thông tin bổ sung cần thiết khác."
-              }
+              },
+              "DataTable": [
+                    {
+                        "stt": 1,
+                        "hangMucChiPhi": "Chi phí xây dựng",
+                        "daPheDuyetDong": "2.411.711.306",
+                        "sauDieuChinhDong": "2.363.470.000",
+                        "tangGiam": "-48.241.306",
+                        "ghiChu": ""
+                    },
+                    {
+                        "stt": 2,
+                        "hangMucChiPhi": "Chi phí thiết bị",
+                        "daPheDuyetDong": "250.000.000",
+                        "sauDieuChinhDong": "292.000.000",
+                        "tangGiam": "+42.000.000",
+                        "ghiChu": ""
+                    },
+                ]
             }
             ```
             **Lưu ý:**
-            + Không định dạng markdown
+            + Nếu không có bảng dữ liệu, trả về "DataTable": []
             + Nếu các thông tin ở đầu ra tôi yêu cầu mà bạn không tìm thấy cứ việc trả về giá trị là chuỗi rỗng `""`
-            """)
+            + Xác định chính xác bảng dữ liệu trong ảnh hoặc PDF.
+            + Tự động nhận diện hàng tiêu đề (header) của bảng, sử dụng nguyên văn tiêu đề cột làm key cho JSON.
+            + Xác định chính xác số dòng số cột của mỗi bảng biểu để hiển thị Số thứ tự(STT) cho đầy đủ tránh bị mất nội dung.
+            + Trích xuất tất cả các hàng trong bảng (kể cả hàng "Tổng cộng" nếu có).
+            + Đảm bảo tất cả các bảng số liệu đều được gộp chung một bảng, nếu nội dung cùng ý nghĩa thì gộp lại cùng một dòng(example: chi phí quản lý dự án hay chi phí QLDA đều mang cùng một ý nghĩa) và kèm theo cột ghiChu về nội dung gộp nhé.
+            + Trả về kết quả ở dạng danh sách JSON (List<Object>), trong đó mỗi object là một dòng dữ liệu, **key là chính xác nội dung tiêu đề của từng cột** (giữ nguyên cấu trúc example: nguồn vốn -> nguonVon).
+            """
+        )
 
         try:
             data_json = json.loads(duLieuSoHoa)
-            thong_tin_chung = data_json.get("ThongTinChung", {})
+            thong_tin_chung = data_json.get("Data", {})
+            data_table = data_json.get("DataTable", [])
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
 
@@ -249,6 +316,8 @@ async def extract_pdf(
             if db_field not in mapped_data:
                 mapped_data[db_field] = ""
 
+        # Tạm thời ẩn code lưu database
+        """
         db_result = await DatabaseService.insert_ho_so_luu_tru(mapped_data)
         
         if not db_result["success"]:
@@ -256,6 +325,7 @@ async def extract_pdf(
             if 'error_details' in db_result:
                 error_msg += f"\nChi tiết lỗi: {db_result['error_details']}"
             raise HTTPException(status_code=500, detail=error_msg)
+        """
 
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
@@ -263,7 +333,8 @@ async def extract_pdf(
         return {
             "success": True,
             "data": mapped_data,
-            "db_result": db_result,
+            "dataTable": data_table,
+            # "db_result": db_result,  # Tạm thời ẩn kết quả lưu database
             "total_pages": total_pages,
             "pages_read": list(pages_to_read)
         }
@@ -291,3 +362,167 @@ async def test_db_query():
         }
     finally:
         db.close()
+
+class MultiPDFExtractRequest(BaseModel):
+    pages: Optional[List[int]] = None
+
+@router.post("/pdf_extract_multi")
+async def extract_multiple_pdfs(
+    files: List[UploadFile] = File(...),
+    pages: Optional[List[int]] = Query(None, description="Danh sách các trang cần đọc trong file PDF")
+):
+    if len(files) < 2:
+        raise HTTPException(status_code=400, detail="Yêu cầu tối thiểu 2 file PDF để so sánh")
+    
+    temp_files = []
+    all_data = []
+    try:
+        temp_dir = os.getenv('TEMP_DIR', 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Process each file
+        for file in files:
+            temp_file_path = os.path.join(temp_dir, file.filename)
+            temp_files.append(temp_file_path)
+            
+            with open(temp_file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+            doc = fitz.open(temp_file_path)
+            total_pages = len(doc)
+            doc.close()
+
+            pages_to_read = None
+            if total_pages <= 3:
+                pages_to_read = set(range(1, total_pages + 1))
+            else:
+                if pages:
+                    pages_to_read = set(pages)
+                else:
+                    pages_to_read = {1, 2, 3}
+
+            dataORC, total_pages = readTextFromPdf(temp_file_path, pages=pages_to_read)
+            all_data.append({
+                "filename": file.filename,
+                "content": dataORC,
+                "total_pages": total_pages,
+                "pages_read": list(pages_to_read)
+            })
+
+        # Combine all data for comparison
+        combined_prompt = """
+        Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước. Hãy phân tích và gộp nội dung từ các văn bản sau:
+
+        {}
+
+        Yêu cầu:
+        1. Phân tích và gộp thông tin chung:
+           - Lấy thông tin mới nhất từ các văn bản (ngày ban hành, số hiệu, người ký...)
+           - Tổng hợp nội dung chung của các văn bản
+           - Nếu có sự khác biệt về thông tin, ưu tiên thông tin mới nhất
+
+        2. Xử lý bảng biểu chi phí:
+           - Gộp tất cả các bảng biểu chi phí từ các văn bản
+           - Nếu có cùng hạng mục chi phí, gộp lại thành một dòng
+           - Tính toán tổng hợp số liệu:
+             + Nếu là chi phí đã phê duyệt: lấy số liệu mới nhất
+             + Nếu là chi phí sau điều chỉnh: lấy số liệu mới nhất
+             + Tính toán lại số tiền tăng/giảm dựa trên số liệu mới
+           - Thêm ghi chú nếu có sự thay đổi về số liệu giữa các văn bản
+
+        3. Quy tắc gộp bảng biểu:
+           - Gộp các hạng mục có tên tương tự (ví dụ: "Chi phí quản lý dự án" và "Chi phí QLDA")
+           - Giữ nguyên cấu trúc cột của bảng biểu
+           - Thêm cột ghi chú để giải thích nguồn gốc số liệu
+           - Sắp xếp các hạng mục theo thứ tự logic
+
+        Trả về kết quả theo định dạng JSON sau:
+        {{
+            "Data": {{
+                "TieuDeHoSo": "Tóm tắt nội dung chung của các văn bản",
+                "SoVaKyHieu": "Số và ký hiệu của văn bản mới nhất",
+                "LoaiVanBan": "Loại văn bản chung",
+                "NgayVanBan": "Ngày ban hành mới nhất",
+                "CoQuanBanHanh": "Cơ quan ban hành",
+                "HoTenNguoiKy": "Người ký văn bản mới nhất",
+                "ChucVuNguoiKy": "Chức vụ người ký",
+                "NgonNgu": "Ngôn ngữ văn bản",
+                "MaHoSo": "Mã hồ sơ",
+                "TongSoTrang": "Tổng số trang",
+                "GhiChu": "Ghi chú về việc gộp văn bản"
+            }},
+            "DataTable": [
+                {{
+                    "stt": 1,
+                    "hangMucChiPhi": "Tên hạng mục (đã gộp)",
+                    "daPheDuyetDong": "Số tiền đã phê duyệt mới nhất",
+                    "sauDieuChinhDong": "Số tiền sau điều chỉnh mới nhất",
+                    "tangGiam": "Số tiền tăng/giảm được tính lại",
+                    "ghiChu": "Ghi chú về nguồn gốc và thay đổi số liệu"
+                }}
+            ]
+        }}
+
+        Lưu ý quan trọng:
+        1. Ưu tiên số liệu mới nhất từ các văn bản
+        2. Gộp các hạng mục tương tự để tránh trùng lặp
+        3. Tính toán lại số tiền tăng/giảm dựa trên số liệu mới
+        4. Thêm ghi chú rõ ràng về nguồn gốc số liệu
+        5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
+        """.format("\n\n".join([f"Văn bản {i+1} ({data['filename']}):\n{data['content']}" for i, data in enumerate(all_data)]))
+
+        duLieuSoHoa = chat_with_openai_json(combined_prompt)
+
+        try:
+            data_json = json.loads(duLieuSoHoa)
+            thong_tin_chung = data_json.get("Data", {})
+            data_table = data_json.get("DataTable", [])
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
+
+        mapped_data = {}
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        mapping_rules = {
+            'TieuDeHoSo': ('trichYeu', lambda x: x),
+            'SoVaKyHieu': ('soVaKyHieuHS', lambda x: x),
+            'LoaiVanBan': ('maLoaiVBanpr', lambda x: x),
+            'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
+            'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
+            'HoTenNguoiKy': ('nguoiKy', lambda x: x),
+            'ChucVuNguoiKy': ('ghiChu', lambda x: ""),
+            'NgonNgu': ('maNgonNgupr_sd', lambda x: "01"),
+            'MaHoSo': ('sttHoSoLuuTrupr_sd', lambda x: x),
+            'TongSoTrang': ('soLuongTrang', lambda x: str(sum(d['total_pages'] for d in all_data))),
+            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4())),
+            'VanBanCode': ('vanBanCode', lambda x: f"VB_{datetime.now().strftime('%Y%m%d%H%M%S')}"),
+            'NgayThaoTac': ('ngayThaoTac', lambda x: current_time),
+            'NoiDung': ('noiDung', lambda x: ""),
+            'DinhKem': ('dinhKem', lambda x: ", ".join(d['filename'] for d in all_data)),
+        }
+
+        for ai_field, (db_field, transform_func) in mapping_rules.items():
+            if ai_field in thong_tin_chung:
+                mapped_data[db_field] = transform_func(thong_tin_chung[ai_field])
+            else:
+                mapped_data[db_field] = transform_func(None)
+
+        for db_field in FIELD_MAPPING.keys():
+            if db_field not in mapped_data:
+                mapped_data[db_field] = ""
+
+        return {
+            "success": True,
+            "data": mapped_data,
+            "dataTable": data_table,
+            "files_processed": [{"filename": d['filename'], "total_pages": d['total_pages'], "pages_read": d['pages_read']} for d in all_data]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up temporary files
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
