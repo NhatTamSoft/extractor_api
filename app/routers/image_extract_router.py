@@ -25,35 +25,13 @@ client = OpenAI(api_key=openai_api_key)
 
 FIELD_MAPPING = {
     'sttHoSoLuuTruCTpr': 'Khóa chính(pk)',
-    'vanBanCode': 'Mã định danh văn bản',
-    'sttHoSoLuuTrupr_sd': 'Mã hồ sơ',
-    'sttDuAnpr_sd': 'Mã cơ quan lưu trữ lịch sử',
-    'maPhongLuuTru': 'Mã phòng/công trình/sưu tập lưu trữ',
-    'mucLucSoNSD': 'Mục lục sổ hoặc năm hình thành hồ sơ',
     'soVaKyHieuHS': 'Số và ký hiệu hồ sơ',
-    'soTTVBTrongHS': 'Số thứ tự văn bản trong hồ sơ',
-    'maLoaiVBanpr': 'Tên loại văn bản',
-    'toSo': 'Số của văn bản',
-    'kyHieuVanBan': 'Ký hiệu của văn bản',
     'ngayKy': 'Ngày, tháng, năm của văn bản',
-    'coQuanBanHanh': 'Tên cơ quan, tổ chức ban hành văn bản',
     'trichYeu': 'Trích yếu nội dung',
-    'maNgonNgupr_sd': 'Ngôn ngữ',
-    'soLuongTrang': 'Số lượng trang của văn bản',
-    'ghiChu': 'Ghi chú',
-    'kyHieuThongTin': 'Ký hiệu thông tin',
-    'tuKhoa': 'Từ khóa',
-    'maCheDoSuDungpr_sd': 'Chế độ sử dụng',
-    'maMucDoTinCaypr_sd': 'Mức độ tin cậy',
-    'butTich': 'Bút tích',
-    'maTinhTrangVLpr_sd': 'Tình trạng vật lý',
-    'dinhKem': 'Tệp đính kèm',
-    'nguoiThaoTac': 'User thao tác',
-    'maDonVipr_sd': 'Đơn vị thao tác',
-    'ngayThaoTac': 'Thời gian thao tác',
-    'noiDung': '//',
+    'coQuanBanHanh': 'Tên cơ quan, tổ chức ban hành văn bản',
+    'ghiChu': 'Chức danh người ký',
     'nguoiKy': 'Người ký',
-    'phanQuyen': 'Phân quyền'
+    'maLoaiVBanpr': 'Tên loại văn bản'
 }
 
 def chat_with_openai_json(prompt: str) -> str:
@@ -184,11 +162,7 @@ async def extract_image(file: UploadFile = File(...)):
                 "NgayVanBan": "Ngày ban hành văn bản.",
                 "CoQuanBanHanh": "Đơn vị chủ quản ban hành văn bản đó.",
                 "HoTenNguoiKy": "Họ và tên đầy đủ của người ký văn bản.",
-                "ChucVuNguoiKy": "Chức danh của người ký văn bản.",
-                "NgonNgu": "Ngôn ngữ chính của văn bản (ví dụ: Tiếng Việt).",
-                "MaHoSo": "Mã của hồ sơ chứa văn bản đó.",
-                "TongSoTrang": "Số lượng trang của văn bản gốc.",
-                "GhiChu": "Các thông tin bổ sung cần thiết khác."
+                "ChucVuNguoiKy": "Chức danh của người ký văn bản."
               },
               "DataTable": [
                 {
@@ -230,15 +204,8 @@ async def extract_image(file: UploadFile = File(...)):
             'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
             'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
             'HoTenNguoiKy': ('nguoiKy', lambda x: x),
-            'ChucVuNguoiKy': ('ghiChu', lambda x: ""),
-            'NgonNgu': ('maNgonNgupr_sd', lambda x: "01"),
-            'MaHoSo': ('sttHoSoLuuTrupr_sd', lambda x: x if x else "HS_" + datetime.now().strftime("%Y%m%d")),
-            'TongSoTrang': ('soLuongTrang', lambda x: x if x else "1"), 
-            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4())),
-            'VanBanCode': ('vanBanCode', lambda x: f"VB_{datetime.now().strftime('%Y%m%d%H%M%S')}"),
-            'NgayThaoTac': ('ngayThaoTac', lambda x: current_time),
-            'NoiDung': ('noiDung', lambda x: ""),
-            'DinhKem': ('dinhKem', lambda x: file.filename),
+            'ChucVuNguoiKy': ('ghiChu', lambda x: x),
+            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4()))
         }
 
         for ai_field, (db_field, transform_func) in mapping_rules.items():
@@ -402,15 +369,8 @@ async def extract_multiple_images(
             'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
             'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
             'HoTenNguoiKy': ('nguoiKy', lambda x: x),
-            'ChucVuNguoiKy': ('ghiChu', lambda x: ""),
-            'NgonNgu': ('maNgonNgupr_sd', lambda x: "01"),
-            'MaHoSo': ('sttHoSoLuuTrupr_sd', lambda x: x if x else "HS_" + datetime.now().strftime("%Y%m%d")),
-            'TongSoTrang': ('soLuongTrang', lambda x: x if x else "1"),
-            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4())),
-            'VanBanCode': ('vanBanCode', lambda x: f"VB_{datetime.now().strftime('%Y%m%d%H%M%S')}"),
-            'NgayThaoTac': ('ngayThaoTac', lambda x: current_time),
-            'NoiDung': ('noiDung', lambda x: ""),
-            'DinhKem': ('dinhKem', lambda x: ", ".join(d['filename'] for d in all_data)),
+            'ChucVuNguoiKy': ('ghiChu', lambda x: x),
+            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4()))
         }
 
         for ai_field, (db_field, transform_func) in mapping_rules.items():
