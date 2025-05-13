@@ -512,3 +512,14 @@ def tim_kiem_tfidf(chuoi_can_tim, df_kmcp, cot_tim_kiem='TenKMCP', so_luong_ket_
     except Exception as e:
         print(f"Lỗi trong quá trình tính toán TF-IDF hoặc cosine similarity: {e}")
         return pd.DataFrame()
+    
+def convert_currency_to_float(value: str) -> float:
+    try:
+        # Loại bỏ tất cả các ký tự không phải số và dấu chấm
+        value = ''.join(c for c in value if c.isdigit() or c == '.')
+        # Loại bỏ dấu chấm ngăn cách hàng nghìn
+        value = value.replace('.', '')
+        # Chuyển đổi thành float
+        return float(value)
+    except (ValueError, TypeError):
+        return 0.0

@@ -3,6 +3,7 @@ from sqlalchemy import text
 from typing import Dict, List, Any
 import uuid
 from datetime import datetime
+from app.services.DungChung import convert_currency_to_float
 
 class DatabaseService:
     @staticmethod
@@ -131,20 +132,20 @@ class DatabaseService:
                     KMCPID,
                     VanBanAIID,
                     TenKMCP,
-                    GiaTri,
-                    GiaTriDieuChinh,
-                    GiaTriDieuChinhTang,
-                    GiaTriDieuChinhGiam
+                    GiaTriTMDTKMCP,
+                    GiaTriTMDTKMCP_DC,
+                    GiaTriTMDTKMCPTang,
+                    GiaTriTMDTKMCPGiam
                 ) VALUES (
                     :BangDuLieuChiTietAIID,
                     :CoCauVonID,
                     :KMCPID,
                     :VanBanAIID,
                     :TenKMCP,
-                    :GiaTri,
-                    :GiaTriDieuChinh,
-                    :GiaTriDieuChinhTang,
-                    :GiaTriDieuChinhGiam
+                    :GiaTriTMDTKMCP,
+                    :GiaTriTMDTKMCP_DC,
+                    :GiaTriTMDTKMCPTang,
+                    :GiaTriTMDTKMCPGiam
                 )
             """)
 
@@ -155,85 +156,8 @@ class DatabaseService:
                 # Set default values for optional fields
                 chi_tiet.setdefault('CoCauVonID', None)
                 chi_tiet.setdefault('KMCPID', None)
-                chi_tiet.setdefault('GiaTriDieuChinhTang', 0)
-                chi_tiet.setdefault('GiaTriDieuChinhGiam', 0)
-                
-                # Convert GiaTri and GiaTriDieuChinh to float if they are strings
-                if isinstance(chi_tiet.get('GiaTri'), str):
-                    chi_tiet['GiaTri'] = float(chi_tiet['GiaTri'].replace(',', ''))
-                if isinstance(chi_tiet.get('GiaTriDieuChinh'), str):
-                    chi_tiet['GiaTriDieuChinh'] = float(chi_tiet['GiaTriDieuChinh'].replace(',', ''))
                 
                 # Execute the query
-                db.execute(insert_chi_tiet_query, chi_tiet)
-            
-            db.commit()
-            
-            return {
-                "success": True,
-                "message": "Thêm chi tiết vào BangDuLieuChiTietAI thành công"
-            }
-            
-        except Exception as e:
-            db.rollback()
-            return {
-                "success": False,
-                "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
-                "error": str(e)
-            }
-
-    @staticmethod
-    async def insert_bang_du_lieu_chi_tiet_ai(
-        db: Session, 
-        chi_tiet_data: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        try:
-            if not chi_tiet_data:
-                return {
-                    "success": True,
-                    "message": "Không có chi tiết để thêm"
-                }
-
-            # Insert BangDuLieuChiTietAI data
-            insert_chi_tiet_query = text("""
-                INSERT INTO BangDuLieuChiTietAI (
-                    BangDuLieuChiTietAIID,
-                    CoCauVonID,
-                    KMCPID,
-                    VanBanAIID,
-                    TenKMCP,
-                    GiaTri,
-                    GiaTriDieuChinh,
-                    GiaTriDieuChinhTang,
-                    GiaTriDieuChinhGiam
-                ) VALUES (
-                    :BangDuLieuChiTietAIID,
-                    :CoCauVonID,
-                    :KMCPID,
-                    :VanBanAIID,
-                    :TenKMCP,
-                    :GiaTri,
-                    :GiaTriDieuChinh,
-                    :GiaTriDieuChinhTang,
-                    :GiaTriDieuChinhGiam
-                )
-            """)
-            
-            for chi_tiet in chi_tiet_data:
-                # Generate new UUID for each record
-                chi_tiet['BangDuLieuChiTietAIID'] = str(uuid.uuid4())
-                # Set default values for optional fields
-                chi_tiet.setdefault('CoCauVonID', None)
-                chi_tiet.setdefault('KMCPID', None)
-                chi_tiet.setdefault('GiaTriDieuChinhTang', 0)
-                chi_tiet.setdefault('GiaTriDieuChinhGiam', 0)
-                
-                # Convert GiaTri and GiaTriDieuChinh to float if they are strings
-                if isinstance(chi_tiet.get('GiaTri'), str):
-                    chi_tiet['GiaTri'] = float(chi_tiet['GiaTri'].replace(',', ''))
-                if isinstance(chi_tiet.get('GiaTriDieuChinh'), str):
-                    chi_tiet['GiaTriDieuChinh'] = float(chi_tiet['GiaTriDieuChinh'].replace(',', ''))
-                
                 db.execute(insert_chi_tiet_query, chi_tiet)
             
             db.commit()

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
-from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 import os
 import google.generativeai as genai
 import base64
@@ -8,241 +9,206 @@ from PIL import Image
 import json
 import uuid
 from datetime import datetime
-from openai import OpenAI
 from dotenv import load_dotenv
-from app.services.db_service import DatabaseService
-from pydantic import BaseModel
+from app.services.database_service import DatabaseService
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+import shutil
+from fastapi.responses import JSONResponse
+from app.services.DungChung import convert_currency_to_float
 
+# Load biến môi trường từ file .env
 load_dotenv()
 
 router = APIRouter()
 
+# Cấu hình API keys từ biến môi trường
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-openai_api_key = os.getenv('OPENAI_API_KEY')
 
+# Khởi tạo models
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
-client = OpenAI(api_key=openai_api_key)
 
-FIELD_MAPPING = {
-    'sttHoSoLuuTruCTpr': 'Khóa chính(pk)',
-    'soVaKyHieuHS': 'Số và ký hiệu hồ sơ',
-    'ngayKy': 'Ngày, tháng, năm của văn bản',
-    'trichYeu': 'Trích yếu nội dung',
-    'coQuanBanHanh': 'Tên cơ quan, tổ chức ban hành văn bản',
-    'ghiChu': 'Chức danh người ký',
-    'nguoiKy': 'Người ký',
-    'maLoaiVBanpr': 'Tên loại văn bản'
-}
-
-def chat_with_openai_json(prompt: str) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": """Bạn là 1 kế toán hành chính chuyên nghiệp, có kinh nghiệm 20 năm trong lĩnh vực kế toán"""},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content
-
-def convert_date_for_sql(input_date: str) -> str:
-    try:
-        parsed_date = datetime.strptime(input_date, "%d/%m/%Y")
-        return parsed_date.strftime("%Y/%m/%d")
-    except (ValueError, TypeError):
-        return ""
+# Định nghĩa IMAGE_STORAGE_PATH
+IMAGE_STORAGE_PATH = os.getenv('IMAGE_STORAGE_PATH', 'image_storage')
+os.makedirs(IMAGE_STORAGE_PATH, exist_ok=True)
 
 @router.post("/image_extract")
-async def extract_image(file: UploadFile = File(...)):
-    temp_file_path = None
+async def extract_image(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    if not file.content_type.startswith('image/'):
+        return JSONResponse(
+            status_code=400,
+            content={"message": "Chỉ chấp nhận file ảnh"}
+        )
     try:
-        if not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File phải là định dạng ảnh")
+        # Generate UUID only once and use it consistently
+        van_ban_id = str(uuid.uuid4())
+        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
 
-        temp_dir = os.getenv('TEMP_DIR', 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        temp_file_path = os.path.join(temp_dir, file.filename)
-        with open(temp_file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
+        # Tạo tên file mới với UUID để tránh trùng lặp
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(IMAGE_STORAGE_PATH, unique_filename)
 
-        with Image.open(temp_file_path) as img:
+        # Lưu file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Đọc và xử lý ảnh
+        with Image.open(file_path) as img:
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
 
-        promptText = """
-        # Yêu cầu:
-        Bạn sẽ nhận một hình ảnh chứa văn bản hành chính (có thể là Quyết định, Công văn, Thông tư, ...). Hãy đọc **chính xác 100% nội dung theo từng dòng từ trái sang phải** của tài liệu.
+        promptText = """Dựa vào tài liệu đã được cung cấp, hãy trích xuất các thông tin sau và định dạng toàn bộ kết quả thành một đối tượng JSON duy nhất.
+Yêu cầu trích xuất:
+1.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Số hiệu văn bản.
+    * `NgayKy`: Ngày ký văn bản, chuyển đổi sang định dạng `dd/mm/yyyy`.
+    * `NguoiKy`: Người ký văn bản.
+    * `ChucDanhNguoiKy`: Chức danh của người ký (ví dụ: "Chủ tịch", "Phó Chủ tịch").
+    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
+    * `TrichYeu`: Trích yếu nội dung văn bản.
+    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu văn bản này là văn bản điều chỉnh, sửa đổi hoặc bổ sung một văn bản khác. Ngược lại, đặt giá trị là `0`.
+    * `LoaiVanBan`: Loại văn bản (ví dụ: "Quyết định", "Nghị định").
+2.  **Chi tiết Tổng mức đầu tư:**
+    * Trích xuất các khoản mục chi phí chi tiết trong phần "Tổng mức đầu tư" (thường ở mục 9 của văn bản).
+    * KHÔNG lấy dòng "Tổng mức đầu tư" hoặc "Tổng cộng".
+    * Thông tin này cần được đặt trong một mảng (array) có tên là `TongMucDauTuChiTiet`.
+    * Mỗi phần tử trong mảng `TongMucDauTuChiTiet` là một đối tượng (object) chứa các cặp key-value:
+        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
+        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
+        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
+        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
+        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
 
-        ## I. Thông tin cần trích xuất (theo từng trường):
-        1. TieuDeHoSo: Tóm tắt ngắn gọn nội dung chính
-        2. SoVaKyHieu: Số và ký hiệu chính thức
-        3. LoaiVanBan: Quyết định, Công văn, Thông tư, Nghị định,...
-        4. NgayVanBan: Ngày ban hành (dd/mm/yyyy)
-        5. CoQuanBanHanh: Tên cơ quan, tổ chức ban hành
-        6. HoTenNguoiKy: Họ và tên đầy đủ người ký
-        7. ChucVuNguoiKy: Chức danh người ký (ví dụ: Giám đốc, Trưởng phòng,...).
-        Lưu ý: Nếu văn bản có ghi "Chủ đầu tư" thì KHÔNG coi là chức danh, mà là vai trò pháp lý trong dự án.
-        Khi đó, ChucVuNguoiKy sẽ là chức vụ theo sau vai trò pháp lý đó.
-        8. NgonNgu: Ngôn ngữ chính của văn bản
-        9. MaHoSo: Mã hồ sơ chứa văn bản
-        10. TongSoTrang: Tổng số trang trong văn bản
-        11. GhiChu: Các thông tin bổ sung khác (nếu có)
-
-        ## II. Định dạng kết quả:
-        - Trả kết quả dưới dạng **JSON** với các key như trên
-        - Nếu không đọc được trường nào, để trống hoặc ghi ""
-        - Luôn trả về định dạng với ngôn ngữ là tiếng việt
-
-        ## III. Xử lý dữ liệu dạng bảng:
-        Nếu tài liệu có bảng dữ liệu (ví dụ: bảng phân công công việc, bảng dự toán...), hãy trích xuất theo quy tắc sau:
-        1. Đọc và xác định chính xác tiêu đề các cột trong bảng
-        2. Trích xuất dữ liệu theo từng dòng, mỗi dòng là một object trong mảng DataTable
-        3. Đặt tên key theo quy tắc:
-           - Chuyển tiêu đề cột thành dạng camelCase
-           - Loại bỏ dấu và ký tự đặc biệt
-           - Thay thế khoảng trắng bằng chữ cái viết hoa
-           - Ví dụ: "Số thứ tự" -> "soThuTu", "Tên công việc" -> "tenCongViec"
-        4. Giữ nguyên định dạng và đơn vị của dữ liệu gốc
-        5. Nếu có nhiều bảng, trích xuất riêng biệt và đánh số thứ tự
-
-        Ví dụ kết quả:
-        {
-          "Data": {
-            "TieuDeHoSo": "Quyết định phê duyệt dự toán",
-            ...
-          },
-          "DataTable": [
-            {
-                "soThuTu": "1",
-                "noiDung": "Chi phí xây dựng",
-                "soTien": "2.411.711.306 đồng",
-                "ghiChu": "Theo dự toán"
-            },
-            {
-                "soThuTu": "2",
-                "noiDung": "Chi phí thiết bị",
-                "soTien": "250.000.000 đồng",
-                "ghiChu": "Theo dự toán"
-            }
-          ]
-        }
-
-        Lưu ý:
-        - Nếu không có bảng dữ liệu, trả về "DataTable": []
-        - Đảm bảo giữ nguyên định dạng số và đơn vị tiền tệ
-        - Nếu có dấu phân cách hàng nghìn, giữ nguyên định dạng
-        - Nếu có ghi chú hoặc chú thích, thêm vào trường tương ứng
-        """
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"ID ngẫu nhiên kiểu uniqueidentifier",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"Nếu là văn bản điều chỉnh `1` ngược lại `0`",
+   "LoaiVanBan":"Loại văn bản, nêu rõ loại văn bản không nói chung chung",
+   "TongMucDauTuChiTiet":[
+      {
+         "VanBanID":"Lấy `VanBanID` ở phía trên",
+         "TenKMCP":"Chi phí xây dựng",
+         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
+         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh",
+         "GiaTriTMDTKMCPTang": "Giá trị tăng (nếu có)",
+         "GiaTriTMDTKMCPGiam": "Giá trị giảm (nếu có)"
+      }
+   ]
+}
+```
+**Lưu ý:** Chỉ trả về đối tượng JSON theo định dạng yêu cầu, không giải thích gì thêm"""
 
         response = model.generate_content([
             {'mime_type': 'image/png', 'data': img_str},
             promptText
         ])
 
-        duLieuSoHoa = chat_with_openai_json(
-            """Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước hãy giúp tôi thực hiện nhiệm vụ sau:
-            - Bước 1: Đọc toàn bộ **Dữ liệu về hồ sơ quyết toán** bên dưới
-            **Dữ liệu hồ sơ quyết toán**
-            ```
-            """ + response.text + """
-            ```
-            - Bước 2: Suy luận toàn bộ **Dữ liệu hồ sơ quyết toán** và đảm bảo hiểu được nội dung
-            - Bước 3: Trích xuất thông tin dưới định dạng JSON theo cấu trúc ở (Bước 4)
-            - Bước 4: Chỉ xuất JSON, không giải thích (không định dạng markdown):
-            ```
-            {
-              "Data": {
-                "TieuDeHoSo": "Tóm tắt ngắn gọn nội dung chính của văn bản hoặc hồ sơ.",
-                "SoVaKyHieu": "Số và ký hiệu chính thức của văn bản.",
-                "LoaiVanBan": "Ví dụ: Quyết định, Công văn, Thông tư, Nghị định,...",
-                "NgayVanBan": "Ngày ban hành văn bản.",
-                "CoQuanBanHanh": "Đơn vị chủ quản ban hành văn bản đó.",
-                "HoTenNguoiKy": "Họ và tên đầy đủ của người ký văn bản.",
-                "ChucVuNguoiKy": "Chức danh của người ký văn bản."
-              },
-              "DataTable": [
-                {
-                    "stt": 1,
-                    "hangMucChiPhi": "Chi phí xây dựng",
-                    "daPheDuyetDong": "2.411.711.306",
-                    "sauDieuChinhDong": "2.363.470.000",
-                    "tangGiam": "-48.241.306",
-                    "ghiChu": ""
-                }
-              ]
-            }
-            ```
-            **Lưu ý:**
-            + Nếu không có bảng dữ liệu, trả về "DataTable": []
-            + Nếu các thông tin ở đầu ra tôi yêu cầu mà bạn không tìm thấy cứ việc trả về giá trị là chuỗi rỗng `""`
-            + Xác định chính xác bảng dữ liệu trong ảnh.
-            + Tự động nhận diện hàng tiêu đề (header) của bảng, sử dụng nguyên văn tiêu đề cột làm key cho JSON.
-            + Xác định chính xác số dòng số cột của mỗi bảng biểu để hiển thị Số thứ tự(STT) cho đầy đủ tránh bị mất nội dung.
-            + Trích xuất tất cả các hàng trong bảng (kể cả hàng "Tổng cộng" nếu có).
-            + Đảm bảo tất cả các bảng số liệu đều được gộp chung một bảng, nếu nội dung cùng ý nghĩa thì gộp lại cùng một dòng(example: chi phí quản lý dự án hay chi phí QLDA đều mang cùng một ý nghĩa) và kèm theo cột ghiChu về nội dung gộp nhé.
-            + Trả về kết quả ở dạng danh sách JSON (List<Object>), trong đó mỗi object là một dòng dữ liệu, **key là chính xác nội dung tiêu đề của từng cột** (giữ nguyên cấu trúc example: nguồn vốn -> nguonVon).
-            """)
-
-        try:
-            data_json = json.loads(duLieuSoHoa)
-            thong_tin_chung = data_json.get("Data", {})
-            data_table = data_json.get("DataTable", [])
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
-
-        mapped_data = {}
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        mapping_rules = {
-            'TieuDeHoSo': ('trichYeu', lambda x: x),
-            'SoVaKyHieu': ('soVaKyHieuHS', lambda x: x),
-            'LoaiVanBan': ('maLoaiVBanpr', lambda x: x),
-            'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
-            'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
-            'HoTenNguoiKy': ('nguoiKy', lambda x: x),
-            'ChucVuNguoiKy': ('ghiChu', lambda x: x),
-            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4()))
-        }
-
-        for ai_field, (db_field, transform_func) in mapping_rules.items():
-            if ai_field in thong_tin_chung:
-                mapped_data[db_field] = transform_func(thong_tin_chung[ai_field])
-            else:
-                mapped_data[db_field] = transform_func(None)
-
-        for db_field in FIELD_MAPPING.keys():
-            if db_field not in mapped_data:
-                mapped_data[db_field] = ""
-
-        # Tạm thời ẩn code lưu database
-        """
-        db_result = await DatabaseService.insert_ho_so_luu_tru(mapped_data)
+        # Xử lý response từ Gemini
+        response_text = response.text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
         
-        if not db_result["success"]:
-            error_msg = f"Lỗi khi thêm dữ liệu vào database: {db_result.get('error', 'Unknown error')}"
-            if 'error_details' in db_result:
-                error_msg += f"\nChi tiết lỗi: {db_result['error_details']}"
-            raise HTTPException(status_code=500, detail=error_msg)
-        """
+        data_json = json.loads(response_text)
 
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        # Set UUIDs in the response data
+        data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+        data_json["VanBanID"] = van_ban_id
 
-        return {
-            "success": True,
-            "data": mapped_data,
-            "dataTable": data_table,
-            # "db_result": db_result  # Tạm thời ẩn kết quả lưu database
+        # Convert currency values in the response
+        if "TongMucDauTuChiTiet" in data_json:
+            for item in data_json["TongMucDauTuChiTiet"]:
+                item["VanBanID"] = van_ban_id
+                item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
+                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
+                item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
+                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
+        
+        van_ban_data = {
+            "VanBanAIID": van_ban_id,
+            "SoVanBan": data_json.get("SoVanBan", ""),
+            "NgayKy": data_json.get("NgayKy", ""),
+            "TrichYeu": data_json.get("TrichYeu", ""),
+            "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
+            "TenNguoiKy": data_json.get("NguoiKy", ""),
+            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        print("request body:", van_ban_data)
+        db_service = DatabaseService()
+        result = await db_service.insert_van_ban_ai(db, van_ban_data)
+        
+        if not result.get("success", False):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Lỗi khi lưu dữ liệu vào database",
+                    "error": result.get("error", "Unknown error"),
+                    "data": data_json
+                }
+            )
 
+        # Insert TongMucDauTuChiTiet data if it exists
+        if "TongMucDauTuChiTiet" in data_json and data_json["TongMucDauTuChiTiet"]:
+            # Prepare the data for TongMucDauTuChiTiet
+            tong_muc_dau_tu_data = []
+            for item in data_json["TongMucDauTuChiTiet"]:
+                tong_muc_dau_tu_data.append({
+                    "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
+                    "VanBanAIID": van_ban_id,
+                    "TenKMCP": item.get("TenKMCP", ""),
+                    "GiaTriTMDTKMCP": item["GiaTriTMDTKMCP"],
+                    "GiaTriTMDTKMCP_DC": item["GiaTriTMDTKMCP_DC"],
+                    "GiaTriTMDTKMCPTang": item["GiaTriTMDTKMCPTang"],
+                    "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
+                })
+            
+            # Insert TongMucDauTuChiTiet data
+            print("tong muc dau tu data:", tong_muc_dau_tu_data)
+            tong_muc_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, tong_muc_dau_tu_data)
+            if not tong_muc_result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "message": "Lỗi khi lưu chi tiết tổng mức đầu tư",
+                        "error": tong_muc_result.get("error", "Unknown error"),
+                        "data": data_json
+                    }
+                )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Upload file ảnh thành công",
+                "original_filename": file.filename,
+                "unique_filename": unique_filename,
+                "file_path": file_path,
+                "data": data_json,
+                "status": result.get("success", False),
+                "db_message": result.get("message", "")
+            }
+        )
     except Exception as e:
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Lỗi khi upload file: {str(e)}"}
+        )
+    finally:
+        # Clean up temporary file
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 class MultiImageExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
@@ -250,7 +216,7 @@ class MultiImageExtractRequest(BaseModel):
 @router.post("/image_extract_multi")
 async def extract_multiple_images(
     files: List[UploadFile] = File(...),
-    pages: Optional[List[int]] = Query(None, description="Danh sách các trang cần đọc trong file PDF")
+    db: Session = Depends(get_db)
 ):
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="Yêu cầu tối thiểu 2 file ảnh để so sánh")
@@ -258,137 +224,191 @@ async def extract_multiple_images(
     temp_files = []
     all_data = []
     try:
-        temp_dir = os.getenv('TEMP_DIR', 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        
+        # Generate UUID only once and use it consistently
+        van_ban_id = str(uuid.uuid4())
+        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
+
         # Process each file
         for file in files:
             if not file.content_type.startswith('image/'):
                 raise HTTPException(status_code=400, detail=f"File {file.filename} phải là định dạng ảnh")
 
-            temp_file_path = os.path.join(temp_dir, file.filename)
+            # Tạo tên file tạm thời
+            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{file.filename}")
             temp_files.append(temp_file_path)
             
+            # Lưu file tạm thời
             with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
 
+            # Xử lý ảnh
             with Image.open(temp_file_path) as img:
                 buffered = BytesIO()
                 img.save(buffered, format="PNG")
                 img_str = base64.b64encode(buffered.getvalue()).decode()
 
-            response = model.generate_content([
-                {'mime_type': 'image/png', 'data': img_str},
-                promptText
-            ])
-
             all_data.append({
                 "filename": file.filename,
-                "content": response.text
+                "image_data": img_str
             })
 
+        if not all_data:
+            raise HTTPException(status_code=400, detail="Không thể xử lý bất kỳ file nào")
+
         # Combine all data for comparison
-        combined_prompt = """
-        Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước. Hãy phân tích và gộp nội dung từ các văn bản sau:
+        combined_prompt = """Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
+Yêu cầu trích xuất:
+1.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Số hiệu văn bản mới nhất.
+    * `NgayKy`: Ngày ký văn bản mới nhất, chuyển đổi sang định dạng `dd/mm/yyyy`.
+    * `NguoiKy`: Người ký văn bản mới nhất.
+    * `ChucDanhNguoiKy`: Chức danh của người ký mới nhất (ví dụ: "Chủ tịch", "Phó Chủ tịch").
+    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
+    * `TrichYeu`: Trích yếu nội dung văn bản (tổng hợp từ các văn bản).
+    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu có bất kỳ văn bản nào là văn bản điều chỉnh. Ngược lại, đặt giá trị là `0`.
+    * `LoaiVanBan`: Loại văn bản chung (ví dụ: "Quyết định", "Nghị định").
+2.  **Chi tiết Tổng mức đầu tư:**
+    * Gộp tất cả các khoản mục chi phí từ các văn bản.
+    * Nếu có cùng hạng mục chi phí, gộp lại thành một dòng.
+    * Lấy giá trị mới nhất cho mỗi hạng mục.
+    * Thông tin này cần được đặt trong một mảng (array) có tên là `TongMucDauTuChiTiet`.
+    * Mỗi phần tử trong mảng `TongMucDauTuChiTiet` là một đối tượng (object) chứa các cặp key-value:
+        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
+        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
+        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
+        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
+        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
 
-        {}
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"ID ngẫu nhiên kiểu uniqueidentifier",
+   "SoVanBan":"Số văn bản mới nhất",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký mới nhất",
+   "ChucDanhNguoiKy":"Chức danh người ký mới nhất",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu tổng hợp",
+   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
+   "LoaiVanBan":"Loại văn bản chung",
+   "TongMucDauTuChiTiet":[
+      {
+         "VanBanID":"Lấy `VanBanID` ở phía trên",
+         "TenKMCP":"Chi phí xây dựng",
+         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
+         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh",
+         "GiaTriTMDTKMCPTang": "Giá trị tăng (nếu có)",
+         "GiaTriTMDTKMCPGiam": "Giá trị giảm (nếu có)"
+      }
+   ]
+}
+```
 
-        Yêu cầu:
-        1. Phân tích và gộp thông tin chung:
-           - Lấy thông tin mới nhất từ các văn bản (ngày ban hành, số hiệu, người ký...)
-           - Tổng hợp nội dung chung của các văn bản
-           - Nếu có sự khác biệt về thông tin, ưu tiên thông tin mới nhất
+**Lưu ý quan trọng:**
+1. Ưu tiên thông tin từ văn bản mới nhất
+2. Gộp các hạng mục chi phí tương tự
+3. Lấy giá trị mới nhất cho mỗi hạng mục
+4. Thêm ghi chú nếu có sự thay đổi về số liệu
+5. Đảm bảo tính nhất quán trong việc gộp dữ liệu"""
 
-        2. Xử lý bảng biểu chi phí:
-           - Gộp tất cả các bảng biểu chi phí từ các văn bản
-           - Nếu có cùng hạng mục chi phí, gộp lại thành một dòng
-           - Tính toán tổng hợp số liệu:
-             + Nếu là chi phí đã phê duyệt: lấy số liệu mới nhất
-             + Nếu là chi phí sau điều chỉnh: lấy số liệu mới nhất
-             + Tính toán lại số tiền tăng/giảm dựa trên số liệu mới
-           - Thêm ghi chú nếu có sự thay đổi về số liệu giữa các văn bản
+        # Prepare parts for Gemini API
+        parts = [combined_prompt]
+        for data in all_data:
+            parts.append({
+                'mime_type': 'image/png',
+                'data': data['image_data']
+            })
 
-        3. Quy tắc gộp bảng biểu:
-           - Gộp các hạng mục có tên tương tự (ví dụ: "Chi phí quản lý dự án" và "Chi phí QLDA")
-           - Giữ nguyên cấu trúc cột của bảng biểu
-           - Thêm cột ghi chú để giải thích nguồn gốc số liệu
-           - Sắp xếp các hạng mục theo thứ tự logic
+        # Call Gemini API with all images at once
+        response = model.generate_content(parts)
+        response_text = response.text
 
-        Trả về kết quả theo định dạng JSON sau:
-        {{
-            "Data": {{
-                "TieuDeHoSo": "Tóm tắt nội dung chung của các văn bản",
-                "SoVaKyHieu": "Số và ký hiệu của văn bản mới nhất",
-                "LoaiVanBan": "Loại văn bản chung",
-                "NgayVanBan": "Ngày ban hành mới nhất",
-                "CoQuanBanHanh": "Cơ quan ban hành",
-                "HoTenNguoiKy": "Người ký văn bản mới nhất",
-                "ChucVuNguoiKy": "Chức vụ người ký",
-                "NgonNgu": "Ngôn ngữ văn bản",
-                "MaHoSo": "Mã hồ sơ",
-                "TongSoTrang": "Tổng số trang",
-                "GhiChu": "Ghi chú về việc gộp văn bản"
-            }},
-            "DataTable": [
-                {{
-                    "stt": 1,
-                    "hangMucChiPhi": "Tên hạng mục (đã gộp)",
-                    "daPheDuyetDong": "Số tiền đã phê duyệt mới nhất",
-                    "sauDieuChinhDong": "Số tiền sau điều chỉnh mới nhất",
-                    "tangGiam": "Số tiền tăng/giảm được tính lại",
-                    "ghiChu": "Ghi chú về nguồn gốc và thay đổi số liệu"
-                }}
-            ]
-        }}
-
-        Lưu ý quan trọng:
-        1. Ưu tiên số liệu mới nhất từ các văn bản
-        2. Gộp các hạng mục tương tự để tránh trùng lặp
-        3. Tính toán lại số tiền tăng/giảm dựa trên số liệu mới
-        4. Thêm ghi chú rõ ràng về nguồn gốc số liệu
-        5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
-        """.format("\n\n".join([f"Văn bản {i+1} ({data['filename']}):\n{data['content']}" for i, data in enumerate(all_data)]))
-
-        duLieuSoHoa = chat_with_openai_json(combined_prompt)
+        # Clean up response text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
 
         try:
-            data_json = json.loads(duLieuSoHoa)
-            thong_tin_chung = data_json.get("Data", {})
-            data_table = data_json.get("DataTable", [])
+            data_json = json.loads(response_text)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
 
-        mapped_data = {}
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Set UUIDs in the response data
+        data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+        data_json["VanBanID"] = van_ban_id
 
-        mapping_rules = {
-            'TieuDeHoSo': ('trichYeu', lambda x: x),
-            'SoVaKyHieu': ('soVaKyHieuHS', lambda x: x),
-            'LoaiVanBan': ('maLoaiVBanpr', lambda x: x),
-            'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
-            'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
-            'HoTenNguoiKy': ('nguoiKy', lambda x: x),
-            'ChucVuNguoiKy': ('ghiChu', lambda x: x),
-            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4()))
+        # Convert currency values in the response
+        if "TongMucDauTuChiTiet" in data_json:
+            for item in data_json["TongMucDauTuChiTiet"]:
+                item["VanBanID"] = van_ban_id
+                item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
+                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
+                item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
+                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
+        
+        van_ban_data = {
+            "VanBanAIID": van_ban_id,
+            "SoVanBan": data_json.get("SoVanBan", ""),
+            "NgayKy": data_json.get("NgayKy", ""),
+            "TrichYeu": data_json.get("TrichYeu", ""),
+            "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
+            "TenNguoiKy": data_json.get("NguoiKy", ""),
+            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        print("request body:", van_ban_data)
+        db_service = DatabaseService()
+        result = await db_service.insert_van_ban_ai(db, van_ban_data)
+        
+        if not result.get("success", False):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Lỗi khi lưu dữ liệu vào database",
+                    "error": result.get("error", "Unknown error"),
+                    "data": data_json
+                }
+            )
 
-        for ai_field, (db_field, transform_func) in mapping_rules.items():
-            if ai_field in thong_tin_chung:
-                mapped_data[db_field] = transform_func(thong_tin_chung[ai_field])
-            else:
-                mapped_data[db_field] = transform_func(None)
+        # Insert TongMucDauTuChiTiet data if it exists
+        if "TongMucDauTuChiTiet" in data_json and data_json["TongMucDauTuChiTiet"]:
+            # Prepare the data for TongMucDauTuChiTiet
+            tong_muc_dau_tu_data = []
+            for item in data_json["TongMucDauTuChiTiet"]:
+                tong_muc_dau_tu_data.append({
+                    "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
+                    "VanBanAIID": van_ban_id,
+                    "TenKMCP": item.get("TenKMCP", ""),
+                    "GiaTriTMDTKMCP": item["GiaTriTMDTKMCP"],
+                    "GiaTriTMDTKMCP_DC": item["GiaTriTMDTKMCP_DC"],
+                    "GiaTriTMDTKMCPTang": item["GiaTriTMDTKMCPTang"],
+                    "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
+                })
+            
+            # Insert TongMucDauTuChiTiet data
+            print("tong muc dau tu data:", tong_muc_dau_tu_data)
+            tong_muc_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, tong_muc_dau_tu_data)
+            if not tong_muc_result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "message": "Lỗi khi lưu chi tiết tổng mức đầu tư",
+                        "error": tong_muc_result.get("error", "Unknown error"),
+                        "data": data_json
+                    }
+                )
 
-        for db_field in FIELD_MAPPING.keys():
-            if db_field not in mapped_data:
-                mapped_data[db_field] = ""
-
-        return {
-            "success": True,
-            "data": mapped_data,
-            "dataTable": data_table,
-            "files_processed": [{"filename": d['filename']} for d in all_data]
-        }
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Upload và xử lý nhiều file ảnh thành công",
+                "files_processed": [{"filename": d['filename']} for d in all_data],
+                "data": data_json,
+                "status": result.get("success", False),
+                "db_message": result.get("message", "")
+            }
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
