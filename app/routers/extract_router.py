@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import os
@@ -10,11 +10,14 @@ import fitz  # PyMuPDF
 import json
 import uuid
 from datetime import datetime
-from openai import OpenAI
 from dotenv import load_dotenv
-from sqlalchemy import text
+from app.services.database_service import DatabaseService
+from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.services.db_service import DatabaseService
+import shutil
+import re
+from fastapi.responses import JSONResponse
+from app.services.DungChung import read_text_from_pdf_combined, to_slug, convert_currency_to_float
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -23,44 +26,65 @@ router = APIRouter()
 
 # Cấu hình API keys từ biến môi trường
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-openai_api_key = os.getenv('OPENAI_API_KEY')
 
 # Khởi tạo models
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
-client = OpenAI(api_key=openai_api_key)
 
-FIELD_MAPPING = {
-    'sttHoSoLuuTruCTpr': 'Khóa chính(pk)',
-    'vanBanCode': 'Mã định danh văn bản',
-    'sttHoSoLuuTrupr_sd': 'Mã hồ sơ',
-    'sttDuAnpr_sd': 'Mã cơ quan lưu trữ lịch sử',
-    'maPhongLuuTru': 'Mã phòng/công trình/sưu tập lưu trữ',
-    'mucLucSoNSD': 'Mục lục sổ hoặc năm hình thành hồ sơ',
-    'soVaKyHieuHS': 'Số và ký hiệu hồ sơ',
-    'soTTVBTrongHS': 'Số thứ tự văn bản trong hồ sơ',
-    'maLoaiVBanpr': 'Tên loại văn bản',
-    'toSo': 'Số của văn bản',
-    'kyHieuVanBan': 'Ký hiệu của văn bản',
-    'ngayKy': 'Ngày, tháng, năm của văn bản',
-    'coQuanBanHanh': 'Tên cơ quan, tổ chức ban hành văn bản',
-    'trichYeu': 'Trích yếu nội dung',
-    'maNgonNgupr_sd': 'Ngôn ngữ',
-    'soLuongTrang': 'Số lượng trang của văn bản',
-    'ghiChu': 'Ghi chú',
-    'kyHieuThongTin': 'Ký hiệu thông tin',
-    'tuKhoa': 'Từ khóa',
-    'maCheDoSuDungpr_sd': 'Chế độ sử dụng',
-    'maMucDoTinCaypr_sd': 'Mức độ tin cậy',
-    'butTich': 'Bút tích',
-    'maTinhTrangVLpr_sd': 'Tình trạng vật lý',
-    'dinhKem': 'Tệp đính kèm',
-    'nguoiThaoTac': 'User thao tác',
-    'maDonVipr_sd': 'Đơn vị thao tác',
-    'ngayThaoTac': 'Thời gian thao tác',
-    'noiDung': '//',
-    'nguoiKy': 'Người ký',
-    'phanQuyen': 'Phân quyền'
-}
+class ExtractService:
+    def __init__(self):
+        self.model = model
+
+    async def extract_text(self, file: UploadFile) -> Dict[str, Any]:
+        try:
+            # Save uploaded file temporarily
+            temp_file_path = f"temp_{file.filename}"
+            with open(temp_file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+            # Extract text from PDF
+            text, total_pages = readTextFromPdf(temp_file_path)
+            
+            # Clean up temporary file
+            os.remove(temp_file_path)
+            
+            return {
+                "success": True,
+                "text": text,
+                "total_pages": total_pages
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Lỗi khi trích xuất văn bản: {str(e)}"
+            }
+
+    def process_extracted_text(self, text: str) -> Dict[str, Any]:
+        try:
+            # Parse the JSON response from Gemini
+            data = json.loads(text)
+            
+            # Convert date format
+            if data.get("NgayKy"):
+                data["NgayKy"] = convert_date_for_sql(data["NgayKy"])
+            
+            return {
+                "SoVanBan": data.get("SoVanBan", ""),
+                "NgayKy": data.get("NgayKy", ""),
+                "TrichYeu": data.get("TrichYeu", ""),
+                "ChucDanhNguoiKy": data.get("ChucDanhNguoiKy", ""),
+                "NguoiKy": data.get("NguoiKy", ""),
+                "TongMucDauTuChiTiet": data.get("TongMucDauTuChiTiet", [])
+            }
+        except Exception as e:
+            return {
+                "SoVanBan": "",
+                "NgayKy": "",
+                "TrichYeu": "",
+                "ChucDanhNguoiKy": "",
+                "NguoiKy": "",
+                "TongMucDauTuChiTiet": []
+            }
 
 def readTextFromPdf(file_path: str, pages: set = None) -> tuple:
     all_text = ""
@@ -92,30 +116,53 @@ def readTextFromPdf(file_path: str, pages: set = None) -> tuple:
                     img.save(buffered, format="PNG")
                     img_str = base64.b64encode(buffered.getvalue()).decode()
 
-                    promptText = """
-                    # Yêu cầu:
-                    Bạn sẽ nhận một file PDF chứa văn bản hành chính (có thể là Quyết định, Công văn, Thông tư, ...). Hãy đọc **chính xác 100% nội dung theo từng dòng từ trái sang phải** của tài liệu.
+                    promptText = """Dựa vào tài liệu đã được cung cấp, hãy trích xuất các thông tin sau và định dạng toàn bộ kết quả thành một đối tượng JSON duy nhất.
+Yêu cầu trích xuất:
+1.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Số hiệu văn bản.
+    * `NgayKy`: Ngày ký văn bản, chuyển đổi sang định dạng `dd/mm/yyyy`.
+    * `NguoiKy`: Người ký văn bản.
+    * `ChucDanhNguoiKy`: Chức danh của người ký (ví dụ: "Chủ tịch", "Phó Chủ tịch").
+    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
+    * `TrichYeu`: Trích yếu nội dung văn bản.
+    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu văn bản này là văn bản điều chỉnh, sửa đổi hoặc bổ sung một văn bản khác. Ngược lại, đặt giá trị là `0`.
+    * `LoaiVanBan`: Loại văn bản (ví dụ: "Quyết định", "Nghị định").
+2.  **Chi tiết Tổng mức đầu tư:**
+    * Trích xuất các khoản mục chi phí chi tiết trong phần "Tổng mức đầu tư" (thường ở mục 9 của văn bản).
+    * KHÔNG lấy dòng "Tổng mức đầu tư" hoặc "Tổng cộng".
+    * Thông tin này cần được đặt trong một mảng (array) có tên là `TongMucDauTuChiTiet`.
+    * Mỗi phần tử trong mảng `TongMucDauTuChiTiet` là một đối tượng (object) chứa các cặp key-value:
+        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
+        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
+        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
+        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
+        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
 
-                    ## I. Thông tin cần trích xuất (theo từng trường):
-                    1. TieuDeHoSo: Tóm tắt ngắn gọn nội dung chính
-                    2. SoVaKyHieu: Số và ký hiệu chính thức
-                    3. LoaiVanBan: Quyết định, Công văn, Thông tư, Nghị định,...
-                    4. NgayVanBan: Ngày ban hành (dd/mm/yyyy)
-                    5. CoQuanBanHanh: Tên cơ quan, tổ chức ban hành
-                    6. HoTenNguoiKy: Họ và tên đầy đủ người ký
-                    7. ChucVuNguoiKy: Chức danh người ký (ví dụ: Giám đốc, Trưởng phòng,...).
-                    Lưu ý: Nếu văn bản có ghi "Chủ đầu tư" thì KHÔNG coi là chức danh, mà là vai trò pháp lý trong dự án.
-                    Khi đó, ChucVuNguoiKy sẽ là chức vụ theo sau vai trò pháp lý đó.
-                    8. NgonNgu: Ngôn ngữ chính của văn bản
-                    9. MaHoSo: Mã hồ sơ chứa văn bản
-                    10. TongSoTrang: Tổng số trang trong văn bản
-                    11. GhiChu: Các thông tin bổ sung khác (nếu có)
-
-                    ## II. Định dạng kết quả:
-                    - Trả kết quả dưới dạng **JSON** với các key như trên
-                    - Nếu không đọc được trường nào, để trống hoặc ghi ""
-                    - Luôn trả về định dạng với ngôn ngữ là tiếng việt
-                    """
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"ID ngẫu nhiên kiểu uniqueidentifier",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"Nếu là văn bản điều chỉnh `1` ngược lại `0`",
+   "LoaiVanBan":"Loại văn bản, nêu rõ loại văn bản không nói chung chung",
+   "TongMucDauTuChiTiet":[
+      {
+         "VanBanID":"Lấy `VanBanID` ở phía trên",
+         "TenKMCP":"Chi phí xây dựng",
+         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
+         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh",
+         "GiaTriTMDTKMCPTang": "Giá trị tăng (nếu có)",
+         "GiaTriTMDTKMCPGiam": "Giá trị giảm (nếu có)"
+      }
+   ]
+}
+```
+**Lưu ý:** Chỉ trả về đối tượng JSON theo định dạng yêu cầu, không giải thích gì thêm"""
 
                     response = model.generate_content([
                         {'mime_type': 'image/png', 'data': img_str},
@@ -126,19 +173,7 @@ def readTextFromPdf(file_path: str, pages: set = None) -> tuple:
         return all_text, total_pages
     finally:
         if doc:
-            doc.close()  # Đảm bảo đóng file PDF trong mọi trường hợp
-
-def chat_with_openai_json(prompt: str) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": """Bạn là 1 kế toán hành chính chuyên nghiệp, có kinh nghiệm 20 năm trong lĩnh vực kế toán"""},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content
+            doc.close()
 
 def convert_date_for_sql(input_date: str) -> str:
     try:
@@ -150,144 +185,176 @@ def convert_date_for_sql(input_date: str) -> str:
 class PDFExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
 
-@router.post("/pdf_extract")
-async def extract_pdf(
+# Định nghĩa PDF_STORAGE_PATH
+PDF_STORAGE_PATH = os.getenv('PDF_STORAGE_PATH', 'pdf_storage')
+os.makedirs(PDF_STORAGE_PATH, exist_ok=True)
+
+@router.post("/extract")
+async def extract_document(
     file: UploadFile = File(...),
-    pages: Optional[List[int]] = Query(None, description="Danh sách các trang cần đọc trong file PDF")
+    db: Session = Depends(get_db)
 ):
-    temp_file_path = None
+    if not file.filename.endswith('.pdf'):
+        return JSONResponse(
+            status_code=400,
+            content={"message": "Chỉ chấp nhận file PDF"}
+        )
     try:
-        temp_dir = os.getenv('TEMP_DIR', 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
+        # Generate UUID only once and use it consistently
+        van_ban_id = str(uuid.uuid4())
+        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
+
+        # Tạo tên file mới với slug sử dụng to_slug của DungChung
+        file_name_without_ext = os.path.splitext(file.filename)[0]
+        file_extension = os.path.splitext(file.filename)[1]
+        slug_filename = to_slug(file_name_without_ext) + file_extension
+        file_path = os.path.join(PDF_STORAGE_PATH, slug_filename)
+
+        # Lưu file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Đọc text từ PDF bằng hàm chuẩn
+        ocr_prompt = """Dựa vào tài liệu đã được cung cấp, hãy trích xuất các thông tin sau và định dạng toàn bộ kết quả thành một đối tượng JSON duy nhất.
+Yêu cầu trích xuất:
+1.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Số hiệu văn bản.
+    * `NgayKy`: Ngày ký văn bản, chuyển đổi sang định dạng `dd/mm/yyyy`.
+    * `NguoiKy`: Người ký văn bản.
+    * `ChucDanhNguoiKy`: Chức danh của người ký (ví dụ: "Chủ tịch", "Phó Chủ tịch").
+    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
+    * `TrichYeu`: Trích yếu nội dung văn bản.
+    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu văn bản này là văn bản điều chỉnh, sửa đổi hoặc bổ sung một văn bản khác. Ngược lại, đặt giá trị là `0`.
+    * `LoaiVanBan`: Loại văn bản (ví dụ: "Quyết định", "Nghị định").
+2.  **Chi tiết Tổng mức đầu tư:**
+    * Trích xuất các khoản mục chi phí chi tiết trong phần "Tổng mức đầu tư" (thường ở mục 9 của văn bản).
+    * KHÔNG lấy dòng "Tổng mức đầu tư" hoặc "Tổng cộng".
+    * Thông tin này cần được đặt trong một mảng (array) có tên là `TongMucDauTuChiTiet`.
+    * Mỗi phần tử trong mảng `TongMucDauTuChiTiet` là một đối tượng (object) chứa các cặp key-value:
+        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
+        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
+        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
+        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
+        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
+
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"ID ngẫu nhiên kiểu uniqueidentifier",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"Nếu là văn bản điều chỉnh `1` ngược lại `0`",
+   "LoaiVanBan":"Loại văn bản, nêu rõ loại văn bản không nói chung chung",
+   "TongMucDauTuChiTiet":[
+      {
+         "VanBanID":"Lấy `VanBanID` ở phía trên",
+         "TenKMCP":"Chi phí xây dựng",
+         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
+         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh",
+         "GiaTriTMDTKMCPTang": "Giá trị tăng (nếu có)",
+         "GiaTriTMDTKMCPGiam": "Giá trị giảm (nếu có)"
+      }
+   ]
+}
+```
+**Lưu ý:** Chỉ trả về đối tượng JSON theo định dạng yêu cầu, không giải thích gì thêm"""
+        specific_ocr_prompt_text_pdf = ocr_prompt
+        pdf_text = read_text_from_pdf_combined(
+            file_path,
+            specific_ocr_prompt_text_pdf,
+            ocr_prompt,
+            model_name="gemini-1.5-flash",
+            output_image_dir="temp_image",
+            loai_file="IMAGE"
+        )
+        if pdf_text.strip().startswith("```json"):
+            pdf_text = pdf_text.strip()[7:-3].strip()
+        elif pdf_text.strip().startswith("```"):
+            pdf_text = pdf_text.strip()[3:-3].strip()
+        data_json = json.loads(pdf_text)
+
+        # Set UUIDs in the response data
+        data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+        data_json["VanBanID"] = van_ban_id
+
+        # Convert currency values in the response
+        if "TongMucDauTuChiTiet" in data_json:
+            for item in data_json["TongMucDauTuChiTiet"]:
+                item["VanBanID"] = van_ban_id
+                item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
+                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
+                item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
+                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
         
-        temp_file_path = os.path.join(temp_dir, file.filename)
-        with open(temp_file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-
-        doc = fitz.open(temp_file_path)
-        total_pages = len(doc)
-        doc.close()
-
-        pages_to_read = None
-        if total_pages <= 3:
-            pages_to_read = set(range(1, total_pages + 1))
-        else:
-            if pages:
-                pages_to_read = set(pages)
-            else:
-                pages_to_read = {1, 2, 3}
-
-        dataORC, total_pages = readTextFromPdf(temp_file_path, pages=pages_to_read)
-
-        duLieuSoHoa = chat_with_openai_json(
-            """Bạn là kế toán viên cao cấp có 20 năm kinh nghiệm làm việc tại cơ quan nhà nước hãy giúp tôi thực hiện nhiệm vụ sau:
-            - Bước 1: Đọc toàn bộ **Dữ liệu về hồ sơ quyết toán** bên dưới
-            **Dữ liệu hồ sơ quyết toán**
-            ```
-            """ + dataORC + """
-            ```
-            - Bước 2: Suy luận toàn bộ **Dữ liệu hồ sơ quyết toán** và đảm bảo hiểu được nội dung
-            - Bước 3: Trích xuất thông tin dưới định dạng JSON theo cấu trúc ở (Bước 4)
-            - Bước 4: Chỉ xuất JSON, không giải thích (không định dạng markdown):
-            ```
-            {
-              "ThongTinChung": {
-                "TieuDeHoSo": "Tóm tắt ngắn gọn nội dung chính của văn bản hoặc hồ sơ.",
-                "SoVaKyHieu": "Số và ký hiệu chính thức của văn bản.",
-                "LoaiVanBan": "Ví dụ: Quyết định, Công văn, Thông tư, Nghị định,...",
-                "NgayVanBan": "Ngày ban hành văn bản.",
-                "CoQuanBanHanh": "Đơn vị chủ quản ban hành văn bản đó.",
-                "HoTenNguoiKy": "Họ và tên đầy đủ của người ký văn bản.",
-                "ChucVuNguoiKy": "Chức danh của người ký văn bản.",
-                "NgonNgu": "Ngôn ngữ chính của văn bản (ví dụ: Tiếng Việt).",
-                "MaHoSo": "Mã của hồ sơ chứa văn bản đó.",
-                "TongSoTrang": "Số lượng trang của văn bản gốc.",
-                "GhiChu": "Các thông tin bổ sung cần thiết khác."
-              }
-            }
-            ```
-            **Lưu ý:**
-            + Không định dạng markdown
-            + Nếu các thông tin ở đầu ra tôi yêu cầu mà bạn không tìm thấy cứ việc trả về giá trị là chuỗi rỗng `""`
-            """)
-
-        try:
-            data_json = json.loads(duLieuSoHoa)
-            thong_tin_chung = data_json.get("ThongTinChung", {})
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
-
-        mapped_data = {}
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        mapping_rules = {
-            'TieuDeHoSo': ('trichYeu', lambda x: x),
-            'SoVaKyHieu': ('soVaKyHieuHS', lambda x: x),
-            'LoaiVanBan': ('maLoaiVBanpr', lambda x: x),
-            'NgayVanBan': ('ngayKy', lambda x: convert_date_for_sql(x) if x else ""),
-            'CoQuanBanHanh': ('coQuanBanHanh', lambda x: x),
-            'HoTenNguoiKy': ('nguoiKy', lambda x: x),
-            'ChucVuNguoiKy': ('ghiChu', lambda x: ""),
-            'NgonNgu': ('maNgonNgupr_sd', lambda x: "01"),
-            'MaHoSo': ('sttHoSoLuuTrupr_sd', lambda x: x),
-            'TongSoTrang': ('soLuongTrang', lambda x: str(total_pages)),
-            'VanBanID': ('sttHoSoLuuTruCTpr', lambda x: str(uuid.uuid4())),
-            'VanBanCode': ('vanBanCode', lambda x: f"VB_{datetime.now().strftime('%Y%m%d%H%M%S')}"),
-            'NgayThaoTac': ('ngayThaoTac', lambda x: current_time),
-            'NoiDung': ('noiDung', lambda x: ""),
-            'DinhKem': ('dinhKem', lambda x: file.filename),
+        van_ban_data = {
+            "VanBanAIID": van_ban_id,
+            "SoVanBan": data_json.get("SoVanBan", ""),
+            "NgayKy": data_json.get("NgayKy", ""),
+            "TrichYeu": data_json.get("TrichYeu", ""),
+            "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
+            "TenNguoiKy": data_json.get("NguoiKy", ""),
+            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
-
-        for ai_field, (db_field, transform_func) in mapping_rules.items():
-            if ai_field in thong_tin_chung:
-                mapped_data[db_field] = transform_func(thong_tin_chung[ai_field])
-            else:
-                mapped_data[db_field] = transform_func(None)
-
-        for db_field in FIELD_MAPPING.keys():
-            if db_field not in mapped_data:
-                mapped_data[db_field] = ""
-
-        db_result = await DatabaseService.insert_ho_so_luu_tru(mapped_data)
+        print("request body:", van_ban_data)
+        db_service = DatabaseService()
+        result = await db_service.insert_van_ban_ai(db, van_ban_data)
         
-        if not db_result["success"]:
-            error_msg = f"Lỗi khi thêm dữ liệu vào database: {db_result.get('error', 'Unknown error')}"
-            if 'error_details' in db_result:
-                error_msg += f"\nChi tiết lỗi: {db_result['error_details']}"
-            raise HTTPException(status_code=500, detail=error_msg)
+        if not result.get("success", False):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "message": "Lỗi khi lưu dữ liệu vào database",
+                    "error": result.get("error", "Unknown error"),
+                    "data": data_json
+                }
+            )
 
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        # Insert TongMucDauTuChiTiet data if it exists
+        if "TongMucDauTuChiTiet" in data_json and data_json["TongMucDauTuChiTiet"]:
+            # Prepare the data for TongMucDauTuChiTiet
+            tong_muc_dau_tu_data = []
+            for item in data_json["TongMucDauTuChiTiet"]:
+                tong_muc_dau_tu_data.append({
+                    "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
+                    "VanBanAIID": van_ban_id,
+                    "TenKMCP": item.get("TenKMCP", ""),
+                    "GiaTriTMDTKMCP": item["GiaTriTMDTKMCP"],
+                    "GiaTriTMDTKMCP_DC": item["GiaTriTMDTKMCP_DC"],
+                    "GiaTriTMDTKMCPTang": item["GiaTriTMDTKMCPTang"],
+                    "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
+                })
+            
+            # Insert TongMucDauTuChiTiet data
+            print("tong muc dau tu data:", tong_muc_dau_tu_data)
+            tong_muc_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, tong_muc_dau_tu_data)
+            if not tong_muc_result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "message": "Lỗi khi lưu chi tiết tổng mức đầu tư",
+                        "error": tong_muc_result.get("error", "Unknown error"),
+                        "data": data_json
+                    }
+                )
 
-        return {
-            "success": True,
-            "data": mapped_data,
-            "db_result": db_result,
-            "total_pages": total_pages,
-            "pages_read": list(pages_to_read)
-        }
-
-    except Exception as e:
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/test-db-query")
-async def test_db_query():
-    try:
-        db = next(get_db())
-        result = db.execute(text("SELECT 1")).scalar()
-        if result == 1:
-            return {
-                "success": True,
-                "message": "Kết nối đến database thành công!"
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Upload file PDF thành công",
+                "original_filename": file.filename,
+                "slug_filename": slug_filename,
+                "file_path": file_path,
+                "data": data_json,
+                "status": result.get("success", False),
+                "db_message": result.get("message", "")
             }
+        )
     except Exception as e:
-        return {
-            "success": False,
-            "message": "Lỗi kết nối đến database!",
-            "error": str(e)
-        }
-    finally:
-        db.close()
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Lỗi khi upload file: {str(e)}"}
+        )
