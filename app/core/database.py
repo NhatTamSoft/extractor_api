@@ -2,12 +2,15 @@ import urllib
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 # Gán thông tin kết nối trực tiếp
-DB_SERVER = "103.162.21.146,1435"  # Thay đổi dấu : thành dấu ,
-DB_NAME = "QLDA_AI"
-DB_USER = "phonglt"
-DB_PASSWORD = "@PhongLT2020!"
+DB_SERVER = os.getenv("DB_SERVER")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 # Chuỗi kết nối
 connection_string = (
@@ -18,7 +21,7 @@ connection_string = (
     f"PWD={DB_PASSWORD};"
     f"TrustServerCertificate=yes;"
     f"MultipleActiveResultSets=true;"
-    f"Connection Timeout=30;"  # Thêm timeout
+    f"Connection Timeout=30;"
 )
 
 # Mã hóa chuỗi kết nối
