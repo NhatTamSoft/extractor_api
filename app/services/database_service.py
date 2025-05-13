@@ -112,47 +112,142 @@ class DatabaseService:
             }
 
     @staticmethod
-    async def insert_tong_muc_dau_tu_chi_tiet(
+    async def insert_bang_du_lieu_chi_tiet_ai(
         db: Session, 
-        tong_muc_dau_tu_chi_tiet: List[Dict[str, Any]]
+        chi_tiet_data: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         try:
-            if not tong_muc_dau_tu_chi_tiet:
+            if not chi_tiet_data:
                 return {
                     "success": True,
-                    "message": "Không có chi tiết tổng mức đầu tư để thêm"
+                    "message": "Không có chi tiết để thêm"
                 }
 
-            # Insert TongMucDauTuChiTiet data
+            # Insert BangDuLieuChiTietAI data
             insert_chi_tiet_query = text("""
-                INSERT INTO TongMucDauTuChiTiet (
-                    VanBanID,
+                INSERT INTO BangDuLieuChiTietAI (
+                    BangDuLieuChiTietAIID,
+                    CoCauVonID,
+                    KMCPID,
+                    VanBanAIID,
                     TenKMCP,
                     GiaTri,
-                    GiaTriDieuChinh
+                    GiaTriDieuChinh,
+                    GiaTriDieuChinhTang,
+                    GiaTriDieuChinhGiam
                 ) VALUES (
-                    :VanBanID,
+                    :BangDuLieuChiTietAIID,
+                    :CoCauVonID,
+                    :KMCPID,
+                    :VanBanAIID,
                     :TenKMCP,
                     :GiaTri,
-                    :GiaTriDieuChinh
+                    :GiaTriDieuChinh,
+                    :GiaTriDieuChinhTang,
+                    :GiaTriDieuChinhGiam
                 )
             """)
-            
-            for chi_tiet in tong_muc_dau_tu_chi_tiet:
+
+            for chi_tiet in chi_tiet_data:
+                # Generate a new UUID for each record
+                chi_tiet['BangDuLieuChiTietAIID'] = str(uuid.uuid4())
+                
+                # Set default values for optional fields
+                chi_tiet.setdefault('CoCauVonID', None)
+                chi_tiet.setdefault('KMCPID', None)
+                chi_tiet.setdefault('GiaTriDieuChinhTang', 0)
+                chi_tiet.setdefault('GiaTriDieuChinhGiam', 0)
+                
+                # Convert GiaTri and GiaTriDieuChinh to float if they are strings
+                if isinstance(chi_tiet.get('GiaTri'), str):
+                    chi_tiet['GiaTri'] = float(chi_tiet['GiaTri'].replace(',', ''))
+                if isinstance(chi_tiet.get('GiaTriDieuChinh'), str):
+                    chi_tiet['GiaTriDieuChinh'] = float(chi_tiet['GiaTriDieuChinh'].replace(',', ''))
+                
+                # Execute the query
                 db.execute(insert_chi_tiet_query, chi_tiet)
             
             db.commit()
             
             return {
                 "success": True,
-                "message": "Thêm chi tiết tổng mức đầu tư thành công"
+                "message": "Thêm chi tiết vào BangDuLieuChiTietAI thành công"
             }
             
         except Exception as e:
             db.rollback()
             return {
                 "success": False,
-                "message": "Lỗi khi thêm chi tiết tổng mức đầu tư",
+                "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
+                "error": str(e)
+            }
+
+    @staticmethod
+    async def insert_bang_du_lieu_chi_tiet_ai(
+        db: Session, 
+        chi_tiet_data: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        try:
+            if not chi_tiet_data:
+                return {
+                    "success": True,
+                    "message": "Không có chi tiết để thêm"
+                }
+
+            # Insert BangDuLieuChiTietAI data
+            insert_chi_tiet_query = text("""
+                INSERT INTO BangDuLieuChiTietAI (
+                    BangDuLieuChiTietAIID,
+                    CoCauVonID,
+                    KMCPID,
+                    VanBanAIID,
+                    TenKMCP,
+                    GiaTri,
+                    GiaTriDieuChinh,
+                    GiaTriDieuChinhTang,
+                    GiaTriDieuChinhGiam
+                ) VALUES (
+                    :BangDuLieuChiTietAIID,
+                    :CoCauVonID,
+                    :KMCPID,
+                    :VanBanAIID,
+                    :TenKMCP,
+                    :GiaTri,
+                    :GiaTriDieuChinh,
+                    :GiaTriDieuChinhTang,
+                    :GiaTriDieuChinhGiam
+                )
+            """)
+            
+            for chi_tiet in chi_tiet_data:
+                # Generate new UUID for each record
+                chi_tiet['BangDuLieuChiTietAIID'] = str(uuid.uuid4())
+                # Set default values for optional fields
+                chi_tiet.setdefault('CoCauVonID', None)
+                chi_tiet.setdefault('KMCPID', None)
+                chi_tiet.setdefault('GiaTriDieuChinhTang', 0)
+                chi_tiet.setdefault('GiaTriDieuChinhGiam', 0)
+                
+                # Convert GiaTri and GiaTriDieuChinh to float if they are strings
+                if isinstance(chi_tiet.get('GiaTri'), str):
+                    chi_tiet['GiaTri'] = float(chi_tiet['GiaTri'].replace(',', ''))
+                if isinstance(chi_tiet.get('GiaTriDieuChinh'), str):
+                    chi_tiet['GiaTriDieuChinh'] = float(chi_tiet['GiaTriDieuChinh'].replace(',', ''))
+                
+                db.execute(insert_chi_tiet_query, chi_tiet)
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "Thêm chi tiết vào BangDuLieuChiTietAI thành công"
+            }
+            
+        except Exception as e:
+            db.rollback()
+            return {
+                "success": False,
+                "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
                 "error": str(e)
             }
 
@@ -170,12 +265,21 @@ class DatabaseService:
 
             # Insert TongMucDauTuChiTiet if exists
             if tong_muc_dau_tu_chi_tiet:
+                # First insert into TongMucDauTuChiTiet
                 chi_tiet_result = await DatabaseService.insert_tong_muc_dau_tu_chi_tiet(
                     db, 
                     tong_muc_dau_tu_chi_tiet
                 )
                 if not chi_tiet_result["success"]:
                     return chi_tiet_result
+
+                # Then insert into BangDuLieuChiTietAI
+                bang_du_lieu_result = await DatabaseService.insert_bang_du_lieu_chi_tiet_ai(
+                    db,
+                    tong_muc_dau_tu_chi_tiet
+                )
+                if not bang_du_lieu_result["success"]:
+                    return bang_du_lieu_result
 
             return {
                 "success": True,

@@ -229,6 +229,8 @@ async def extract_document(
 
         # Generate UUID only once and use it consistently
         van_ban_id = str(uuid.uuid4())
+        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
+        data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
         data_json["VanBanID"] = van_ban_id
         
         van_ban_data = {
@@ -253,6 +255,32 @@ async def extract_document(
                     "data": data_json
                 }
             )
+
+        # Insert TongMucDauTuChiTiet data if it exists
+        if "TongMucDauTuChiTiet" in data_json and data_json["TongMucDauTuChiTiet"]:
+            # Prepare the data for TongMucDauTuChiTiet
+            tong_muc_dau_tu_data = []
+            for item in data_json["TongMucDauTuChiTiet"]:
+                tong_muc_dau_tu_data.append({
+                    "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
+                    "VanBanAIID": van_ban_id,
+                    "TenKMCP": item.get("TenKMCP", ""),
+                    "GiaTri": item.get("GiaTri", 0),
+                    "GiaTriDieuChinh": item.get("GiaTriDieuChinh", 0)
+                })
+            
+            # Insert TongMucDauTuChiTiet data
+            print("tong muc dau tu data:", tong_muc_dau_tu_data)
+            tong_muc_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, tong_muc_dau_tu_data)
+            if not tong_muc_result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "message": "Lỗi khi lưu chi tiết tổng mức đầu tư",
+                        "error": tong_muc_result.get("error", "Unknown error"),
+                        "data": data_json
+                    }
+                )
 
         return JSONResponse(
             status_code=200,
