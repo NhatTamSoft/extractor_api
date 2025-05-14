@@ -15,10 +15,9 @@ Dự án này được phát triển nhằm mục đích:
 
 * **Framework:** FastAPI
 * **Ngôn ngữ:** Python
-* **Cơ sở dữ liệu:** SQLite (dựa trên sự hiện diện của `app.db`)
-* **Xử lý ảnh & OCR:** (Ví dụ: Tesseract, OpenCV, Google Cloud Vision, Azure Computer Vision - *Hãy liệt kê công cụ/thư viện bạn sử dụng cụ thể trong thư mục `app`*)
-* **Xử lý ngôn ngữ tự nhiên (NLP):** (Ví dụ: spaCy, NLTK, các mô hình pre-trained - *Hãy liệt kê công cụ/thư viện bạn sử dụng cụ thể trong thư mục `app` nếu có*)
-* **Khác:** Uvicorn, Gunicorn (thường dùng với FastAPI) - *Liệt kê các công nghệ phụ trợ khác nếu có*
+* **Cơ sở dữ liệu:** MS SQL SERVER
+* **Xử lý ảnh & OCR:** Google Cloud Vision
+* **Xử lý ngôn ngữ tự nhiên (NLP):** Google Gemini
 
 ## Tính năng chính
 
@@ -35,7 +34,7 @@ Dự án này được phát triển nhằm mục đích:
 
 **Yêu cầu:**
 
-* Python 3.8+
+* Python 3.11+
 * PIP (Python package installer)
 * (Các yêu cầu khác như Tesseract OCR engine nếu bạn dùng,...)
 
