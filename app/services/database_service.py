@@ -91,8 +91,8 @@ class DatabaseService:
                     }
             
             # Set default values for new fields if not provided
-            van_ban_data.setdefault('TenLoaiVanBan', None)
-            van_ban_data.setdefault('DuAnID', None)
+            van_ban_data.setdefault('TenLoaiVanBan', "QDPD_ChuTuongDT")
+            van_ban_data.setdefault('DuAnID', "5010455E-74C8-443B-BE4E-F0B25DDC8009")
             
             # Execute query
             try:

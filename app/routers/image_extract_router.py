@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 from app.services.database_service import DatabaseService
+from app.services.prompt_service import PromptService
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 import shutil
@@ -27,6 +28,9 @@ genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 
 # Khởi tạo models
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+
+# Khởi tạo PromptService
+prompt_service = PromptService()
 
 # Định nghĩa IMAGE_STORAGE_PATH
 IMAGE_STORAGE_PATH = os.getenv('IMAGE_STORAGE_PATH', 'image_storage')
@@ -262,63 +266,8 @@ async def extract_multiple_images(
         if not all_data:
             raise HTTPException(status_code=400, detail="Không thể xử lý bất kỳ file nào")
 
-        # Combine all data for comparison
-        combined_prompt = """
-        
-Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
-Yêu cầu trích xuất:
-1.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Số hiệu văn bản mới nhất.
-    * `NgayKy`: Ngày ký văn bản mới nhất, chuyển đổi sang định dạng `dd/mm/yyyy`.
-    * `NguoiKy`: Người ký văn bản mới nhất.
-    * `ChucDanhNguoiKy`: Chức danh của người ký mới nhất (ví dụ: "Chủ tịch", "Phó Chủ tịch").
-    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
-    * `TrichYeu`: Trích yếu nội dung văn bản (tổng hợp từ các văn bản).
-    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu có bất kỳ văn bản nào là văn bản điều chỉnh. Ngược lại, đặt giá trị là `0`.
-    * `LoaiVanBan`: Loại văn bản chung (ví dụ: "Quyết định", "Nghị định").
-2.  **Chi tiết Tổng mức đầu tư:**
-    * Gộp tất cả các khoản mục chi phí từ các văn bản.
-    * Nếu có cùng hạng mục chi phí, gộp lại thành một dòng.
-    * Lấy giá trị mới nhất cho mỗi hạng mục.
-    * Thông tin này cần được đặt trong một mảng (array) có tên là `BangDuLieu`.
-    * Mỗi phần tử trong mảng `BangDuLieu` là một đối tượng (object) chứa các cặp key-value:
-        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
-        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
-        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
-        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
-        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
-
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản mới nhất",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký mới nhất",
-   "ChucDanhNguoiKy":"Chức danh người ký mới nhất",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu tổng hợp",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
-         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
-         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
-         "GiaTriTMDTKMCPTang": "Giá trị tăng, nếu không có để '0'",
-         "GiaTriTMDTKMCPGiam": "Giá trị giảm, nếu không có để '0'"
-      }
-   ]
-}
-```
-
-**Lưu ý quan trọng:**
-1. Ưu tiên thông tin từ văn bản mới nhất
-2. Gộp các hạng mục chi phí tương tự
-3. Lấy giá trị mới nhất cho mỗi hạng mục
-4. Thêm ghi chú nếu có sự thay đổi về số liệu
-5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
-6. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng"""
+        # Get the appropriate prompt based on loaiVanBan
+        combined_prompt = prompt_service.get_prompt(loaiVanBan)
 
         # Prepare parts for Gemini API
         parts = [combined_prompt]
