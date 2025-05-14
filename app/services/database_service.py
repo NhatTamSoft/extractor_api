@@ -63,7 +63,9 @@ class DatabaseService:
                     TrichYeu,
                     ChucDanhNguoiKy,
                     TenNguoiKy,
-                    NgayThaotac
+                    NgayThaotac,
+                    TenLoaiVanBan,
+                    DuAnID
                 ) VALUES (
                     :VanBanAIID,
                     :SoVanBan,
@@ -71,7 +73,9 @@ class DatabaseService:
                     :TrichYeu,
                     :ChucDanhNguoiKy,
                     :TenNguoiKy,
-                    :NgayThaotac
+                    :NgayThaotac,
+                    :TenLoaiVanBan,
+                    :DuAnID
                 )
             """)
             
@@ -85,6 +89,10 @@ class DatabaseService:
                         "message": "Lỗi khi chuyển đổi định dạng ngày tháng",
                         "error": str(e)
                     }
+            
+            # Set default values for new fields if not provided
+            van_ban_data.setdefault('TenLoaiVanBan', None)
+            van_ban_data.setdefault('DuAnID', None)
             
             # Execute query
             try:

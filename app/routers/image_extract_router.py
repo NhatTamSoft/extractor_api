@@ -35,6 +35,8 @@ os.makedirs(IMAGE_STORAGE_PATH, exist_ok=True)
 @router.post("/image_extract")
 async def extract_image(
     file: UploadFile = File(...),
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     if not file.content_type.startswith('image/'):
@@ -129,8 +131,8 @@ Yêu cầu trích xuất:
         data_json["VanBanID"] = van_ban_id
 
         # Convert currency values in the response
-        if "TongMucDauTuChiTiet" in data_json:
-            for item in data_json["TongMucDauTuChiTiet"]:
+        if "BangDuLieu" in data_json:
+            for item in data_json["BangDuLieu"]:
                 item["VanBanID"] = van_ban_id
                 item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
                 item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
@@ -144,7 +146,9 @@ Yêu cầu trích xuất:
             "TrichYeu": data_json.get("TrichYeu", ""),
             "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
             "TenNguoiKy": data_json.get("NguoiKy", ""),
-            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "TenLoaiVanBan": loaiVanBan,
+            "DuAnID": duAnID
         }
         print("request body:", van_ban_data)
         db_service = DatabaseService()
@@ -160,12 +164,12 @@ Yêu cầu trích xuất:
                 }
             )
 
-        # Insert TongMucDauTuChiTiet data if it exists
-        if "TongMucDauTuChiTiet" in data_json and data_json["TongMucDauTuChiTiet"]:
-            # Prepare the data for TongMucDauTuChiTiet
-            tong_muc_dau_tu_data = []
-            for item in data_json["TongMucDauTuChiTiet"]:
-                tong_muc_dau_tu_data.append({
+        # Insert BangDuLieu data if it exists
+        if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
+            # Prepare the data for BangDuLieu
+            bang_du_lieu_data = []
+            for item in data_json["BangDuLieu"]:
+                bang_du_lieu_data.append({
                     "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
                     "VanBanAIID": van_ban_id,
                     "TenKMCP": item.get("TenKMCP", ""),
@@ -175,15 +179,15 @@ Yêu cầu trích xuất:
                     "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
                 })
             
-            # Insert TongMucDauTuChiTiet data
-            print("tong muc dau tu data:", tong_muc_dau_tu_data)
-            tong_muc_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, tong_muc_dau_tu_data)
-            if not tong_muc_result.get("success", False):
+            # Insert BangDuLieu data
+            print("bang du lieu data:", bang_du_lieu_data)
+            bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
+            if not bang_du_lieu_result.get("success", False):
                 return JSONResponse(
                     status_code=500,
                     content={
-                        "message": "Lỗi khi lưu chi tiết tổng mức đầu tư",
-                        "error": tong_muc_result.get("error", "Unknown error"),
+                        "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
+                        "error": bang_du_lieu_result.get("error", "Unknown error"),
                         "data": data_json
                     }
                 )
@@ -216,6 +220,8 @@ class MultiImageExtractRequest(BaseModel):
 @router.post("/image_extract_multi")
 async def extract_multiple_images(
     files: List[UploadFile] = File(...),
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     # if len(files) < 2:
@@ -257,7 +263,9 @@ async def extract_multiple_images(
             raise HTTPException(status_code=400, detail="Không thể xử lý bất kỳ file nào")
 
         # Combine all data for comparison
-        combined_prompt = """Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
+        combined_prompt = """
+        
+Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
 Yêu cầu trích xuất:
 1.  **Thông tin chung của văn bản:**
     * `SoVanBan`: Số hiệu văn bản mới nhất.
@@ -272,8 +280,8 @@ Yêu cầu trích xuất:
     * Gộp tất cả các khoản mục chi phí từ các văn bản.
     * Nếu có cùng hạng mục chi phí, gộp lại thành một dòng.
     * Lấy giá trị mới nhất cho mỗi hạng mục.
-    * Thông tin này cần được đặt trong một mảng (array) có tên là `TongMucDauTuChiTiet`.
-    * Mỗi phần tử trong mảng `TongMucDauTuChiTiet` là một đối tượng (object) chứa các cặp key-value:
+    * Thông tin này cần được đặt trong một mảng (array) có tên là `BangDuLieu`.
+    * Mỗi phần tử trong mảng `BangDuLieu` là một đối tượng (object) chứa các cặp key-value:
         * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
         * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
         * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
@@ -283,7 +291,7 @@ Yêu cầu trích xuất:
 **Định dạng JSON đầu ra mong muốn:**
 ```json
 {
-   "VanBanID":"ID ngẫu nhiên kiểu uniqueidentifier",
+   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
    "SoVanBan":"Số văn bản mới nhất",
    "NgayKy":"dd/mm/yyyy",
    "NguoiKy":"Tên người ký mới nhất",
@@ -291,15 +299,14 @@ Yêu cầu trích xuất:
    "CoQuanBanHanh":"Tên cơ quan ban hành",
    "TrichYeu":"Nội dung trích yếu tổng hợp",
    "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "LoaiVanBan":"Loại văn bản chung",
-   "TongMucDauTuChiTiet":[
+   "TenVanBan":"Tên văn bản",
+   "BangDuLieu":[
       {
-         "VanBanID":"Lấy `VanBanID` ở phía trên",
-         "TenKMCP":"Chi phí xây dựng",
+         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
          "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
-         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh",
-         "GiaTriTMDTKMCPTang": "Giá trị tăng (nếu có)",
-         "GiaTriTMDTKMCPGiam": "Giá trị giảm (nếu có)"
+         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
+         "GiaTriTMDTKMCPTang": "Giá trị tăng, nếu không có để '0'",
+         "GiaTriTMDTKMCPGiam": "Giá trị giảm, nếu không có để '0'"
       }
    ]
 }
@@ -310,7 +317,8 @@ Yêu cầu trích xuất:
 2. Gộp các hạng mục chi phí tương tự
 3. Lấy giá trị mới nhất cho mỗi hạng mục
 4. Thêm ghi chú nếu có sự thay đổi về số liệu
-5. Đảm bảo tính nhất quán trong việc gộp dữ liệu"""
+5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
+6. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng"""
 
         # Prepare parts for Gemini API
         parts = [combined_prompt]
@@ -340,8 +348,8 @@ Yêu cầu trích xuất:
         data_json["VanBanID"] = van_ban_id
 
         # Convert currency values in the response
-        if "TongMucDauTuChiTiet" in data_json:
-            for item in data_json["TongMucDauTuChiTiet"]:
+        if "BangDuLieu" in data_json:
+            for item in data_json["BangDuLieu"]:
                 item["VanBanID"] = van_ban_id
                 item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
                 item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
@@ -355,7 +363,9 @@ Yêu cầu trích xuất:
             "TrichYeu": data_json.get("TrichYeu", ""),
             "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
             "TenNguoiKy": data_json.get("NguoiKy", ""),
-            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "TenLoaiVanBan": loaiVanBan,
+            "DuAnID": duAnID
         }
         print("request body:", van_ban_data)
         db_service = DatabaseService()
@@ -371,12 +381,12 @@ Yêu cầu trích xuất:
                 }
             )
 
-        # Insert TongMucDauTuChiTiet data if it exists
-        if "TongMucDauTuChiTiet" in data_json and data_json["TongMucDauTuChiTiet"]:
-            # Prepare the data for TongMucDauTuChiTiet
-            tong_muc_dau_tu_data = []
-            for item in data_json["TongMucDauTuChiTiet"]:
-                tong_muc_dau_tu_data.append({
+        # Insert BangDuLieu data if it exists
+        if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
+            # Prepare the data for BangDuLieu
+            bang_du_lieu_data = []
+            for item in data_json["BangDuLieu"]:
+                bang_du_lieu_data.append({
                     "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
                     "VanBanAIID": van_ban_id,
                     "TenKMCP": item.get("TenKMCP", ""),
@@ -386,15 +396,15 @@ Yêu cầu trích xuất:
                     "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
                 })
             
-            # Insert TongMucDauTuChiTiet data
-            print("tong muc dau tu data:", tong_muc_dau_tu_data)
-            tong_muc_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, tong_muc_dau_tu_data)
-            if not tong_muc_result.get("success", False):
+            # Insert BangDuLieu data
+            print("bang du lieu data:", bang_du_lieu_data)
+            bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
+            if not bang_du_lieu_result.get("success", False):
                 return JSONResponse(
                     status_code=500,
                     content={
-                        "message": "Lỗi khi lưu chi tiết tổng mức đầu tư",
-                        "error": tong_muc_result.get("error", "Unknown error"),
+                        "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
+                        "error": bang_du_lieu_result.get("error", "Unknown error"),
                         "data": data_json
                     }
                 )
