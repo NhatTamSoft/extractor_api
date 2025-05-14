@@ -218,8 +218,8 @@ async def extract_multiple_images(
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db)
 ):
-    if len(files) < 2:
-        raise HTTPException(status_code=400, detail="Yêu cầu tối thiểu 2 file ảnh để so sánh")
+    # if len(files) < 2:
+    #     raise HTTPException(status_code=400, detail="Yêu cầu tối thiểu 2 file ảnh để so sánh")
     
     temp_files = []
     all_data = []
