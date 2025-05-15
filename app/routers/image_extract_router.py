@@ -17,6 +17,8 @@ from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
 from app.services.DungChung import convert_currency_to_float
+from app.core.auth import get_current_user
+from app.schemas.user import User
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -36,6 +38,15 @@ prompt_service = PromptService()
 IMAGE_STORAGE_PATH = os.getenv('IMAGE_STORAGE_PATH', 'image_storage')
 os.makedirs(IMAGE_STORAGE_PATH, exist_ok=True)
 
+# Định nghĩa các định dạng ảnh được chấp nhận
+ALLOWED_IMAGE_TYPES = {
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/bmp',
+    'image/webp'
+}
+
 @router.post("/image_extract")
 async def extract_image(
     file: UploadFile = File(...),
@@ -46,7 +57,12 @@ async def extract_image(
     if not file.content_type.startswith('image/'):
         return JSONResponse(
             status_code=400,
-            content={"message": "Chỉ chấp nhận file ảnh"}
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "File không đúng định dạng ảnh",
+                "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+            }
         )
     try:
         # Generate UUID only once and use it consistently
@@ -61,13 +77,21 @@ async def extract_image(
         # Lưu file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-
-        # Đọc và xử lý ảnh
-        with Image.open(file_path) as img:
-            buffered = BytesIO()
-            img.save(buffered, format="PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-
+        try:
+            with Image.open(file_path) as img:
+                buffered = BytesIO()
+                img.save(buffered, format="PNG")
+                img_str = base64.b64encode(buffered.getvalue()).decode()
+        except Exception as e:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "File ảnh bị hỏng hoặc không thể đọc",
+                    "detail": str(e)
+                }
+            )
         promptText = """Dựa vào tài liệu đã được cung cấp, hãy trích xuất các thông tin sau và định dạng toàn bộ kết quả thành một đối tượng JSON duy nhất.
 Yêu cầu trích xuất:
 1.  **Thông tin chung của văn bản:**
@@ -127,8 +151,52 @@ Yêu cầu trích xuất:
             response_text = response_text.strip()[7:-3].strip()
         elif response_text.strip().startswith("```"):
             response_text = response_text.strip()[3:-3].strip()
-        
-        data_json = json.loads(response_text)
+        # Nếu AI trả về lỗi rõ ràng
+        if "error" in response_text.lower() or "không thể" in response_text.lower():
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "AI không thể nhận diện văn bản từ ảnh",
+                    "detail": response_text
+                }
+            )
+        try:
+            data_json = json.loads(response_text)
+        except json.JSONDecodeError as e:
+            # Nếu response_text có vẻ là HTML hoặc text không phải JSON
+            if response_text.strip().startswith("<"):
+                msg = "AI trả về HTML hoặc file không phải là ảnh văn bản."
+            elif len(response_text.strip()) < 30:
+                msg = "Ảnh không chứa đủ thông tin văn bản hoặc quá mờ."
+            else:
+                msg = "Kết quả trả về không đúng định dạng."
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": msg,
+                    "detail": str(e),
+                    "raw_response": response_text
+                }
+            )
+
+        # Validate required fields in the response
+        required_fields = ["SoVanBan", "NgayKy", "NguoiKy", "ChucDanhNguoiKy", "TrichYeu"]
+        missing_fields = [field for field in required_fields if field not in data_json]
+        if missing_fields:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
+                    "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                    "missing_fields": missing_fields
+                }
+            )
 
         # Set UUIDs in the response data
         data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
@@ -152,9 +220,11 @@ Yêu cầu trích xuất:
             "TenNguoiKy": data_json.get("NguoiKy", ""),
             "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "TenLoaiVanBan": loaiVanBan,
-            "DuAnID": duAnID
+            "DuAnID": duAnID,
+            "JsonAI": json.dumps(data_json, ensure_ascii=False),
+            "DataOCR": response_text
         }
-        print("request body:", van_ban_data)
+
         db_service = DatabaseService()
         result = await db_service.insert_van_ban_ai(db, van_ban_data)
         
@@ -162,15 +232,15 @@ Yêu cầu trích xuất:
             return JSONResponse(
                 status_code=500,
                 content={
+                    "status": "error",
+                    "code": 500,
                     "message": "Lỗi khi lưu dữ liệu vào database",
-                    "error": result.get("error", "Unknown error"),
-                    "data": data_json
+                    "detail": result.get("error", "Unknown error")
                 }
             )
 
         # Insert BangDuLieu data if it exists
         if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
-            # Prepare the data for BangDuLieu
             bang_du_lieu_data = []
             for item in data_json["BangDuLieu"]:
                 bang_du_lieu_data.append({
@@ -183,35 +253,43 @@ Yêu cầu trích xuất:
                     "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
                 })
             
-            # Insert BangDuLieu data
-            print("bang du lieu data:", bang_du_lieu_data)
             bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
             if not bang_du_lieu_result.get("success", False):
                 return JSONResponse(
                     status_code=500,
                     content={
+                        "status": "error",
+                        "code": 500,
                         "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
-                        "error": bang_du_lieu_result.get("error", "Unknown error"),
-                        "data": data_json
+                        "detail": bang_du_lieu_result.get("error", "Unknown error")
                     }
                 )
 
         return JSONResponse(
             status_code=200,
             content={
+                "status": "success",
+                "code": 200,
                 "message": "Upload file ảnh thành công",
-                "original_filename": file.filename,
-                "unique_filename": unique_filename,
-                "file_path": file_path,
-                "data": data_json,
-                "status": result.get("success", False),
-                "db_message": result.get("message", "")
+                "data": {
+                    "original_filename": file.filename,
+                    "unique_filename": unique_filename,
+                    "file_path": file_path,
+                    "van_ban": data_json,
+                    "db_status": result.get("success", False),
+                    "db_message": result.get("message", "")
+                }
             }
         )
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"message": f"Lỗi khi upload file: {str(e)}"}
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
         )
     finally:
         # Clean up temporary file
@@ -228,9 +306,6 @@ async def extract_multiple_images(
     duAnID: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    # if len(files) < 2:
-    #     raise HTTPException(status_code=400, detail="Yêu cầu tối thiểu 2 file ảnh để so sánh")
-    
     temp_files = []
     all_data = []
     try:
@@ -240,8 +315,16 @@ async def extract_multiple_images(
 
         # Process each file
         for file in files:
-            if not file.content_type.startswith('image/'):
-                raise HTTPException(status_code=400, detail=f"File {file.filename} phải là định dạng ảnh")
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
 
             # Tạo tên file tạm thời
             temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{file.filename}")
@@ -251,20 +334,35 @@ async def extract_multiple_images(
             with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
-
-            # Xử lý ảnh
-            with Image.open(temp_file_path) as img:
-                buffered = BytesIO()
-                img.save(buffered, format="PNG")
-                img_str = base64.b64encode(buffered.getvalue()).decode()
-
+            try:
+                with Image.open(temp_file_path) as img:
+                    buffered = BytesIO()
+                    img.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
+            except Exception as e:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} bị hỏng hoặc không thể đọc",
+                        "detail": str(e)
+                    }
+                )
             all_data.append({
                 "filename": file.filename,
                 "image_data": img_str
             })
-
         if not all_data:
-            raise HTTPException(status_code=400, detail="Không thể xử lý bất kỳ file nào")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể xử lý file",
+                    "detail": "Không thể xử lý bất kỳ file nào"
+                }
+            )
 
         # Get the appropriate prompt based on loaiVanBan
         combined_prompt = prompt_service.get_prompt(loaiVanBan)
@@ -277,102 +375,163 @@ async def extract_multiple_images(
                 'data': data['image_data']
             })
 
-        # Call Gemini API with all images at once
-        response = model.generate_content(parts)
-        response_text = response.text
-
-        # Clean up response text
-        if response_text.strip().startswith("```json"):
-            response_text = response_text.strip()[7:-3].strip()
-        elif response_text.strip().startswith("```"):
-            response_text = response_text.strip()[3:-3].strip()
-
         try:
-            data_json = json.loads(response_text)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
-
-        # Set UUIDs in the response data
-        data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
-        data_json["VanBanID"] = van_ban_id
-
-        # Convert currency values in the response
-        if "BangDuLieu" in data_json:
-            for item in data_json["BangDuLieu"]:
-                item["VanBanID"] = van_ban_id
-                item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
-                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
-                item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
-                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
-        
-        van_ban_data = {
-            "VanBanAIID": van_ban_id,
-            "SoVanBan": data_json.get("SoVanBan", ""),
-            "NgayKy": data_json.get("NgayKy", ""),
-            "TrichYeu": data_json.get("TrichYeu", ""),
-            "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
-            "TenNguoiKy": data_json.get("NguoiKy", ""),
-            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "TenLoaiVanBan": loaiVanBan,
-            "DuAnID": duAnID
-        }
-        print("request body:", van_ban_data)
-        db_service = DatabaseService()
-        result = await db_service.insert_van_ban_ai(db, van_ban_data)
-        
-        if not result.get("success", False):
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "message": "Lỗi khi lưu dữ liệu vào database",
-                    "error": result.get("error", "Unknown error"),
-                    "data": data_json
-                }
-            )
-
-        # Insert BangDuLieu data if it exists
-        if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
-            # Prepare the data for BangDuLieu
-            bang_du_lieu_data = []
-            for item in data_json["BangDuLieu"]:
-                bang_du_lieu_data.append({
-                    "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
-                    "VanBanAIID": van_ban_id,
-                    "TenKMCP": item.get("TenKMCP", ""),
-                    "GiaTriTMDTKMCP": item["GiaTriTMDTKMCP"],
-                    "GiaTriTMDTKMCP_DC": item["GiaTriTMDTKMCP_DC"],
-                    "GiaTriTMDTKMCPTang": item["GiaTriTMDTKMCPTang"],
-                    "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
-                })
-            
-            # Insert BangDuLieu data
-            print("bang du lieu data:", bang_du_lieu_data)
-            bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
-            if not bang_du_lieu_result.get("success", False):
+            # Call Gemini API with all images at once
+            response = model.generate_content(parts)
+            response_text = response.text
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
+            # Nếu AI trả về lỗi rõ ràng
+            if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
-                    status_code=500,
+                    status_code=400,
                     content={
-                        "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
-                        "error": bang_du_lieu_result.get("error", "Unknown error"),
-                        "data": data_json
+                        "status": "error",
+                        "code": 400,
+                        "message": "AI không thể nhận diện văn bản từ ảnh",
+                        "detail": response_text
+                    }
+                )
+            try:
+                data_json = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                if response_text.strip().startswith("<"):
+                    msg = "AI trả về HTML hoặc file không phải là ảnh văn bản."
+                elif len(response_text.strip()) < 30:
+                    msg = "Ảnh không chứa đủ thông tin văn bản hoặc quá mờ."
+                else:
+                    msg = "Kết quả trả về không đúng định dạng."
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": msg,
+                        "detail": str(e),
+                        "raw_response": response_text
                     }
                 )
 
+            # Validate required fields in the response
+            required_fields = ["SoVanBan", "NgayKy", "NguoiKy", "ChucDanhNguoiKy", "TrichYeu"]
+            missing_fields = [field for field in required_fields if field not in data_json]
+            if missing_fields:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
+                        "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                        "missing_fields": missing_fields
+                    }
+                )
+
+            # Set UUIDs in the response data
+            data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+            data_json["VanBanID"] = van_ban_id
+
+            # Convert currency values in the response
+            if "BangDuLieu" in data_json:
+                for item in data_json["BangDuLieu"]:
+                    item["VanBanID"] = van_ban_id
+                    item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
+                    item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
+                    item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
+                    item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
+            
+            van_ban_data = {
+                "VanBanAIID": van_ban_id,
+                "SoVanBan": data_json.get("SoVanBan", ""),
+                "NgayKy": data_json.get("NgayKy", ""),
+                "TrichYeu": data_json.get("TrichYeu", ""),
+                "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
+                "TenNguoiKy": data_json.get("NguoiKy", ""),
+                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "TenLoaiVanBan": loaiVanBan,
+                "DuAnID": duAnID,
+                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                "DataOCR": response_text
+            }
+
+            db_service = DatabaseService()
+            result = await db_service.insert_van_ban_ai(db, van_ban_data)
+            
+            if not result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi lưu dữ liệu vào database",
+                        "detail": result.get("error", "Unknown error")
+                    }
+                )
+
+            # Insert BangDuLieu data if it exists
+            if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
+                bang_du_lieu_data = []
+                for item in data_json["BangDuLieu"]:
+                    bang_du_lieu_data.append({
+                        "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
+                        "VanBanAIID": van_ban_id,
+                        "TenKMCP": item.get("TenKMCP", ""),
+                        "GiaTriTMDTKMCP": item["GiaTriTMDTKMCP"],
+                        "GiaTriTMDTKMCP_DC": item["GiaTriTMDTKMCP_DC"],
+                        "GiaTriTMDTKMCPTang": item["GiaTriTMDTKMCPTang"],
+                        "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
+                    })
+                
+                bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
+                if not bang_du_lieu_result.get("success", False):
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "status": "error",
+                            "code": 500,
+                            "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
+                            "detail": bang_du_lieu_result.get("error", "Unknown error")
+                        }
+                    )
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "code": 200,
+                    "message": "Upload và xử lý nhiều file ảnh thành công",
+                    "data": {
+                        "files_processed": [{"filename": d['filename']} for d in all_data],
+                        "van_ban": data_json,
+                        "db_status": result.get("success", False),
+                        "db_message": result.get("message", "")
+                    }
+                }
+            )
+
+        except Exception as e:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Lỗi khi xử lý ảnh",
+                    "detail": str(e)
+                }
+            )
+    except Exception as e:
         return JSONResponse(
-            status_code=200,
+            status_code=500,
             content={
-                "message": "Upload và xử lý nhiều file ảnh thành công",
-                "files_processed": [{"filename": d['filename']} for d in all_data],
-                "data": data_json,
-                "status": result.get("success", False),
-                "db_message": result.get("message", "")
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
             }
         )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Clean up temporary files
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file) 

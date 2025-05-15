@@ -206,7 +206,12 @@ async def extract_document(
     if not file.filename.endswith('.pdf'):
         return JSONResponse(
             status_code=400,
-            content={"message": "Chỉ chấp nhận file PDF"}
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Định dạng file không hợp lệ",
+                "detail": "Chỉ chấp nhận file PDF"
+            }
         )
     try:
         # Generate UUID only once and use it consistently
@@ -239,7 +244,35 @@ async def extract_document(
             pdf_text = pdf_text.strip()[7:-3].strip()
         elif pdf_text.strip().startswith("```"):
             pdf_text = pdf_text.strip()[3:-3].strip()
-        data_json = json.loads(pdf_text)
+
+        try:
+            data_json = json.loads(pdf_text)
+        except json.JSONDecodeError as e:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể phân tích kết quả từ AI",
+                    "detail": str(e),
+                    "raw_response": pdf_text
+                }
+            )
+
+        # Validate required fields in the response
+        required_fields = ["SoVanBan", "NgayKy", "NguoiKy", "ChucDanhNguoiKy", "TrichYeu"]
+        missing_fields = [field for field in required_fields if field not in data_json]
+        if missing_fields:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể trích xuất đầy đủ thông tin từ PDF",
+                    "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                    "missing_fields": missing_fields
+                }
+            )
 
         # Set UUIDs in the response data
         data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
@@ -265,7 +298,7 @@ async def extract_document(
             "TenLoaiVanBan": loaiVanBan,
             "DuAnID": duAnID
         }
-        print("request body:", van_ban_data)
+
         db_service = DatabaseService()
         result = await db_service.insert_van_ban_ai(db, van_ban_data)
         
@@ -273,15 +306,15 @@ async def extract_document(
             return JSONResponse(
                 status_code=500,
                 content={
+                    "status": "error",
+                    "code": 500,
                     "message": "Lỗi khi lưu dữ liệu vào database",
-                    "error": result.get("error", "Unknown error"),
-                    "data": data_json
+                    "detail": result.get("error", "Unknown error")
                 }
             )
 
         # Insert BangDuLieu data if it exists
         if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
-            # Prepare the data for BangDuLieu
             bang_du_lieu_data = []
             for item in data_json["BangDuLieu"]:
                 bang_du_lieu_data.append({
@@ -294,35 +327,43 @@ async def extract_document(
                     "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
                 })
             
-            # Insert BangDuLieu data
-            print("bang du lieu data:", bang_du_lieu_data)
             bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
             if not bang_du_lieu_result.get("success", False):
                 return JSONResponse(
                     status_code=500,
                     content={
+                        "status": "error",
+                        "code": 500,
                         "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
-                        "error": bang_du_lieu_result.get("error", "Unknown error"),
-                        "data": data_json
+                        "detail": bang_du_lieu_result.get("error", "Unknown error")
                     }
                 )
 
         return JSONResponse(
             status_code=200,
             content={
+                "status": "success",
+                "code": 200,
                 "message": "Upload file PDF thành công",
-                "original_filename": file.filename,
-                "slug_filename": slug_filename,
-                "file_path": file_path,
-                "data": data_json,
-                "status": result.get("success", False),
-                "db_message": result.get("message", "")
+                "data": {
+                    "original_filename": file.filename,
+                    "slug_filename": slug_filename,
+                    "file_path": file_path,
+                    "van_ban": data_json,
+                    "db_status": result.get("success", False),
+                    "db_message": result.get("message", "")
+                }
             }
         )
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"message": f"Lỗi khi upload file: {str(e)}"}
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
         )
 
 @router.post("/extract_multi")
@@ -345,7 +386,15 @@ async def extract_multiple_documents(
         # Process each file
         for file in files:
             if not file.filename.endswith('.pdf'):
-                raise HTTPException(status_code=400, detail=f"File {file.filename} phải là định dạng PDF")
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Định dạng file không hợp lệ",
+                        "detail": f"File {file.filename} phải là định dạng PDF"
+                    }
+                )
 
             # Tạo tên file tạm thời
             temp_file_path = os.path.join(PDF_STORAGE_PATH, f"temp_{file.filename}")
@@ -377,11 +426,27 @@ async def extract_multiple_documents(
                     "filename": file.filename,
                     "data": data_json
                 })
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ file {file.filename}: {str(e)}")
+            except json.JSONDecodeError as e:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "Không thể phân tích kết quả từ file",
+                        "detail": f"Lỗi parse JSON từ file {file.filename}: {str(e)}"
+                    }
+                )
 
         if not all_data:
-            raise HTTPException(status_code=400, detail="Không thể xử lý bất kỳ file nào")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể xử lý file",
+                    "detail": "Không thể xử lý bất kỳ file nào"
+                }
+            )
 
         # Get the appropriate prompt for combining data
         combined_prompt = prompt_service.get_prompt(loaiVanBan)
@@ -403,8 +468,32 @@ async def extract_multiple_documents(
 
         try:
             data_json = json.loads(response_text)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Lỗi parse JSON từ AI: {str(e)}")
+        except json.JSONDecodeError as e:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể phân tích kết quả từ AI",
+                    "detail": str(e),
+                    "raw_response": response_text
+                }
+            )
+
+        # Validate required fields in the response
+        required_fields = ["SoVanBan", "NgayKy", "NguoiKy", "ChucDanhNguoiKy", "TrichYeu"]
+        missing_fields = [field for field in required_fields if field not in data_json]
+        if missing_fields:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không thể trích xuất đầy đủ thông tin từ PDF",
+                    "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                    "missing_fields": missing_fields
+                }
+            )
 
         # Set UUIDs in the response data
         data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
@@ -430,7 +519,7 @@ async def extract_multiple_documents(
             "TenLoaiVanBan": loaiVanBan,
             "DuAnID": duAnID
         }
-        print("request body:", van_ban_data)
+
         db_service = DatabaseService()
         result = await db_service.insert_van_ban_ai(db, van_ban_data)
         
@@ -438,15 +527,15 @@ async def extract_multiple_documents(
             return JSONResponse(
                 status_code=500,
                 content={
+                    "status": "error",
+                    "code": 500,
                     "message": "Lỗi khi lưu dữ liệu vào database",
-                    "error": result.get("error", "Unknown error"),
-                    "data": data_json
+                    "detail": result.get("error", "Unknown error")
                 }
             )
 
         # Insert BangDuLieu data if it exists
         if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
-            # Prepare the data for BangDuLieu
             bang_du_lieu_data = []
             for item in data_json["BangDuLieu"]:
                 bang_du_lieu_data.append({
@@ -459,32 +548,43 @@ async def extract_multiple_documents(
                     "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
                 })
             
-            # Insert BangDuLieu data
-            print("bang du lieu data:", bang_du_lieu_data)
             bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
             if not bang_du_lieu_result.get("success", False):
                 return JSONResponse(
                     status_code=500,
                     content={
+                        "status": "error",
+                        "code": 500,
                         "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
-                        "error": bang_du_lieu_result.get("error", "Unknown error"),
-                        "data": data_json
+                        "detail": bang_du_lieu_result.get("error", "Unknown error")
                     }
                 )
 
         return JSONResponse(
             status_code=200,
             content={
+                "status": "success",
+                "code": 200,
                 "message": "Upload và xử lý nhiều file PDF thành công",
-                "files_processed": [{"filename": d['filename']} for d in all_data],
-                "data": data_json,
-                "status": result.get("success", False),
-                "db_message": result.get("message", "")
+                "data": {
+                    "files_processed": [{"filename": d['filename']} for d in all_data],
+                    "van_ban": data_json,
+                    "db_status": result.get("success", False),
+                    "db_message": result.get("message", "")
+                }
             }
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
+        )
     finally:
         # Clean up temporary files
         for temp_file in temp_files:
