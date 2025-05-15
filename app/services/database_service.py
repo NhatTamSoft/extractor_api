@@ -65,7 +65,9 @@ class DatabaseService:
                     TenNguoiKy,
                     NgayThaotac,
                     TenLoaiVanBan,
-                    DuAnID
+                    DuAnID,
+                    JsonAI,
+                    DataOCR
                 ) VALUES (
                     :VanBanAIID,
                     :SoVanBan,
@@ -75,7 +77,9 @@ class DatabaseService:
                     :TenNguoiKy,
                     :NgayThaotac,
                     :TenLoaiVanBan,
-                    :DuAnID
+                    :DuAnID,
+                    :JsonAI,
+                    :DataOCR
                 )
             """)
             
@@ -91,8 +95,10 @@ class DatabaseService:
                     }
             
             # Set default values for new fields if not provided
-            van_ban_data.setdefault('TenLoaiVanBan', "QDPD_ChuTuongDT")
-            van_ban_data.setdefault('DuAnID', "5010455E-74C8-443B-BE4E-F0B25DDC8009")
+            van_ban_data.setdefault('LoaiVanBanID', None)
+            van_ban_data.setdefault('DuAnID', None)
+            van_ban_data.setdefault('JsonAI', None)
+            van_ban_data.setdefault('DataOCR', None)
             
             # Execute query
             try:
