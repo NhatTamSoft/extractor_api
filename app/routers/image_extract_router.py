@@ -17,6 +17,8 @@ from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
 from app.services.DungChung import convert_currency_to_float
+from app.core.auth import get_current_user
+from app.schemas.user import User
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -226,7 +228,8 @@ async def extract_multiple_images(
     files: List[UploadFile] = File(...),
     loaiVanBan: Optional[str] = None,
     duAnID: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     # if len(files) < 2:
     #     raise HTTPException(status_code=400, detail="Yêu cầu tối thiểu 2 file ảnh để so sánh")
