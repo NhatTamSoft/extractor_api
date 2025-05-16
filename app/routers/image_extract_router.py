@@ -368,10 +368,10 @@ async def extract_multiple_images(
             )
 
         # Get the appropriate prompt based on loaiVanBan
-        combined_prompt = prompt_service.get_prompt(loaiVanBan)
+        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
 
         # Prepare parts for Gemini API
-        parts = [combined_prompt]
+        parts = [prompt]
         for data in all_data:
             parts.append({
                 'mime_type': 'image/png',
@@ -440,10 +440,13 @@ async def extract_multiple_images(
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
                     item["VanBanID"] = van_ban_id
-                    item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
-                    item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
-                    item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
-                    item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
+                    # Convert all numeric values based on required columns
+                    for col in required_columns:
+                        if col.startswith('GiaTri') and item.get(col):
+                            try:
+                                item[col] = convert_currency_to_float(str(item[col]))
+                            except:
+                                item[col] = 0
             
             van_ban_data = {
                 "VanBanAIID": van_ban_id,
@@ -479,16 +482,15 @@ async def extract_multiple_images(
                 bang_du_lieu_data = []
                 for item in data_json["BangDuLieu"]:
                     bang_du_lieu_data.append({
-                        "BangDuLieuChiTietAIID": bang_du_lieu_chi_tiet_id,
                         "VanBanAIID": van_ban_id,
-                        "TenKMCP": item.get("TenKMCP", ""),
-                        "GiaTriTMDTKMCP": item["GiaTriTMDTKMCP"],
-                        "GiaTriTMDTKMCP_DC": item["GiaTriTMDTKMCP_DC"],
-                        "GiaTriTMDTKMCPTang": item["GiaTriTMDTKMCPTang"],
-                        "GiaTriTMDTKMCPGiam": item["GiaTriTMDTKMCPGiam"]
+                        **{col: item.get(col, 0) for col in required_columns}
                     })
                 
-                bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(db, bang_du_lieu_data)
+                bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
+                    db, 
+                    bang_du_lieu_data,
+                    required_columns
+                )
                 if not bang_du_lieu_result.get("success", False):
                     return JSONResponse(
                         status_code=500,

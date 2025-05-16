@@ -1,8 +1,8 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple, List
 
 class PromptService:
     def __init__(self):
-        self.prompts: Dict[str, str] = {}
+        self.prompts: Dict[str, Tuple[str, List[str]]] = {}
         self._load_prompts()
 
     def _load_prompts(self):
@@ -27,21 +27,42 @@ class PromptService:
                     if header.startswith('[') and header.endswith(']'):
                         loai_van_ban = header[1:-1]
                         prompt = parts[1].strip()
-                        self.prompts[loai_van_ban] = prompt
+                        
+                        # Extract required columns based on loaiVanBan
+                        required_columns = self._get_required_columns(loai_van_ban)
+                        self.prompts[loai_van_ban] = (prompt, required_columns)
         except Exception as e:
             print(f"Error loading prompts: {str(e)}")
             # Initialize with empty prompts if file loading fails
             self.prompts = {}
 
-    def get_prompt(self, loai_van_ban: Optional[str]) -> str:
+    def _get_required_columns(self, loai_van_ban: str) -> List[str]:
+        """Get required columns based on loaiVanBan"""
+        # Default columns that are always required
+        default_columns = ["TenKMCP"]
+        
+        # Map loaiVanBan to required columns
+        column_mapping = {
+            'QDPD_CT': default_columns + ["GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"],
+            'QDPDDT_CBDT': default_columns + ["GiaTriDuToanKMCP", "GiaTriDuToanKMCP_DC", "GiaTriDuToanKMCPTang", "GiaTriDuToanKMCPGiam"],
+            'QDPD_KHLCNT_CBDT': default_columns + ["TenDauThau", "GiaTriGoiThau", "TenNguonVon", "HinhThucLCNT", "PhuongThucLCNT", "ThoiGianTCLCNT", "LoaiHopDong", "ThoiGianTHHopDong"],
+            'QDPD_DA': default_columns + ["GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"],
+            'QDPD_DT_THDT': default_columns + ["GiaTriDuToanKMCP", "GiaTriDuToanKMCP_DC", "GiaTriDuToanKMCPTang", "GiaTriDuToanKMCPGiam"],
+            'QDPD_KHLCNT_THDT': default_columns + ["TenDauThau", "GiaTriGoiThau", "TenNguonVon", "HinhThucLCNT", "PhuongThucLCNT", "ThoiGianTCLCNT", "LoaiHopDong", "ThoiGianTHHopDong"]
+        }
+        
+        return column_mapping.get(loai_van_ban, default_columns)
+
+    def get_prompt(self, loai_van_ban: Optional[str]) -> Tuple[str, List[str]]:
         """
-        Get the prompt for a specific loaiVanBan
-        If loaiVanBan is None or not found, return the default prompt
+        Get the prompt and required columns for a specific loaiVanBan
+        If loaiVanBan is None or not found, return the default prompt and columns
         """
         if loai_van_ban and loai_van_ban in self.prompts:
             return self.prompts[loai_van_ban]
         
-        # Return default prompt if loaiVanBan is not found
+        # Return default prompt and columns if loaiVanBan is not found
+        default_columns = ["TenKMCP", "GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"]
         return """
 Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
 Yêu cầu trích xuất:
@@ -97,4 +118,4 @@ Yêu cầu trích xuất:
 4. Thêm ghi chú nếu có sự thay đổi về số liệu
 5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
 6. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-""" 
+""", default_columns 
