@@ -1,38 +1,30 @@
 [*********]
-['QDPD_ChuTuongDT', 'QDPD_DuAn']
-Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
-Yêu cầu trích xuất:
-1.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Số hiệu văn bản mới nhất.
-    * `NgayKy`: Ngày ký văn bản mới nhất, chuyển đổi sang định dạng `dd/mm/yyyy`.
-    * `NguoiKy`: Người ký văn bản mới nhất.
-    * `ChucDanhNguoiKy`: Chức danh của người ký mới nhất (ví dụ: "Chủ tịch", "Phó Chủ tịch").
-    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
-    * `TrichYeu`: Trích yếu nội dung văn bản (tổng hợp từ các văn bản).
-    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu có bất kỳ văn bản nào là văn bản điều chỉnh. Ngược lại, đặt giá trị là `0`.
-    * `LoaiVanBan`: Loại văn bản chung (ví dụ: "Quyết định", "Nghị định").
-2.  **Chi tiết Tổng mức đầu tư:**
-    * Gộp tất cả các khoản mục chi phí từ các văn bản.
-    * Nếu có cùng hạng mục chi phí, gộp lại thành một dòng.
-    * Lấy giá trị mới nhất cho mỗi hạng mục.
-    * Thông tin này cần được đặt trong một mảng (array) có tên là `BangDuLieu`.
-    * Mỗi phần tử trong mảng `BangDuLieu` là một đối tượng (object) chứa các cặp key-value:
-        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
-        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
-        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
-        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
-        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
-
+['QDPD_CT']
+1. Quyết định phê duyệt chủ trương đầu tư, quyết định điều chỉnh chủ trương đầu tư
+a.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Lấy số văn bản
+    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
+    * `NguoiKy`: Lấy người ký văn bản
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+    * `DieuChinh`: Nếu điều chỉnh chủ trương đầu tư gán giá trị là `1`, ngược lại gán giá trị là `0`
+b.  **Bảng số liệu tổng mức đầu tư:**
+    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+    * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư theo khoản mục chi phí
+    * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí 
+    * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
+    * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
 **Định dạng JSON đầu ra mong muốn:**
 ```json
 {
    "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản mới nhất",
+   "SoVanBan":"Số văn bản",
    "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký mới nhất",
-   "ChucDanhNguoiKy":"Chức danh người ký mới nhất",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
    "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu tổng hợp",
+   "TrichYeu":"Nội dung trích yếu",
    "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
    "TenVanBan":"Tên văn bản",
    "BangDuLieu":[
@@ -46,50 +38,130 @@ Yêu cầu trích xuất:
    ]
 }
 ```
-
-**Lưu ý quan trọng:**
-1. Ưu tiên thông tin từ văn bản mới nhất
-2. Gộp các hạng mục chi phí tương tự
-3. Lấy giá trị mới nhất cho mỗi hạng mục
-4. Thêm ghi chú nếu có sự thay đổi về số liệu
-5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
-6. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-
+**Lưu ý**
+1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
+2. Không lấy dòng tổng cộng của bảng
 [*********]
-[QDPheDuyetChuTruong]
-Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
-Yêu cầu trích xuất:
-1.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Số hiệu văn bản mới nhất.
-    * `NgayKy`: Ngày ký văn bản mới nhất, chuyển đổi sang định dạng `dd/mm/yyyy`.
-    * `NguoiKy`: Người ký văn bản mới nhất.
-    * `ChucDanhNguoiKy`: Chức danh của người ký mới nhất (ví dụ: "Chủ tịch", "Phó Chủ tịch").
-    * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
-    * `TrichYeu`: Trích yếu nội dung văn bản (tổng hợp từ các văn bản).
-    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu có bất kỳ văn bản nào là văn bản điều chỉnh. Ngược lại, đặt giá trị là `0`.
-    * `LoaiVanBan`: Loại văn bản chung (ví dụ: "Quyết định", "Nghị định").
-2.  **Chi tiết Tổng mức đầu tư:**
-    * Gộp tất cả các khoản mục chi phí từ các văn bản.
-    * Nếu có cùng hạng mục chi phí, gộp lại thành một dòng.
-    * Lấy giá trị mới nhất cho mỗi hạng mục.
-    * Thông tin này cần được đặt trong một mảng (array) có tên là `BangDuLieu`.
-    * Mỗi phần tử trong mảng `BangDuLieu` là một đối tượng (object) chứa các cặp key-value:
-        * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng").
-        * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư khoản mục chi phí.
-        * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư khoản mục chi phí sau điều chỉnh.
-        * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư khoản mục chi phí tăng (nếu có).
-        * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư khoản mục chi phí giảm (nếu có).
-
+['QDPDDT_CBDT']
+2. Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư
+a.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Lấy số văn bản
+    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
+    * `NguoiKy`: Lấy người ký văn bản
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+    * `DieuChinh`: Nếu điều chỉnh dự toán gán giá trị là `1`, ngược lại gán giá trị là `0`
+b.  **Bảng số liệu dự toán:**
+    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+    * `GiaTriDuToanKMCP`: Giá trị dự toán theo khoản mục chi phí
+    * `GiaTriDuToanKMCP_DC`: Giá trị dự toán điều chỉnh theo khoản mục chi phí
+    * `GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
+    * `GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
 **Định dạng JSON đầu ra mong muốn:**
 ```json
 {
    "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản mới nhất",
+   "SoVanBan":"Số văn bản",
    "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký mới nhất",
-   "ChucDanhNguoiKy":"Chức danh người ký mới nhất",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
    "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu tổng hợp",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
+   "TenVanBan":"Tên văn bản",
+   "BangDuLieu":[
+      {
+         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
+         "GiaTriDuToanKMCP": "Giá trị tổng mức đầu tư",
+         "GiaTriDuToanKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
+         "GiaTriDuToanKMCPTang": "Giá trị tăng, nếu không có để '0'",
+         "GiaTriDuToanKMCPGiam": "Giá trị giảm, nếu không có để '0'"
+      }
+   ]
+}
+```
+**Lưu ý**
+1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
+2. Không lấy dòng tổng cộng của bảng
+[*********]
+['QDPD_KHLCNT_CBDT']
+3. Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (KHLCNT) giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KHLCNT giai đoạn chuẩn bị đầu tư
+a.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Lấy số văn bản
+    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
+    * `NguoiKy`: Lấy người ký văn bản
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+    * `DieuChinh`: Nếu điều chỉnh KHLCNT gán giá trị là `1`, ngược lại gán giá trị là `0`
+b.  **Phụ lục gói thầu:**
+    * `TenDauThau`: Lấy tên gói thầu
+    * `TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
+    * `GiaTriGoiThau`: Lấy giá gói thầu
+    * `TenNguonVon`: Lấy nguồn vốn
+    * `HinhThucLCNT`: Lấy hình thức lựa chọn nhà thầu
+    * `PhuongThucLCNT`: Lấy phương thức lựa chọn nhà thầu
+	* `ThoiGianTCLCNT`: Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu
+	* `LoaiHopDong`: Lấy loại hợp đồng
+	* `ThoiGianTHHopDong`: Lấy thời gian thực hiện hợp đồng
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
+   "TenVanBan":"Tên văn bản",
+   "BangDuLieu":[
+      {
+         "TenDauThau": "Lấy tên gói thầu",
+         "TenKMCP": "Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`",
+         "GiaTriGoiThau": "Lấy giá gói thầu",
+         "TenNguonVon": "Lấy nguồn vốn",
+         "HinhThucLCNT": "Lấy hình thức lựa chọn nhà thầu",
+         "PhuongThucLCNT": "Lấy phương thức lựa chọn nhà thầu",
+         "ThoiGianTCLCNT": "Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu",
+         "LoaiHopDong": "Lấy loại hợp đồng",
+         "ThoiGianTHHopDong": "Lấy thời gian thực hiện hợp đồng"
+      }
+   ]
+}
+```
+**Lưu ý**
+1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
+2. Không lấy dòng tổng cộng của bảng
+[*********]
+['QDPD_DA']	
+4. Quyết định phê duyệt dự án, quyết định phê duyệt điều chỉnh dự án
+a.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Lấy số văn bản
+    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
+    * `NguoiKy`: Lấy người ký văn bản
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+    * `DieuChinh`: Nếu điều chỉnh dự án gán giá trị là `1`, ngược lại gán giá trị là `0`
+b.  **Bảng số liệu tổng mức đầu tư:**
+    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+    * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư theo khoản mục chi phí
+    * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí 
+    * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
+    * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
    "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
    "TenVanBan":"Tên văn bản",
    "BangDuLieu":[
@@ -103,11 +175,96 @@ Yêu cầu trích xuất:
    ]
 }
 ```
-
-**Lưu ý quan trọng:**
-1. Ưu tiên thông tin từ văn bản mới nhất
-2. Gộp các hạng mục chi phí tương tự
-3. Lấy giá trị mới nhất cho mỗi hạng mục
-4. Thêm ghi chú nếu có sự thay đổi về số liệu
-5. Đảm bảo tính nhất quán trong việc gộp dữ liệu
-6. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
+**Lưu ý**
+1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
+2. Không lấy dòng tổng cộng của bảng
+[*********]
+['QDPD_DT_THDT']
+5. Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư
+a.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Lấy số văn bản
+    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
+    * `NguoiKy`: Lấy người ký văn bản
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+    * `DieuChinh`: Nếu điều chỉnh dự toán gán giá trị là `1`, ngược lại gán giá trị là `0`
+b.  **Bảng số liệu dự toán:**
+    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+    * `GiaTriDuToanKMCP`: Giá trị dự toán theo khoản mục chi phí
+    * `GiaTriDuToanKMCP_DC`: Giá trị dự toán điều chỉnh theo khoản mục chi phí
+    * `GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
+    * `GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
+   "TenVanBan":"Tên văn bản",
+   "BangDuLieu":[
+      {
+         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
+         "GiaTriDuToanKMCP": "Giá trị tổng mức đầu tư",
+         "GiaTriDuToanKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
+         "GiaTriDuToanKMCPTang": "Giá trị tăng, nếu không có để '0'",
+         "GiaTriDuToanKMCPGiam": "Giá trị giảm, nếu không có để '0'"
+      }
+   ]
+}
+[*********]
+['QDPD_KHLCNT_THDT']
+6. Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (KHLCNT) giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư
+a.  **Thông tin chung của văn bản:**
+    * `SoVanBan`: Lấy số văn bản
+    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
+    * `NguoiKy`: Lấy người ký văn bản
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+    * `DieuChinh`: Nếu điều chỉnh KHLCNT gán giá trị là `1`, ngược lại gán giá trị là `0`
+b.  **Phụ lục gói thầu:**
+    * `TenDauThau`: Lấy tên gói thầu
+	* `TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
+    * `GiaTriGoiThau`: Lấy giá gói thầu
+    * `TenNguonVon`: Lấy nguồn vốn
+    * `HinhThucLCNT`: Lấy hình thức lựa chọn nhà thầu
+    * `PhuongThucLCNT`: Lấy phương thức lựa chọn nhà thầu
+	* `ThoiGianTCLCNT`: Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu
+	* `LoaiHopDong`: Lấy loại hợp đồng
+	* `ThoiGianTHHopDong`: Lấy thời gian thực hiện hợp đồng
+**Định dạng JSON đầu ra mong muốn:**
+```json
+{
+   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+   "SoVanBan":"Số văn bản",
+   "NgayKy":"dd/mm/yyyy",
+   "NguoiKy":"Tên người ký",
+   "ChucDanhNguoiKy":"Chức danh người ký",
+   "CoQuanBanHanh":"Tên cơ quan ban hành",
+   "TrichYeu":"Nội dung trích yếu",
+   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
+   "TenVanBan":"Tên văn bản",
+   "BangDuLieu":[
+      {
+         "TenDauThau": "Lấy tên gói thầu",
+         "TenKMCP": "Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`",
+         "GiaTriGoiThau": "Lấy giá gói thầu",
+         "TenNguonVon": "Lấy nguồn vốn",
+         "HinhThucLCNT": "Lấy hình thức lựa chọn nhà thầu",
+         "PhuongThucLCNT": "Lấy phương thức lựa chọn nhà thầu",
+         "ThoiGianTCLCNT": "Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu",
+         "LoaiHopDong": "Lấy loại hợp đồng",
+         "ThoiGianTHHopDong": "Lấy thời gian thực hiện hợp đồng"
+      }
+   ]
+}
+```
+**Lưu ý**
+1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
+2. Không lấy dòng tổng cộng của bảng
