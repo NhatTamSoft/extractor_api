@@ -222,7 +222,8 @@ Yêu cầu trích xuất:
             "TenLoaiVanBan": loaiVanBan,
             "DuAnID": duAnID,
             "JsonAI": json.dumps(data_json, ensure_ascii=False),
-            "DataOCR": response_text
+            "DataOCR": response_text,
+            "TenFile": file.filename
         }
 
         db_service = DatabaseService()
@@ -326,8 +327,9 @@ async def extract_multiple_images(
                     }
                 )
 
-            # Tạo tên file tạm thời
-            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{file.filename}")
+            # Tạo tên file tạm thời với timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{file.filename}")
             temp_files.append(temp_file_path)
             
             # Lưu file tạm thời
@@ -351,7 +353,8 @@ async def extract_multiple_images(
                 )
             all_data.append({
                 "filename": file.filename,
-                "image_data": img_str
+                "image_data": img_str,
+                "temp_path": temp_file_path  # Lưu đường dẫn file tạm để có thể xử lý sau
             })
         if not all_data:
             return JSONResponse(
@@ -453,7 +456,8 @@ async def extract_multiple_images(
                 "TenLoaiVanBan": loaiVanBan,
                 "DuAnID": duAnID,
                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
-                "DataOCR": response_text
+                "DataOCR": response_text,
+                "TenFile": "*".join([d['filename'] for d in all_data])
             }
 
             db_service = DatabaseService()

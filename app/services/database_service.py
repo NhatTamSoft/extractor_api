@@ -67,7 +67,8 @@ class DatabaseService:
                     TenLoaiVanBan,
                     DuAnID,
                     JsonAI,
-                    DataOCR
+                    DataOCR,
+                    TenFile
                 ) VALUES (
                     :VanBanAIID,
                     :SoVanBan,
@@ -79,7 +80,8 @@ class DatabaseService:
                     :TenLoaiVanBan,
                     :DuAnID,
                     :JsonAI,
-                    :DataOCR
+                    :DataOCR,
+                    :TenFile
                 )
             """)
             
@@ -99,6 +101,7 @@ class DatabaseService:
             van_ban_data.setdefault('DuAnID', None)
             van_ban_data.setdefault('JsonAI', None)
             van_ban_data.setdefault('DataOCR', None)
+            van_ban_data.setdefault('TenFile', None)
             
             # Execute query
             try:
