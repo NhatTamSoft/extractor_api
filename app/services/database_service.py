@@ -67,7 +67,8 @@ class DatabaseService:
                     TenLoaiVanBan,
                     DuAnID,
                     JsonAI,
-                    DataOCR
+                    DataOCR,
+                    TenFile
                 ) VALUES (
                     :VanBanAIID,
                     :SoVanBan,
@@ -79,7 +80,8 @@ class DatabaseService:
                     :TenLoaiVanBan,
                     :DuAnID,
                     :JsonAI,
-                    :DataOCR
+                    :DataOCR,
+                    :TenFile
                 )
             """)
             
@@ -99,6 +101,7 @@ class DatabaseService:
             van_ban_data.setdefault('DuAnID', None)
             van_ban_data.setdefault('JsonAI', None)
             van_ban_data.setdefault('DataOCR', None)
+            van_ban_data.setdefault('TenFile', None)
             
             # Execute query
             try:
@@ -129,7 +132,8 @@ class DatabaseService:
     @staticmethod
     async def insert_bang_du_lieu_chi_tiet_ai(
         db: Session, 
-        chi_tiet_data: List[Dict[str, Any]]
+        chi_tiet_data: List[Dict[str, Any]],
+        required_columns: List[str]
     ) -> Dict[str, Any]:
         try:
             if not chi_tiet_data:
@@ -138,28 +142,15 @@ class DatabaseService:
                     "message": "Không có chi tiết để thêm"
                 }
 
-            # Insert BangDuLieuChiTietAI data
-            insert_chi_tiet_query = text("""
+            # Build dynamic SQL query based on required columns
+            columns = ["BangDuLieuChiTietAIID", "VanBanAIID"] + required_columns
+            placeholders = [f":{col}" for col in columns]
+            
+            insert_chi_tiet_query = text(f"""
                 INSERT INTO BangDuLieuChiTietAI (
-                    BangDuLieuChiTietAIID,
-                    CoCauVonID,
-                    KMCPID,
-                    VanBanAIID,
-                    TenKMCP,
-                    GiaTriTMDTKMCP,
-                    GiaTriTMDTKMCP_DC,
-                    GiaTriTMDTKMCPTang,
-                    GiaTriTMDTKMCPGiam
+                    {', '.join(columns)}
                 ) VALUES (
-                    :BangDuLieuChiTietAIID,
-                    :CoCauVonID,
-                    :KMCPID,
-                    :VanBanAIID,
-                    :TenKMCP,
-                    :GiaTriTMDTKMCP,
-                    :GiaTriTMDTKMCP_DC,
-                    :GiaTriTMDTKMCPTang,
-                    :GiaTriTMDTKMCPGiam
+                    {', '.join(placeholders)}
                 )
             """)
 
@@ -167,9 +158,13 @@ class DatabaseService:
                 # Generate a new UUID for each record
                 chi_tiet['BangDuLieuChiTietAIID'] = str(uuid.uuid4())
                 
-                # Set default values for optional fields
-                chi_tiet.setdefault('CoCauVonID', None)
-                chi_tiet.setdefault('KMCPID', None)
+                # Convert numeric values to float
+                for col in required_columns:
+                    if col.startswith('GiaTri') and chi_tiet.get(col):
+                        try:
+                            chi_tiet[col] = convert_currency_to_float(str(chi_tiet[col]))
+                        except:
+                            chi_tiet[col] = 0
                 
                 # Execute the query
                 db.execute(insert_chi_tiet_query, chi_tiet)
@@ -214,7 +209,8 @@ class DatabaseService:
                 # Then insert into BangDuLieuChiTietAI
                 bang_du_lieu_result = await DatabaseService.insert_bang_du_lieu_chi_tiet_ai(
                     db,
-                    tong_muc_dau_tu_chi_tiet
+                    tong_muc_dau_tu_chi_tiet,
+                    ["CoCauVonID", "KMCPID", "TenKMCP", "GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"]
                 )
                 if not bang_du_lieu_result["success"]:
                     return bang_du_lieu_result
