@@ -1,4 +1,5 @@
 from typing import Dict, Optional, Tuple, List
+import re
 
 class PromptService:
     def __init__(self):
@@ -10,27 +11,24 @@ class PromptService:
         try:
             with open('data/promt_quettailieu.txt', 'r', encoding='utf-8') as file:
                 content = file.read()
-                # Split content by [*********]
-                sections = content.split('[*********]')
+                # Split content by {{CHUCNANG01}}
+                sections = re.split(r'{{CHUCNANG\d+}}', content)
                 
                 for section in sections:
                     if not section.strip():
                         continue
                     
-                    # Split section into header and prompt
-                    parts = section.strip().split('\n', 1)
-                    if len(parts) != 2:
+                    # Extract KyHieu from the section
+                    ky_hieu_match = re.search(r'\*\*KyHieu\*\*:\s*"([^"]+)"', section)
+                    if not ky_hieu_match:
                         continue
-                    
-                    # Extract loaiVanBan from header
-                    header = parts[0].strip()
-                    if header.startswith('[') and header.endswith(']'):
-                        loai_van_ban = header[1:-1]
-                        prompt = parts[1].strip()
                         
-                        # Extract required columns based on loaiVanBan
-                        required_columns = self._get_required_columns(loai_van_ban)
-                        self.prompts[loai_van_ban] = (prompt, required_columns)
+                    ky_hieu = ky_hieu_match.group(1)
+                    prompt = section.strip()
+                    
+                    # Extract required columns based on ky_hieu
+                    required_columns = self._get_required_columns(ky_hieu)
+                    self.prompts[ky_hieu] = (prompt, required_columns)
         except Exception as e:
             print(f"Error loading prompts: {str(e)}")
             # Initialize with empty prompts if file loading fails
