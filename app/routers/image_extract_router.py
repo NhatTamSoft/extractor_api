@@ -418,7 +418,7 @@ async def extract_multiple_images(
                 )
 
             # Validate required fields in the response
-            required_fields = ["SoVanBan", "NgayKy", "NguoiKy", "ChucDanhNguoiKy", "TrichYeu"]
+            required_fields = ["SoVanBan", "NgayKy", "NguoiKy", "ChucDanhNguoiKy", "TrichYeu", "DieuChinh"]
             missing_fields = [field for field in required_fields if field not in data_json]
             if missing_fields:
                 return JSONResponse(
@@ -458,6 +458,7 @@ async def extract_multiple_images(
                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "TenLoaiVanBan": loaiVanBan,
                 "DuAnID": duAnID,
+                "DieuChinh": data_json.get("DieuChinh", "0"),
                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
                 "DataOCR": response_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
@@ -540,4 +541,5 @@ async def extract_multiple_images(
     finally:
         for temp_file in temp_files:
             if os.path.exists(temp_file):
-                os.remove(temp_file) 
+                os.remove(temp_file)
+

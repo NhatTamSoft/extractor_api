@@ -228,3 +228,36 @@ class DatabaseService:
                 "message": "Lỗi khi lưu dữ liệu",
                 "error": str(e)
             } 
+
+    @staticmethod
+    async def get_BangDuLieuChiTietAI(
+        db: Session,
+        duAnID: str,
+        loaiVanBan: str
+    ) -> Dict[str, Any]:
+        try:
+            # Thực hiện truy vấn SQL
+            print("Dự án ID")
+            print(duAnID)
+            query = text("""select STT, TenKMCP from BangDuLieuChiTietAI where VanBanAIID in (select vb.VanBanAIID from dbo.VanBanAI vb where vb.DuAnID='"""+duAnID+"""') order by TenKMCP""")
+            print(query)
+            result = db.execute(query)
+            print(result)
+            # Chuyển đổi kết quả thành markdown
+            markdown_data = "| STT | TenKMCP |\n|-----|----------|\n"
+            for row in result:
+                markdown_data += f"| {row.STT} | {row.TenKMCP} |\n"
+
+            return {
+                "success": True,
+                "message": "Lấy dữ liệu thành công",
+                "data": markdown_data
+            }
+
+        except Exception as e:
+            db.rollback()
+            return {
+                "success": False,
+                "message": "Lỗi khi lấy dữ liệu",
+                "error": str(e)
+            } 
