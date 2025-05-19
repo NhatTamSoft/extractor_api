@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Form, Header
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import os
@@ -16,10 +16,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
-from app.services.DungChung import convert_currency_to_float, lay_du_lieu_tu_sql_server, thuc_thi_truy_van
+from app.services.DungChung import convert_currency_to_float, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token
 from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
+import httpx
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -307,8 +308,48 @@ async def extract_multiple_images(
     files: List[UploadFile] = File(...),
     loaiVanBan: Optional[str] = None,
     duAnID: Optional[str] = None,
+    authorization: str = Header(...),
     db: Session = Depends(get_db)
 ):
+    # Xác thực token
+    try:
+        # Kiểm tra header Authorization
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+            
+        # Lấy token từ header
+        token = authorization.split(" ")[1]
+        
+        # Giải mã token để lấy userID và donViID
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        
+        # Thêm thông tin user vào request
+        request_data = {
+            "userID": user_id,
+            "donViID": don_vi_id
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+
     temp_files = []
     all_data = []
     try:
@@ -530,20 +571,70 @@ async def extract_multiple_images(
                         }
                     )
 
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "code": 200,
-                    "message": "Upload và xử lý nhiều file ảnh thành công",
-                    "data": {
-                        "files_processed": [{"filename": d['filename']} for d in all_data],
-                        "van_ban": data_json,
-                        "db_status": result.get("success", False),
-                        "db_message": result.get("message", "")
+            # After successful processing and database operations
+            try:
+                # Get QLDA upload URL from environment
+                qlda_upload_url = os.getenv("API_URL_UPLOAD_QLDA")
+                if not qlda_upload_url:
+                    raise ValueError("Không tìm thấy API_URL_UPLOAD_QLDA trong file .env")
+
+                # Prepare files for upload to QLDA
+                files_data = []
+                for file in files:
+                    # Reset file pointer to beginning
+                    await file.seek(0)
+                    files_data.append(
+                        ("files", (file.filename, file.file, file.content_type))
+                    )
+
+                # Upload files to QLDA system
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{qlda_upload_url}/api/v1/Uploads/uploadMultipleFiles",
+                        files=files_data,
+                        headers={"Authorization": authorization}
+                    )
+                    
+                    if response.status_code != 200:
+                        return JSONResponse(
+                            status_code=500,
+                            content={
+                                "status": "error",
+                                "code": 500,
+                                "message": "Lỗi khi upload file lên hệ thống QLDA",
+                                "detail": response.text
+                            }
+                        )
+                    
+                    qlda_response = response.json()
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success",
+                        "code": 200,
+                        "message": "Upload và xử lý nhiều file ảnh thành công",
+                        "data": {
+                            "files_processed": [{"filename": d['filename']} for d in all_data],
+                            "van_ban": data_json,
+                            "db_status": result.get("success", False),
+                            "db_message": result.get("message", ""),
+                            "qlda_upload_status": "success",
+                            "qlda_response": qlda_response
+                        }
                     }
-                }
-            )
+                )
+
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi upload file lên hệ thống QLDA",
+                        "detail": str(e)
+                    }
+                )
 
         except Exception as e:
             return JSONResponse(
@@ -776,9 +867,9 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
 
 ### ĐIỀU KIỆN BẮT BUỘC:
 - Bảo toàn DuLieuChiTiet.STT: Cột STT của bảng DuLieuChiTiet là khóa chính, giá trị không được thay đổi.
-- Ánh xạ dựa trên TenKMCP: Việc gán MaKMCP phải dựa trên sự tương đồng về ý nghĩa giữa DuLieuChiTiet.TenKMCP (tên khoản mục gốc) và KMCP.TenKMCP.
-- Cung cấp GhiChu: Mỗi ánh xạ phải đi kèm một giải thích ngắn gọn trong cột GhiChu về lý do lựa chọn MaKMCP đó.
-- Không bỏ trống MaKMCP: TUYỆT ĐỐI không được để trống MaKMCP cho bất kỳ dòng nào trong bảng DuLieuChiTiet sau khi xử lý. Bắt buộc mọi dòng đều phải được ánh xạ.
+- Ánh xạ dựa trên TenKMCP: Việc gán MaKMCP và TenKMCP_Moi phải dựa trên sự tương đồng về ý nghĩa giữa DuLieuChiTiet.TenKMCP (tên khoản mục gốc) và KMCP.TenKMCP, kể cả khi có sự khác biệt về từ ngữ hoặc mức độ chi tiết.
+- Cung cấp GhiChu: Mỗi ánh xạ phải đi kèm một giải thích ngắn gọn trong cột GhiChu về lý do lựa chọn MaKMCP đó. Trong trường hợp có sự mơ hồ, cần giải thích chi tiết hơn về các từ khóa được sử dụng, các khái niệm liên quan, và các giả định được đưa ra.
+- Không bỏ trống MaKMCP hoặc TenKMCP_Moi: TUYỆT ĐỐI không được để trống MaKMCP hoặc TenKMCP_Moi cho bất kỳ dòng nào trong bảng DuLieuChiTiet sau khi xử lý. Bắt buộc mọi dòng đều phải được ánh xạ. Nếu không tìm thấy kết quả phù hợp nhất, hãy chọn một giá trị gần đúng nhất và ghi rõ trong GhiChu.
 - Xử lý toàn bộ dữ liệu: Nếu bảng DuLieuChiTiet đầu vào có N dòng, kết quả đầu ra cũng phải có N dòng tương ứng đã được xử lý. Không được ngắt quãng hay bỏ sót.
 - Chỉ trả về JSON: Kết quả cuối cùng CHỈ LÀ MỘT CHUỖI JSON DUY NHẤT, không kèm theo bất kỳ giải thích hay văn bản nào khác.
 """
