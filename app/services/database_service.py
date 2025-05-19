@@ -52,7 +52,7 @@ class DatabaseService:
             }
 
     @staticmethod
-    async def insert_van_ban_ai(db: Session, van_ban_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def insert_van_ban_ai(db: Session, van_ban_data: Dict[str, Any], loaiVanBan) -> Dict[str, Any]:
         try:
             # Insert main document data
             insert_van_ban_query = text("""
@@ -61,10 +61,15 @@ class DatabaseService:
                     SoVanBan,
                     NgayKy,
                     TrichYeu,
-                    ChucDanhNguoiKy,
-                    TenNguoiKy,
+                    ChucDanhNguoiKy, 
+                    CoQuanBanHanh,
+                    NguoiKy,
                     NgayThaotac,
                     TenLoaiVanBan,
+                    LoaiVanBanID,
+                    GiaiDoanID,
+                    GiaiDoan,
+                    DieuChinh,
                     DuAnID,
                     JsonAI,
                     DataOCR,
@@ -74,10 +79,15 @@ class DatabaseService:
                     :SoVanBan,
                     :NgayKy,
                     :TrichYeu,
-                    :ChucDanhNguoiKy,
-                    :TenNguoiKy,
+                    :ChucDanhNguoiKy, 
+                    :CoQuanBanHanh,
+                    :NguoiKy,
                     :NgayThaotac,
                     :TenLoaiVanBan,
+                    :LoaiVanBanID,
+                    :GiaiDoanID,
+                    :GiaiDoan,
+                    :DieuChinh,
                     :DuAnID,
                     :JsonAI,
                     :DataOCR,
@@ -97,16 +107,60 @@ class DatabaseService:
                     }
             
             # Set default values for new fields if not provided
-            van_ban_data.setdefault('LoaiVanBanID', None)
-            van_ban_data.setdefault('DuAnID', None)
-            van_ban_data.setdefault('JsonAI', None)
-            van_ban_data.setdefault('DataOCR', None)
-            van_ban_data.setdefault('TenFile', None)
+            if loaiVanBan == "BCDX_CT": # Báo cáo đề xuất chủ trương đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "3d4566fb-cf78-42e0-bebb-b22018b53763")
+                van_ban_data.setdefault('GiaiDoanID', "6F6BB0B9-92BF-4831-8053-6246F42929B6")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            elif loaiVanBan == "QDPD_CT": # Phê duyệt chủ trương đầu tư
+                if van_ban_data.get("DieuChinh") == "1":
+                    van_ban_data.setdefault('LoaiVanBanID', "d8821afb-76a4-4b24-9fd3-ba1aa84e156d")
+                else:
+                    van_ban_data.setdefault('LoaiVanBanID', "550358d9-a68a-4122-89da-6fc7cb6df0df")
+                van_ban_data.setdefault('GiaiDoanID', "AD8D512D-AA6B-4243-B651-A80A1CB59FFC")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            elif loaiVanBan == "QDPDDT_CBDT": # Phê quyệt dự toán chuẩn bị đầu tư
+                if van_ban_data.get("DieuChinh") == "1":
+                    van_ban_data.setdefault('LoaiVanBanID', "8f4faa5a-9725-4f5f-bf8e-0862569936b3")
+                else:
+                    van_ban_data.setdefault('LoaiVanBanID', "ac6e7501-eea1-4546-9195-4e44ade01990")
+                van_ban_data.setdefault('GiaiDoanID', "2BB4A12A-A588-48FC-9BE2-5B99E31F1212")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            elif loaiVanBan == "QDPD_DA": # Phê duyệt dự án
+                if van_ban_data.get("DieuChinh") == "1":
+                    van_ban_data.setdefault('LoaiVanBanID', "f20710a1-7ea6-4c4a-9dec-52bea3d37f3d")
+                else:
+                    van_ban_data.setdefault('LoaiVanBanID', "4e31610d-31b7-4fbb-b530-c1f97b99e362")
+                van_ban_data.setdefault('GiaiDoanID', "F9C3D581-53B2-4EBE-A223-1E0B4839A45A")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif loaiVanBan == "QDPD_KHLCNT_CBDT": # Phê duyệt KHLCNT giai đoạn chuẩn bị đầu tư
+                if van_ban_data.get("DieuChinh") == "1":
+                    van_ban_data.setdefault('LoaiVanBanID', "f8f74942-566b-4ae9-b612-855f0fe63127")
+                else:
+                    van_ban_data.setdefault('LoaiVanBanID', "7017f242-e957-4e64-8048-3cff04519176")
+                van_ban_data.setdefault('GiaiDoanID', "68B4F3FB-BBB1-45B3-92C1-7456E57CFB9E")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            elif loaiVanBan == "QDPD_KHLCNT_THDT": # Phê duyệt KHLCNT giai đoạn thực hiện dự án
+                if van_ban_data.get("DieuChinh") == "1":
+                    van_ban_data.setdefault('LoaiVanBanID', "93559dce-aa92-4b2c-93b5-b36f566fb1a2")
+                else:
+                    van_ban_data.setdefault('LoaiVanBanID', "b38eb6d6-ecb5-418d-9f2f-60469ed5fcf1")
+                van_ban_data.setdefault('GiaiDoanID', "7BAE2A20-4377-4DE5-87B6-C905C955A882")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            else: # Ngược lại
+                van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
+                van_ban_data.setdefault('GiaiDoanID', "00000000-0000-0000-0000-000000000000")
+                van_ban_data.setdefault('GiaiDoan', "")
+            van_ban_data.setdefault('DuAnID', "00000000-0000-0000-0000-000000000000")
+            van_ban_data.setdefault('JsonAI', "")
+            van_ban_data.setdefault('DataOCR', "")
+            van_ban_data.setdefault('TenFile', "")
+            van_ban_data.setdefault('CoQuanBanHanh', "")
             
             # Execute query
             try:
                 db.execute(insert_van_ban_query, van_ban_data)
                 db.commit()
+
             except Exception as e:
                 db.rollback()
                 return {
@@ -210,7 +264,7 @@ class DatabaseService:
                 bang_du_lieu_result = await DatabaseService.insert_bang_du_lieu_chi_tiet_ai(
                     db,
                     tong_muc_dau_tu_chi_tiet,
-                    ["CoCauVonID", "KMCPID", "TenKMCP", "GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"]
+                    ["CoCauVonID", "KMCPID", "TenKMCP", "GiaTriTMDTKMCP", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"]
                 )
                 if not bang_du_lieu_result["success"]:
                     return bang_du_lieu_result

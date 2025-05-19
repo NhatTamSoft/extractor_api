@@ -293,7 +293,7 @@ async def extract_document(
             "NgayKy": data_json.get("NgayKy", ""),
             "TrichYeu": data_json.get("TrichYeu", ""),
             "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
-            "TenNguoiKy": data_json.get("NguoiKy", ""),
+            "NguoiKy": data_json.get("NguoiKy", ""),
             "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "TenLoaiVanBan": loaiVanBan,
             "DuAnID": duAnID
@@ -514,7 +514,7 @@ async def extract_multiple_documents(
             "NgayKy": data_json.get("NgayKy", ""),
             "TrichYeu": data_json.get("TrichYeu", ""),
             "ChucDanhNguoiKy": data_json.get("ChucDanhNguoiKy", ""),
-            "TenNguoiKy": data_json.get("NguoiKy", ""),
+            "NguoiKy": data_json.get("NguoiKy", ""),
             "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "TenLoaiVanBan": loaiVanBan,
             "DuAnID": duAnID

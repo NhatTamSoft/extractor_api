@@ -1,270 +1,293 @@
-[*********]
-['QDPD_CT']
-1. Quyết định phê duyệt chủ trương đầu tư, quyết định điều chỉnh chủ trương đầu tư
+{{CHUCNANG01}} Chức năng **Quyết định phê duyệt chủ trương đầu tư**
+### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+**KyHieu**: "QDPD_CT"
+**SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ... Định dạng dd/mm/yyyy".
+**NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
+**TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về chủ trương...".
+**DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+**TenKMCP**: Tên của khoản mục chi phí (VD: "Chi phí xây dựng")
+**GiaTriTMDTKMCP**: Giá trị tổng mức đầu tư theo khoản mục chi phí
+**GiaTriTMDTKMCP_DC**: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí
+**GiaTriTMDTKMCPTang**: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
+**GiaTriTMDTKMCPGiam**: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
+### Yêu cầu xử lý:
+- Kết quả trích xuất dễ dàng xuất ra dạng JSON.
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
+- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
+- Nếu không tìm thấy giá trị thì ghi `0`
+{{CHUCNANG02}} Chức năng **Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư**
+### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+**KyHieu**: "QDPDDT_CBDT"
+**SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
+**NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
+**TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
+**DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng số liệu dự toán, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+**TenKMCP**: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+**GiaTriDuToanKMCP**: Giá trị dự toán theo khoản mục chi phí
+**GiaTriDuToanKMCP_DC**: Giá trị dự toán điều chỉnh theo khoản mục chi phí
+**GiaTriDuToanKMCPTang**: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
+**GiaTriDuToanKMCPGiam**: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
+### Yêu cầu xử lý:
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
+- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
+- Nếu không tìm thấy giá trị, để trống hoặc ghi rõ "Không có".
+- Giữ nguyên đúng tên khoản mục như trên bảng (bao gồm cả chữ in hoa, dấu câu nếu có).
+- Với các dòng không có số liệu, để trống `GiaTriDuToanKMCP` và `GiaTriDuToanKMCP_DC` và `GiaTriDuToanKMCPTang` và `GiaTriDuToanKMCPGiam`.
+- Giữ nguyên định dạng STT dạng lồng nhau (VD: `1.1`, `3.1`, `4.1`).
+- Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng.
+- Nếu số tiền có dấu chấm (`.`) ngăn cách phần nghìn, vẫn giữ nguyên để dễ xử lý về sau.
+- Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị.
+{{CHUCNANG03}} Chức năng **Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư**
+### Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt KHLCNT giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KHLCNT giai đoạn chuẩn bị đầu tư"
+### Thông tin chung của văn bản:
+**KyHieu**: "QDPD_KHLCNT_CBDT"
+**SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
+**NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
+**TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
+**DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+**TenGoiThau**: Trích tên đầy đủ của gói thầu
+**TenKMCP**: Trích khoản mục chi phí tại thông tin "tên gói thầu" gán vào cột **TenKMCP**
+**GiaTriGoiThau**: Trích cột giá gói thầu
+**TenNguonVon**: Trích cột nguồn vốn
+**HinhThucLCNT**: Trích cột hình thức lựa chọn nhà thầu
+**PhuongThucLCNT**: Trích cột phương thức lựa chọn nhà thầu
+**ThoiGianTCLCNT**: Trích cột thời gian bắt đầu tổ chức lựa chọn nhà thầu
+**LoaiHopDong**: Trích cột loại hợp đồng
+**ThoiGianTHHopDong**: Trích cột thời gian thực hiện hợp đồng
+### Yêu cầu xử lý:
+- Kết quả trích xuất dễ dàng xuất ra dạng JSON.
+- Bỏ qua dòng tiêu đề hoặc nhóm (VD: “Gói thầu dịch vụ tư vấn: 02 gói”), chỉ trích các gói có thông tin chi tiết.
+- Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
+- Nếu có dòng “Trong đó”, vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
+{{CHUCNANG04}} Chức năng **"Quyết định phê duyệt dự án"**
+**Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt dự án hoặc phê duyệt điều chỉnh phê duyệt dự án"
+**Ký hiệu**: ['QDPD_DA']
+**Thông tin chung của văn bản**:
+**SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
+**NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
+**TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt...".
+**DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+**Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau**:
+**TenKMCP**: Tên của khoản mục chi phí (VD: "Chi phí xây dựng")
+**GiaTriTMDTKMCP**: Giá trị tổng mức đầu tư theo khoản mục chi phí
+**GiaTriTMDTKMCP_DC**: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí
+**GiaTriTMDTKMCPTang**: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
+**GiaTriTMDTKMCPGiam**: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
+**Yêu cầu xử lý:**
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
+- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
+- Nếu không tìm thấy giá trị, để trống hoặc ghi rõ "Không có".
+{{CHUCNANG05}} Chức năng **Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư**
+### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+**KyHieu**: "QDPD_DT_THDT"
+**SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy).
+**NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản.
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên.
+**TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
+**DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+**TenKMCP**: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+**GiaTriDuToanKMCP**: Giá trị dự toán theo khoản mục chi phí
+**GiaTriDuToanKMCP_DC**: Giá trị dự toán điều chỉnh theo khoản mục chi phí
+**GiaTriDuToanKMCPTang**: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
+**GiaTriDuToanKMCPGiam**: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
+### Yêu cầu xử lý:
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
+- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
+- Nếu không tìm thấy giá trị, để trống hoặc ghi rõ "Không có".
+- Giữ nguyên đúng tên khoản mục như trên bảng (bao gồm cả chữ in hoa, dấu câu nếu có).
+- Với các dòng không có số liệu, để trống `GiaTriDuToanKMCP` và `GiaTriDuToanKMCP_DC` và `GiaTriDuToanKMCPTang` và `GiaTriDuToanKMCPGiam`.
+- Giữ nguyên định dạng STT dạng lồng nhau (VD: `1.1`, `3.1`, `4.1`).
+- Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng.
+- Nếu số tiền có dấu chấm (`.`) ngăn cách phần nghìn, vẫn giữ nguyên để dễ xử lý về sau.
+- Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị.
+{{CHUCNANG06}} Chức năng **"Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"**
+**Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
+**Ký hiệu**: ['QDPD_KHLCNT_THDT']
+**Thông tin chung của văn bản**:
+**SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
+**NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
+**TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
+**DieuChinh**: Gán `1` nếu **trích yếu văn bản** có chứa nội dung **"điều chỉnh..."**, ngược lại gán `0`.
+**Phụ lục gói thầu trích xuất mỗi dòng gói thầu theo cấu trúc sau:**
+**TenGoiThau**: Trích tên đầy đủ của gói thầu
+**TenKMCP**: Trích khoản mục chi phí tại thông tin "tên gói thầu" gán vào cột **TenKMCP**
+**GiaTriGoiThau**: Trích cột giá gói thầu
+**TenNguonVon**: Trích cột nguồn vốn
+**HinhThucLCNT**: Trích cột hình thức lựa chọn nhà thầu
+**PhuongThucLCNT**: Trích cột phương thức lựa chọn nhà thầu
+**ThoiGianTCLCNT**: Trích cột thời gian bắt đầu tổ chức lựa chọn nhà thầu
+**LoaiHopDong**: Trích cột loại hợp đồng
+**ThoiGianTHHopDong**: Trích cột thời gian thực hiện hợp đồng
+**Yêu cầu xử lý:**
+- Bỏ qua dòng tiêu đề hoặc nhóm (VD: “Gói thầu dịch vụ tư vấn: 02 gói”), chỉ trích các gói có thông tin chi tiết.
+- Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
+- Nếu có dòng “Trong đó”, vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
+{{CHUCNANG07}} Chức năng **"Hợp đồng"**
+**Văn bản để nhận dạng thông tin là**: "Hợp đồng"
+**Ký hiệu**: ['HOP_DONG']
+**Thông tin chung của văn bản**:
+**SoHopDong**: Trích số hợp đồng
+**NgayKy**: Trích ngày ký hợp đồng (VD: "06/11/2023")
+**NgayHieuLuc**: Trích ngày hiệu lực hợp đồng (VD: "06/11/2023")
+**NgayKetThuc**: Trích ngày hết hạn hoặc ngày kết thúc hợp đồng (VD: "06/11/2023")
+**NguoiKy**: Lấy người ký hợp đồng bên chủ đầu tư
+**ChucDanhNguoiKy**: Lấy chức danh người ký hợp đồng bên chủ đầu tư
+**CoQuanBanHanh**: Lấy cơ quan ban hành
+**TrichYeu**: Lấy trích yếu văn bản
+**Yêu cầu xử lý:**
+- Trích nguyên văn theo tài liệu, không thêm suy diễn.
+- Nếu không có thông tin, để trống hoặc ghi rõ "Không có".
+{{CHUCNANG07}} Chức năng Hợp đồng
+['HOP_DONG']
 a.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Lấy số văn bản
-    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
-    * `NguoiKy`: Lấy người ký văn bản
-    * `ChucDanhNguoiKy`: Lấy chức danh người ký
+    * `SoHopDong`: Lấy số hợp đồng
+    * `NgayKy`: Lấy ngày ký hợp đồng, định dạng `dd/mm/yyyy`
+	* `NgayKetThuc`: Lấy ngày hết hạn hoặc ngày kết thúc hợp đồng, định dạng `dd/mm/yyyy`
+	* `NguoiKy`: Lấy người ký hợp đồng bên chủ đầu tư
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký hợp đồng bên chủ đầu tư
     * `CoQuanBanHanh`: Lấy cơ quan ban hành
     * `TrichYeu`: Lấy trích yếu văn bản
-    * `DieuChinh`: Nếu điều chỉnh chủ trương đầu tư gán giá trị là `1`, ngược lại gán giá trị là `0`
-b.  **Bảng số liệu tổng mức đầu tư:**
-    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
-    * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư theo khoản mục chi phí
-    * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí 
-    * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
-    * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký",
-   "ChucDanhNguoiKy":"Chức danh người ký",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
-         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
-         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
-         "GiaTriTMDTKMCPTang": "Giá trị tăng, nếu không có để '0'",
-         "GiaTriTMDTKMCPGiam": "Giá trị giảm, nếu không có để '0'"
-      }
-   ]
-}
-```
-**Lưu ý**
-1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-2. Không lấy dòng tổng cộng của bảng
-[*********]
-['QDPDDT_CBDT']
-2. Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư
-a.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Lấy số văn bản
-    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
-    * `NguoiKy`: Lấy người ký văn bản
-    * `ChucDanhNguoiKy`: Lấy chức danh người ký
-    * `CoQuanBanHanh`: Lấy cơ quan ban hành
-    * `TrichYeu`: Lấy trích yếu văn bản
-    * `DieuChinh`: Nếu điều chỉnh dự toán gán giá trị là `1`, ngược lại gán giá trị là `0`
-b.  **Bảng số liệu dự toán:**
-    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
-    * `GiaTriDuToanKMCP`: Giá trị dự toán theo khoản mục chi phí
-    * `GiaTriDuToanKMCP_DC`: Giá trị dự toán điều chỉnh theo khoản mục chi phí
-    * `GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
-    * `GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký",
-   "ChucDanhNguoiKy":"Chức danh người ký",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
-         "GiaTriDuToanKMCP": "Giá trị tổng mức đầu tư",
-         "GiaTriDuToanKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
-         "GiaTriDuToanKMCPTang": "Giá trị tăng, nếu không có để '0'",
-         "GiaTriDuToanKMCPGiam": "Giá trị giảm, nếu không có để '0'"
-      }
-   ]
-}
-```
-**Lưu ý**
-1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-2. Không lấy dòng tổng cộng của bảng
-[*********]
-['QDPD_KHLCNT_CBDT']
-3. Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (KHLCNT) giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KHLCNT giai đoạn chuẩn bị đầu tư
-a.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Lấy số văn bản
-    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
-    * `NguoiKy`: Lấy người ký văn bản
-    * `ChucDanhNguoiKy`: Lấy chức danh người ký
-    * `CoQuanBanHanh`: Lấy cơ quan ban hành
-    * `TrichYeu`: Lấy trích yếu văn bản
-    * `DieuChinh`: Nếu điều chỉnh KHLCNT gán giá trị là `1`, ngược lại gán giá trị là `0`
-b.  **Phụ lục gói thầu:**
-    * `TenDauThau`: Lấy tên gói thầu
-    * `TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
-    * `GiaTriGoiThau`: Lấy giá gói thầu
-    * `TenNguonVon`: Lấy nguồn vốn
-    * `HinhThucLCNT`: Lấy hình thức lựa chọn nhà thầu
-    * `PhuongThucLCNT`: Lấy phương thức lựa chọn nhà thầu
-	* `ThoiGianTCLCNT`: Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu
-	* `LoaiHopDong`: Lấy loại hợp đồng
-	* `ThoiGianTHHopDong`: Lấy thời gian thực hiện hợp đồng
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký",
-   "ChucDanhNguoiKy":"Chức danh người ký",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenDauThau": "Lấy tên gói thầu",
-         "TenKMCP": "Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`",
-         "GiaTriGoiThau": "Lấy giá gói thầu",
-         "TenNguonVon": "Lấy nguồn vốn",
-         "HinhThucLCNT": "Lấy hình thức lựa chọn nhà thầu",
-         "PhuongThucLCNT": "Lấy phương thức lựa chọn nhà thầu",
-         "ThoiGianTCLCNT": "Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu",
-         "LoaiHopDong": "Lấy loại hợp đồng",
-         "ThoiGianTHHopDong": "Lấy thời gian thực hiện hợp đồng"
-      }
-   ]
-}
-```
-**Lưu ý**
-1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-2. Không lấy dòng tổng cộng của bảng
-[*********]
-['QDPD_DA']	
-4. Quyết định phê duyệt dự án, quyết định phê duyệt điều chỉnh dự án
-a.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Lấy số văn bản
-    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
-    * `NguoiKy`: Lấy người ký văn bản
-    * `ChucDanhNguoiKy`: Lấy chức danh người ký
-    * `CoQuanBanHanh`: Lấy cơ quan ban hành
-    * `TrichYeu`: Lấy trích yếu văn bản
-    * `DieuChinh`: Nếu điều chỉnh dự án gán giá trị là `1`, ngược lại gán giá trị là `0`
-b.  **Bảng số liệu tổng mức đầu tư:**
-    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
-    * `GiaTriTMDTKMCP`: Giá trị tổng mức đầu tư theo khoản mục chi phí
-    * `GiaTriTMDTKMCP_DC`: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí 
-    * `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
-    * `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký",
-   "ChucDanhNguoiKy":"Chức danh người ký",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
-         "GiaTriTMDTKMCP": "Giá trị tổng mức đầu tư",
-         "GiaTriTMDTKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
-         "GiaTriTMDTKMCPTang": "Giá trị tăng, nếu không có để '0'",
-         "GiaTriTMDTKMCPGiam": "Giá trị giảm, nếu không có để '0'"
-      }
-   ]
-}
-```
-**Lưu ý**
-1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-2. Không lấy dòng tổng cộng của bảng
-[*********]
-['QDPD_DT_THDT']
-5. Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư
-a.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Lấy số văn bản
-    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
-    * `NguoiKy`: Lấy người ký văn bản
-    * `ChucDanhNguoiKy`: Lấy chức danh người ký
-    * `CoQuanBanHanh`: Lấy cơ quan ban hành
-    * `TrichYeu`: Lấy trích yếu văn bản
-    * `DieuChinh`: Nếu điều chỉnh dự toán gán giá trị là `1`, ngược lại gán giá trị là `0`
-b.  **Bảng số liệu dự toán:**
-    * `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
-    * `GiaTriDuToanKMCP`: Giá trị dự toán theo khoản mục chi phí
-    * `GiaTriDuToanKMCP_DC`: Giá trị dự toán điều chỉnh theo khoản mục chi phí
-    * `GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
-    * `GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký",
-   "ChucDanhNguoiKy":"Chức danh người ký",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenKMCP":"Tên khoản mục chi phí. Ví dụ: Chi phí xây dựng",
-         "GiaTriDuToanKMCP": "Giá trị tổng mức đầu tư",
-         "GiaTriDuToanKMCP_DC": "Giá trị sau điều chỉnh, nếu không có để '0'",
-         "GiaTriDuToanKMCPTang": "Giá trị tăng, nếu không có để '0'",
-         "GiaTriDuToanKMCPGiam": "Giá trị giảm, nếu không có để '0'"
-      }
-   ]
-}
-[*********]
-['QDPD_KHLCNT_THDT']
-6. Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (KHLCNT) giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư
-a.  **Thông tin chung của văn bản:**
-    * `SoVanBan`: Lấy số văn bản
-    * `NgayKy`: Lấy ngày ký văn bản, định dạng `dd/mm/yyyy`
-    * `NguoiKy`: Lấy người ký văn bản
-    * `ChucDanhNguoiKy`: Lấy chức danh người ký
-    * `CoQuanBanHanh`: Lấy cơ quan ban hành
-    * `TrichYeu`: Lấy trích yếu văn bản
-    * `DieuChinh`: Nếu điều chỉnh KHLCNT gán giá trị là `1`, ngược lại gán giá trị là `0`
 b.  **Phụ lục gói thầu:**
     * `TenDauThau`: Lấy tên gói thầu
 	* `TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
-    * `GiaTriGoiThau`: Lấy giá gói thầu
-    * `TenNguonVon`: Lấy nguồn vốn
-    * `HinhThucLCNT`: Lấy hình thức lựa chọn nhà thầu
-    * `PhuongThucLCNT`: Lấy phương thức lựa chọn nhà thầu
-	* `ThoiGianTCLCNT`: Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu
-	* `LoaiHopDong`: Lấy loại hợp đồng
-	* `ThoiGianTHHopDong`: Lấy thời gian thực hiện hợp đồng
-**Định dạng JSON đầu ra mong muốn:**
-```json
-{
-   "VanBanID":"AI Tạo một giá trị UUID duy nhất theo định dạng xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-   "SoVanBan":"Số văn bản",
-   "NgayKy":"dd/mm/yyyy",
-   "NguoiKy":"Tên người ký",
-   "ChucDanhNguoiKy":"Chức danh người ký",
-   "CoQuanBanHanh":"Tên cơ quan ban hành",
-   "TrichYeu":"Nội dung trích yếu",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
-   "TenVanBan":"Tên văn bản",
-   "BangDuLieu":[
-      {
-         "TenDauThau": "Lấy tên gói thầu",
-         "TenKMCP": "Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`",
-         "GiaTriGoiThau": "Lấy giá gói thầu",
-         "TenNguonVon": "Lấy nguồn vốn",
-         "HinhThucLCNT": "Lấy hình thức lựa chọn nhà thầu",
-         "PhuongThucLCNT": "Lấy phương thức lựa chọn nhà thầu",
-         "ThoiGianTCLCNT": "Lấy thời gian bắt đầu tổ chức lựa chọn nhà thầu",
-         "LoaiHopDong": "Lấy loại hợp đồng",
-         "ThoiGianTHHopDong": "Lấy thời gian thực hiện hợp đồng"
-      }
-   ]
-}
-```
-**Lưu ý**
-1. Các thông giá trị trong BangDuLieu chỉ hiện số không cần định dạng
-2. Không lấy dòng tổng cộng của bảng
+    * `GiaTrungThau`: Lấy giá gói thầu
+    * `GiaTriHopDong`: Lấy giá trị hợp đồng
+    * `GiaTriHopDong_DC`: Lấy giá trị hợp đồng điều chỉnh
+    * `GiaTriHopDongTang`: Lấy giá trị hợp đồng tăng
+	* `GiaTriHopDongGiam`: Lấy giá trị hợp đồng giảm
+	[*********]
+8. Phụ lục hợp đồng
+['PL_HOP_DONG']
+a.  **Thông tin chung của văn bản:**
+	* `SoPLHD`: Lấy số phụ lục hợp đồng
+    * `NgayKyPLHD`: Lấy ngày ký phụ lục hợp đồng, định dạng `dd/mm/yyyy`
+    * `SoHopDong`: Lấy số hợp đồng
+    * `NgayKy`: Lấy ngày ký hợp đồng, định dạng `dd/mm/yyyy`
+	* `TenNhaThau`: Lấy tên nhà thầu
+	* `ThanhToanLanThu`: Lấy lần thanh toán
+	* `NguoiKy`: Lấy đại diện chủ đầu tư/Ban quản lý dự án
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký đại diện chủ đầu tư/Ban quản lý dự án
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+b.  **Phụ lục gói thầu:**
+    * `TenDauThau`: Lấy tên gói thầu
+	* `TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
+    * `GiaTrungThau`: Lấy giá gói thầu
+    * `GiaTriHopDong`: Lấy giá trị hợp đồng
+    * `GiaTriHopDong_DC`: Lấy giá trị hợp đồng điều chỉnh
+    * `GiaTriHopDongTang`: Lấy giá trị hợp đồng tăng
+	* `GiaTriHopDongGiam`: Lấy giá trị hợp đồng giảm
+8. Bảng xác định giá trị khối lượng công việc hoàn thành
+['BXD_KLCVHT']
+a.  **Thông tin chung của văn bản:**
+    * `SoBienBanNghiemThu`: Lấy số biên bản nghiệm thu
+    * `NgayKy`: Lấy ngày ký biên bản nghiệm thu, định dạng `dd/mm/yyyy`
+	* `TenGoiThau`: Lấy tên gói thầu
+	* `SoHopDong`: Lấy số hợp đồng
+	* `NgayKy`: Lấy ngày ký hợp đồng, định dạng `dd/mm/yyyy`
+	* `SoHopDong`: Lấy số hợp đồng
+	* `NgayKy`: Lấy ngày ký hợp đồng, định dạng `dd/mm/yyyy`
+	* `TenGoiThau`: Lấy tên gói thầu
+	* `NguoiKy`: Lấy người ký hợp đồng bên chủ đầu tư
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký hợp đồng bên chủ đầu tư
+    * `CoQuanBanHanh`: Lấy cơ quan ban hành
+    * `TrichYeu`: Lấy trích yếu văn bản
+b.  **Phụ lục gói thầu:**
+    * `TenDauThau`: Lấy tên gói thầu
+	* `TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
+    * `GiaTrungThau`: Lấy giá gói thầu
+    * `GiaTriHopDong`: Lấy giá trị hợp đồng
+    * `GiaTriHopDong_DC`: Lấy giá trị hợp đồng điều chỉnh
+    * `GiaTriHopDongTang`: Lấy giá trị hợp đồng tăng
+	* `GiaTriHopDongGiam`: Lấy giá trị hợp đồng giảm
+[*********]
+9. Giấy rút vốn đầu tư
+['GIAI_NGAN']
+9.1. Chứng từ để nhận dạng thông tin là `GIẤY ĐỀ NGHỊ THANH TOÁN VỐN`, mẫu số 04.a/TT
+a.  **Thông tin chung của văn bản:**
+    * `SoChungTu`: Lấy số biên bản nghiệm thu
+    * `NgayChungTu`: Lấy ngày ký của lãnh đạo cơ quan kiểm soát, thanh toán, định dạng `dd/mm/yyyy`
+	* `SoHopDong`: Lấy căn cứ hợp đồng số
+	* `SoPLHopDong`: Lấy phụ lục bổ sung hợp đồng số
+	* `TenDVThuHuong`: Lấy tên đơn vị thụ hưởng
+	* `SoTKDVThuHuong`: Lấy số tài khoản đơn vị thụ hưởng
+	* `ThuocNguonVon`: Lấy thuộc nguồn vốn
+	* `NienDo`: Lấy năm
+	* `ThuocKeHoach`: Lấy thuộc kế hoạch nếu `NienDo` = `ThuocKeHoach` thì gán giá trị là `Năm nay` nếu `NienDo` <> `ThuocKeHoach` thì gán giá trị là `Năm trước`
+	* `SoTien`: Lấy tổng số tiền đề nghị tạm ứng, thanh toán bằng số
+	* `NguoiKy`: Lấy người ký `ĐẠI DIỆN CHỦ ĐẦU TƯ/BAN QUẢN LÝ DỰ ÁN`
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký `ĐẠI DIỆN CHỦ ĐẦU TƯ/BAN QUẢN LÝ DỰ ÁN`
+    * `CoQuanBanHanh`: Lấy chủ đầu tư/Ban QLDA
+    * `TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
+b.  **Bảng số liệu:**
+    * `DienGiai`: Lấy cột nội dung thanh toán của bảng số liệu
+	* `SoTien`: Lấy cột số đề nghị tạm ứng, thanh toán khối lượng hoàn thành kỳ này (cột vốn trong nước)
+9.2. Chứng từ để nhận dạng thông tin là `GIẤY RÚT VỐN`, mẫu số 05/TT
+a.  **Thông tin chung của giấy rút:**
+    * `SoChungTu`: Lấy số giấy rút vốn
+    * `NgayChungTu`: Lấy ngày ký của lãnh đạo cơ quan kiểm soát, thanh toán, định dạng `dd/mm/yyyy`
+	* `NghiepVu`: Nếu `Thực chi` chọn thì gán giá trị là `Thực chi`, Nếu `Tạm ứng` chọn thì gán giá trị là `Tạm ứng`, nếu `Ứng trước đủ điều kiện thanh toán` chọn thì gán giá trị là `Ứng trước đủ điều kiện thanh toán`, nếu `Ứng trước chưa đủ điều kiện thanh toán` chọn thì gán giá trị là `Ứng trước chưa đủ điều kiện thanh toán`
+	* `SoPLHopDong`: Lấy phụ lục bổ sung hợp đồng số
+	* `TenDVThuHuong`: Lấy tên đơn vị nhận tiền
+	* `SoTKDVThuHuong`: Lấy số tài khoản đơn vị nhận tiền
+	* `NienDo`: Lấy năm NS
+	* `SoTien`: Lấy dòng tổng cộng của cột tổng số tiền (cột 7)
+	* `NguoiKy`: Lấy người ký `LÃNH ĐẠO ĐƠN VỊ`
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký `LÃNH ĐẠO ĐƠN VỊ`
+    * `CoQuanBanHanh`: Lấy chủ đầu tư
+    * `TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
+b.  **Bảng số liệu:**
+    * `DienGiai`: Lấy cột (1) Nội dung của bảng số liệu
+	* `MaNDKT`: Lấy cột (2) Mã NDKT của bảng số liệu
+	* `MaChuong`: Lấy cột (3) Mã chương của bảng số liệu
+	* `MaNganhKT`: Lấy cột (4) Mã ngành KT của bảng số liệu
+	* `MaNguonNSNN`: Lấy cột (5) Mã nguồn NSNN của bảng số liệu
+	* `NamKHV`: Lấy cột (6) Năm KHV của bảng số liệu
+	* `SoTien`: Lấy cột (7) Tổng số tiền của bảng số liệu
+	* `NienDo`: Lấy năm NS trên thông tin chung của giấy rút gán cho từng dòng của bảng số liệu
+9.3. Chứng từ để nhận dạng thông tin là `GIẤY ĐỀ NGHỊ THU HỒI VỐN`, mẫu số 04.b/TT
+a.  **Thông tin chung của giấy rút:**
+    * `SoChungTu`: Lấy số giấy rút vốn
+    * `NgayChungTu`: Lấy ngày ký của lãnh đạo cơ quan kiểm soát, thanh toán, định dạng `dd/mm/yyyy`
+	* `NghiepVu`: Nếu `Tạm ứng sang thực chi` chọn thì gán giá trị là `Tạm ứng sang thực chi`, nếu `Ứng trước chưa đủ ĐKTT sang ứng trước đủ ĐKTT` chọn thì gán giá trị là `Ứng trước chưa đủ ĐKTT sang ứng trước đủ ĐKTT`
+	* `TenDVThuHuong`: Lấy tên đơn vị nhận tiền
+	* `SoTKDVThuHuong`: Lấy số tài khoản đơn vị nhận tiền
+	* `NienDo`: Lấy năm NS
+	* `SoTien`: Lấy dòng tổng cộng của cột số đề nghị
+	* `NguoiKy`: Lấy người ký `LÃNH ĐẠO ĐƠN VỊ`
+    * `ChucDanhNguoiKy`: Lấy chức danh người ký `LÃNH ĐẠO ĐƠN VỊ`
+    * `CoQuanBanHanh`: Lấy chủ đầu tư
+    * `TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
+b.  **Bảng số liệu:**
+    * `DienGiai`: Lấy cột (1) Nội dung của bảng số liệu
+	* `MaNDKT`: Lấy cột (2) Mã NDKT của bảng số liệu
+	* `MaChuong`: Lấy cột (3) Mã chương của bảng số liệu
+	* `MaNganhKT`: Lấy cột (4) Mã ngành KT của bảng số liệu
+	* `MaNguonNSNN`: Lấy cột (5) Mã nguồn NSNN của bảng số liệu
+	* `NamKHV`: Lấy cột (6) Năm KHV của bảng số liệu
+	* `SoTien`: Lấy cột (7) Tổng số tiền của bảng số liệu
+	* `NienDo`: Lấy năm NS trên thông tin chung của giấy rút gán cho từng dòng của bảng số liệu

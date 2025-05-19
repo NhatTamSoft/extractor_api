@@ -16,6 +16,7 @@ from openai import OpenAI
 from dotenv import load_dotenv # Thư viện để đọc file .env
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import jwt
 # %%
 # --- 2. Tải và cấu hình API Keys từ file .env ---
 # Tải các biến môi trường từ file .env trong cùng thư mục
@@ -338,6 +339,56 @@ def xoa_file(duong_dan_file):
     except Exception as e:
         return f"Lỗi khi xóa file: {e}"
 
+def thuc_thi_truy_van(cau_sql):
+    """
+    Thực thi truy vấn SQL và trả về kết quả.
+    
+    Args:
+        cau_sql (str): Câu lệnh SQL cần thực thi
+        
+    Returns:
+        bool: True nếu thực thi thành công, False nếu có lỗi
+    """
+    try:
+        # Lấy thông tin kết nối từ biến môi trường
+        server = os.getenv("DB_SERVER").replace(",", ":")
+        database = os.getenv("DB_NAME")
+        username = os.getenv("DB_USER")
+        password = os.getenv("DB_PASSWORD")
+        
+        # Kiểm tra các thông tin kết nối
+        if not all([server, database, username, password]):
+            print("Thiếu thông tin kết nối SQL Server trong file .env")
+            return False
+            
+        # Kết nối đến SQL Server
+        conn = pymssql.connect(
+            server=server,
+            database=database,
+            user=username,
+            password=password
+        )
+        
+        # Tạo cursor để thực thi truy vấn
+        cursor = conn.cursor()
+        
+        # Thực thi truy vấn
+        cursor.execute(cau_sql)
+        
+        # Commit thay đổi
+        conn.commit()
+        
+        # Đóng cursor và kết nối
+        cursor.close()
+        conn.close()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Lỗi khi thực thi truy vấn SQL: {str(e)}")
+        return False
+
+
 def lay_du_lieu_tu_sql_server(cau_sql):
     """
     Lấy dữ liệu từ SQL Server và trả về DataFrame.
@@ -353,10 +404,10 @@ def lay_du_lieu_tu_sql_server(cau_sql):
     """
     try:
         # Lấy thông tin kết nối từ biến môi trường
-        server = os.getenv("SERVER_DB")
-        database = os.getenv("DATA_DB")
-        username = os.getenv("SERVER_User")
-        password = os.getenv("SERVER_Pass")
+        server = os.getenv("DB_SERVER").replace(",", ":")
+        database = os.getenv("DB_NAME")
+        username = os.getenv("DB_USER")
+        password = os.getenv("DB_PASSWORD")
         
         # Kiểm tra các thông tin kết nối
         if not all([server, database, username, password]):
@@ -523,3 +574,49 @@ def convert_currency_to_float(value: str) -> float:
         return float(value)
     except (ValueError, TypeError):
         return 0.0
+
+def decode_jwt_token(token: str) -> dict:
+    """
+    Giải mã JWT token và trả về thông tin userID và donViID.
+    
+    Args:
+        token (str): JWT token cần giải mã
+        
+    Returns:
+        dict: Dictionary chứa userID và donViID
+        
+    Raises:
+        Exception: Nếu token không hợp lệ hoặc không thể giải mã
+    """
+    try:
+        # Lấy secret key từ biến môi trường
+        secret_key = os.getenv("JWT_SECRET_KEY")
+        if not secret_key:
+            raise ValueError("Không tìm thấy JWT_SECRET_KEY trong file .env")
+            
+        # Giải mã token với options để bỏ qua audience validation
+        decoded = jwt.decode(
+            token, 
+            secret_key, 
+            algorithms=["HS256"],
+            options={
+                "verify_aud": False,  
+                "verify_exp": True,   
+                "verify_iat": True,   
+                "verify_nbf": True    
+            }
+        )
+        
+        if "UserId" not in decoded or "DonViID" not in decoded:
+            raise ValueError("Token không chứa đủ thông tin userID hoặc donViID")
+            
+        return {
+            "userID": decoded["UserId"],
+            "donViID": decoded["DonViID"]
+        }
+    except jwt.ExpiredSignatureError:
+        raise Exception("Token đã hết hạn")
+    except jwt.InvalidTokenError as e:
+        raise Exception(f"Token không hợp lệ: {str(e)}")
+    except Exception as e:
+        raise Exception(f"Lỗi khi giải mã token: {str(e)}")
