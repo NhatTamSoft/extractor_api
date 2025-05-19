@@ -3,7 +3,7 @@
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 **KyHieu**: "QDPD_CT"
 **SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ... Định dạng dd/mm/yyyy".
 **NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
 **ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 **CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
@@ -19,7 +19,7 @@
 - Kết quả trích xuất dễ dàng xuất ra dạng JSON.
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
-- Nếu không tìm thấy giá trị, để trống hoặc ghi rõ "Không có".
+- Nếu không tìm thấy giá trị thì ghi `0`
 {{CHUCNANG02}} Chức năng **Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư**
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
@@ -73,11 +73,10 @@
 - Bỏ qua dòng tiêu đề hoặc nhóm (VD: “Gói thầu dịch vụ tư vấn: 02 gói”), chỉ trích các gói có thông tin chi tiết.
 - Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
 - Nếu có dòng “Trong đó”, vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
-[*********]
-4. Chức năng **"Quyết định phê duyệt dự án"**
-4.1. **Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt dự án hoặc phê duyệt điều chỉnh phê duyệt dự án"
-4.2. **Ký hiệu**: ['QDPD_DA']
-4.3. **Thông tin chung của văn bản**:
+{{CHUCNANG04}} Chức năng **"Quyết định phê duyệt dự án"**
+**Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt dự án hoặc phê duyệt điều chỉnh phê duyệt dự án"
+**Ký hiệu**: ['QDPD_DA']
+**Thông tin chung của văn bản**:
 **SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 **NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
 **NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
@@ -85,35 +84,34 @@
 **CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
 **TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt...".
 **DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
-4.4.  **Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau**:
+**Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau**:
 **TenKMCP**: Tên của khoản mục chi phí (VD: "Chi phí xây dựng")
 **GiaTriTMDTKMCP**: Giá trị tổng mức đầu tư theo khoản mục chi phí
 **GiaTriTMDTKMCP_DC**: Giá trị tổng mức đầu tư điều chỉnh theo khoản mục chi phí
 **GiaTriTMDTKMCPTang**: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
 **GiaTriTMDTKMCPGiam**: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
-4.5. **Yêu cầu xử lý:**
+**Yêu cầu xử lý:**
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
 - Nếu không tìm thấy giá trị, để trống hoặc ghi rõ "Không có".
-[*********]
-5. Chức năng **"Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư"**
-5.1. **Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư"
-5.2. **Ký hiệu**: ['QDPD_DT_THDT']
-5.3. **Thông tin chung của văn bản, tên đối tượng (object): "ThongTinChung"**:
+{{CHUCNANG05}} Chức năng **Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư**
+### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+**KyHieu**: "QDPD_DT_THDT"
 **SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
+**NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy).
 **NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
-**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
-**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
+**ChucDanhNguoiKy**: Trích phần ghi rõ chức vụ người ký văn bản.
+**CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên.
 **TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
 **DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
-5.4.  **Bảng số liệu dự toán, tên đối tượng (object): "BangDuLieu", mỗi dòng là một bản ghi với các cột sau**:
+### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 **TenKMCP**: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
 **GiaTriDuToanKMCP**: Giá trị dự toán theo khoản mục chi phí
 **GiaTriDuToanKMCP_DC**: Giá trị dự toán điều chỉnh theo khoản mục chi phí
 **GiaTriDuToanKMCPTang**: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
 **GiaTriDuToanKMCPGiam**: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
-5.5. **Yêu cầu xử lý:**
+### Yêu cầu xử lý:
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
 - Nếu không tìm thấy giá trị, để trống hoặc ghi rõ "Không có".
@@ -123,11 +121,10 @@
 - Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng.
 - Nếu số tiền có dấu chấm (`.`) ngăn cách phần nghìn, vẫn giữ nguyên để dễ xử lý về sau.
 - Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị.
-[*********]
-6. Chức năng **"Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"**
-6.1. **Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
-6.2. **Ký hiệu**: ['QDPD_KHLCNT_THDT']
-6.3. **Thông tin chung của văn bản**:
+{{CHUCNANG06}} Chức năng **"Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"**
+**Văn bản để nhận dạng thông tin là**: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
+**Ký hiệu**: ['QDPD_KHLCNT_THDT']
+**Thông tin chung của văn bản**:
 **SoVanBan**: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 **NgayKy**: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...".
 **NguoiKy**: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
@@ -135,7 +132,7 @@
 **CoQuanBanHanh**: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên (VD: "ỦY BAN NHÂN DÂN HUYỆN TRẦN ĐỀ").
 **TrichYeu**: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
 **DieuChinh**: Gán `1` nếu **trích yếu văn bản** có chứa nội dung **"điều chỉnh..."**, ngược lại gán `0`.
-6.4.  **Phụ lục gói thầu trích xuất mỗi dòng gói thầu theo cấu trúc sau:**
+**Phụ lục gói thầu trích xuất mỗi dòng gói thầu theo cấu trúc sau:**
 **TenGoiThau**: Trích tên đầy đủ của gói thầu
 **TenKMCP**: Trích khoản mục chi phí tại thông tin "tên gói thầu" gán vào cột **TenKMCP**
 **GiaTriGoiThau**: Trích cột giá gói thầu
@@ -145,15 +142,14 @@
 **ThoiGianTCLCNT**: Trích cột thời gian bắt đầu tổ chức lựa chọn nhà thầu
 **LoaiHopDong**: Trích cột loại hợp đồng
 **ThoiGianTHHopDong**: Trích cột thời gian thực hiện hợp đồng
-6.5. **Yêu cầu xử lý:**
+**Yêu cầu xử lý:**
 - Bỏ qua dòng tiêu đề hoặc nhóm (VD: “Gói thầu dịch vụ tư vấn: 02 gói”), chỉ trích các gói có thông tin chi tiết.
 - Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
 - Nếu có dòng “Trong đó”, vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
-[*********]
-7. Chức năng **"Hợp đồng"**
-7.1. **Văn bản để nhận dạng thông tin là**: "Hợp đồng"
-7.2. **Ký hiệu**: ['HOP_DONG']
-7.3. **Thông tin chung của văn bản**:
+{{CHUCNANG07}} Chức năng **"Hợp đồng"**
+**Văn bản để nhận dạng thông tin là**: "Hợp đồng"
+**Ký hiệu**: ['HOP_DONG']
+**Thông tin chung của văn bản**:
 **SoHopDong**: Trích số hợp đồng
 **NgayKy**: Trích ngày ký hợp đồng (VD: "06/11/2023")
 **NgayHieuLuc**: Trích ngày hiệu lực hợp đồng (VD: "06/11/2023")
@@ -162,13 +158,10 @@
 **ChucDanhNguoiKy**: Lấy chức danh người ký hợp đồng bên chủ đầu tư
 **CoQuanBanHanh**: Lấy cơ quan ban hành
 **TrichYeu**: Lấy trích yếu văn bản
-7.5. **Yêu cầu xử lý:**
+**Yêu cầu xử lý:**
 - Trích nguyên văn theo tài liệu, không thêm suy diễn.
 - Nếu không có thông tin, để trống hoặc ghi rõ "Không có".
-- Nếu 
-
-[*********]
-7. Hợp đồng
+{{CHUCNANG07}} Chức năng Hợp đồng
 ['HOP_DONG']
 a.  **Thông tin chung của văn bản:**
     * `SoHopDong`: Lấy số hợp đồng

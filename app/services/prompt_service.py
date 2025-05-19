@@ -1,5 +1,7 @@
 from typing import Dict, Optional, Tuple, List
 import re
+from app.services.database_service import DatabaseService
+from app.services.DungChung import lay_du_lieu_tu_sql_server
 
 class PromptService:
     def __init__(self):
@@ -7,59 +9,70 @@ class PromptService:
         self._load_prompts()
 
     def _load_prompts(self):
-        """Load prompts from the prompt file"""
+        """Tải các prompt từ file prompt"""
         try:
             with open('data/promt_quettailieu.txt', 'r', encoding='utf-8') as file:
                 content = file.read()
-                # Split content by {{CHUCNANG01}}
+                # Phân tách nội dung theo {{CHUCNANG01}}
                 sections = re.split(r'{{CHUCNANG\d+}}', content)
-                
+                #print(sections)
                 for section in sections:
                     if not section.strip():
                         continue
                     
-                    # Extract KyHieu from the section
+                    # Trích xuất KyHieu từ phần
                     ky_hieu_match = re.search(r'\*\*KyHieu\*\*:\s*"([^"]+)"', section)
                     if not ky_hieu_match:
                         continue
                         
                     ky_hieu = ky_hieu_match.group(1)
                     prompt = section.strip()
-                    
-                    # Extract required columns based on ky_hieu
+                    # Trích xuất các cột bắt buộc dựa trên ky_hieu
                     required_columns = self._get_required_columns(ky_hieu)
+                    # print("=====required_columns=====")
+                    # print(required_columns)
                     self.prompts[ky_hieu] = (prompt, required_columns)
         except Exception as e:
-            print(f"Error loading prompts: {str(e)}")
-            # Initialize with empty prompts if file loading fails
+            print(f"Lỗi khi tải prompts: {str(e)}")
+            # Khởi tạo với prompts rỗng nếu việc tải file thất bại
             self.prompts = {}
 
     def _get_required_columns(self, loai_van_ban: str) -> List[str]:
-        """Get required columns based on loaiVanBan"""
-        # Default columns that are always required
+        """Lấy các cột bắt buộc dựa trên loaiVanBan"""
+        # Các cột mặc định luôn bắt buộc
         default_columns = ["TenKMCP"]
-        
-        # Map loaiVanBan to required columns
-        column_mapping = {
-            'QDPD_CT': default_columns + ["GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"],
-            'QDPDDT_CBDT': default_columns + ["GiaTriDuToanKMCP", "GiaTriDuToanKMCP_DC", "GiaTriDuToanKMCPTang", "GiaTriDuToanKMCPGiam"],
-            'QDPD_KHLCNT_CBDT': default_columns + ["TenDauThau", "GiaTriGoiThau", "TenNguonVon", "HinhThucLCNT", "PhuongThucLCNT", "ThoiGianTCLCNT", "LoaiHopDong", "ThoiGianTHHopDong"],
-            'QDPD_DA': default_columns + ["GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"],
-            'QDPD_DT_THDT': default_columns + ["GiaTriDuToanKMCP", "GiaTriDuToanKMCP_DC", "GiaTriDuToanKMCPTang", "GiaTriDuToanKMCPGiam"],
-            'QDPD_KHLCNT_THDT': default_columns + ["TenDauThau", "GiaTriGoiThau", "TenNguonVon", "HinhThucLCNT", "PhuongThucLCNT", "ThoiGianTCLCNT", "LoaiHopDong", "ThoiGianTHHopDong"]
-        }
-        
-        return column_mapping.get(loai_van_ban, default_columns)
+        try:
+            # Thực hiện truy vấn SQL để lấy dữ liệu
+            query = """select NghiepVuID=ChucNangAIID, BangDuLieu from ChucNangAI order by STT"""
+            result = lay_du_lieu_tu_sql_server(query)
+            # Khởi tạo dictionary để lưu kết quả
+            column_mapping = {}
+            
+            # Duyệt qua từng dòng kết quả
+            for _, row in result.iterrows():
+                # Lấy NghiepVuID và BangDuLieu
+                nghiep_vu_id = row['NghiepVuID']
+                bang_du_lieu = row['BangDuLieu']
+                # Tách BangDuLieu thành mảng các cột bằng dấu ;
+                columns = bang_du_lieu.split(';')
+                # Thêm vào dictionary
+                column_mapping[nghiep_vu_id] = columns
+            # print("--------------------------------")
+            # print(column_mapping.get(loai_van_ban, default_columns))
+            return column_mapping.get(loai_van_ban, default_columns)
+            
+        except Exception as e:
+            print(f"Lỗi khi lấy dữ liệu từ CSDL: {str(e)}")
+            return default_columns
 
     def get_prompt(self, loai_van_ban: Optional[str]) -> Tuple[str, List[str]]:
         """
-        Get the prompt and required columns for a specific loaiVanBan
-        If loaiVanBan is None or not found, return the default prompt and columns
+        Lấy prompt và các cột bắt buộc cho một loaiVanBan cụ thể
+        Nếu loaiVanBan là None hoặc không tìm thấy, trả về prompt và các cột mặc định
         """
         if loai_van_ban and loai_van_ban in self.prompts:
             return self.prompts[loai_van_ban]
-        
-        # Return default prompt and columns if loaiVanBan is not found
+        # Trả về prompt và các cột mặc định nếu không tìm thấy loaiVanBan
         default_columns = ["TenKMCP", "GiaTriTMDTKMCP", "GiaTriTMDTKMCP_DC", "GiaTriTMDTKMCPTang", "GiaTriTMDTKMCPGiam"]
         return """
 Dựa vào các tài liệu đã được cung cấp, hãy phân tích và gộp thông tin thành một đối tượng JSON duy nhất.
@@ -71,7 +84,7 @@ Yêu cầu trích xuất:
     * `ChucDanhNguoiKy`: Chức danh của người ký mới nhất (ví dụ: "Chủ tịch", "Phó Chủ tịch").
     * `CoQuanBanHanh`: Cơ quan ban hành văn bản.
     * `TrichYeu`: Trích yếu nội dung văn bản (tổng hợp từ các văn bản).
-    * `LaVanBanDieuChinh`: Đặt giá trị là `1` nếu có bất kỳ văn bản nào là văn bản điều chỉnh. Ngược lại, đặt giá trị là `0`.
+    * `DieuChinh`: Đặt giá trị là `1` nếu là văn bản điều chỉnh. Ngược lại giá trị là `0`.
     * `LoaiVanBan`: Loại văn bản chung (ví dụ: "Quyết định", "Nghị định").
 2.  **Chi tiết Tổng mức đầu tư:**
     * Gộp tất cả các khoản mục chi phí từ các văn bản.
@@ -95,7 +108,7 @@ Yêu cầu trích xuất:
    "ChucDanhNguoiKy":"Chức danh người ký mới nhất",
    "CoQuanBanHanh":"Tên cơ quan ban hành",
    "TrichYeu":"Nội dung trích yếu tổng hợp",
-   "LaVanBanDieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
+   "DieuChinh":"1 nếu có văn bản điều chỉnh, 0 nếu không",
    "TenVanBan":"Tên văn bản",
    "BangDuLieu":[
       {

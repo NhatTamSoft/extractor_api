@@ -338,6 +338,56 @@ def xoa_file(duong_dan_file):
     except Exception as e:
         return f"Lỗi khi xóa file: {e}"
 
+def thuc_thi_truy_van(cau_sql):
+    """
+    Thực thi truy vấn SQL và trả về kết quả.
+    
+    Args:
+        cau_sql (str): Câu lệnh SQL cần thực thi
+        
+    Returns:
+        bool: True nếu thực thi thành công, False nếu có lỗi
+    """
+    try:
+        # Lấy thông tin kết nối từ biến môi trường
+        server = os.getenv("DB_SERVER").replace(",", ":")
+        database = os.getenv("DB_NAME")
+        username = os.getenv("DB_USER")
+        password = os.getenv("DB_PASSWORD")
+        
+        # Kiểm tra các thông tin kết nối
+        if not all([server, database, username, password]):
+            print("Thiếu thông tin kết nối SQL Server trong file .env")
+            return False
+            
+        # Kết nối đến SQL Server
+        conn = pymssql.connect(
+            server=server,
+            database=database,
+            user=username,
+            password=password
+        )
+        
+        # Tạo cursor để thực thi truy vấn
+        cursor = conn.cursor()
+        
+        # Thực thi truy vấn
+        cursor.execute(cau_sql)
+        
+        # Commit thay đổi
+        conn.commit()
+        
+        # Đóng cursor và kết nối
+        cursor.close()
+        conn.close()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Lỗi khi thực thi truy vấn SQL: {str(e)}")
+        return False
+
+
 def lay_du_lieu_tu_sql_server(cau_sql):
     """
     Lấy dữ liệu từ SQL Server và trả về DataFrame.
@@ -353,10 +403,10 @@ def lay_du_lieu_tu_sql_server(cau_sql):
     """
     try:
         # Lấy thông tin kết nối từ biến môi trường
-        server = os.getenv("SERVER_DB")
-        database = os.getenv("DATA_DB")
-        username = os.getenv("SERVER_User")
-        password = os.getenv("SERVER_Pass")
+        server = os.getenv("DB_SERVER").replace(",", ":")
+        database = os.getenv("DB_NAME")
+        username = os.getenv("DB_USER")
+        password = os.getenv("DB_PASSWORD")
         
         # Kiểm tra các thông tin kết nối
         if not all([server, database, username, password]):
