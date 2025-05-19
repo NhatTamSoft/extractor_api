@@ -776,9 +776,9 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
 
 ### ĐIỀU KIỆN BẮT BUỘC:
 - Bảo toàn DuLieuChiTiet.STT: Cột STT của bảng DuLieuChiTiet là khóa chính, giá trị không được thay đổi.
-- Ánh xạ dựa trên TenKMCP: Việc gán MaKMCP phải dựa trên sự tương đồng về ý nghĩa giữa DuLieuChiTiet.TenKMCP (tên khoản mục gốc) và KMCP.TenKMCP.
-- Cung cấp GhiChu: Mỗi ánh xạ phải đi kèm một giải thích ngắn gọn trong cột GhiChu về lý do lựa chọn MaKMCP đó.
-- Không bỏ trống MaKMCP: TUYỆT ĐỐI không được để trống MaKMCP cho bất kỳ dòng nào trong bảng DuLieuChiTiet sau khi xử lý. Bắt buộc mọi dòng đều phải được ánh xạ.
+- Ánh xạ dựa trên TenKMCP: Việc gán MaKMCP và TenKMCP_Moi phải dựa trên sự tương đồng về ý nghĩa giữa DuLieuChiTiet.TenKMCP (tên khoản mục gốc) và KMCP.TenKMCP, kể cả khi có sự khác biệt về từ ngữ hoặc mức độ chi tiết.
+- Cung cấp GhiChu: Mỗi ánh xạ phải đi kèm một giải thích ngắn gọn trong cột GhiChu về lý do lựa chọn MaKMCP đó. Trong trường hợp có sự mơ hồ, cần giải thích chi tiết hơn về các từ khóa được sử dụng, các khái niệm liên quan, và các giả định được đưa ra.
+- Không bỏ trống MaKMCP hoặc TenKMCP_Moi: TUYỆT ĐỐI không được để trống MaKMCP hoặc TenKMCP_Moi cho bất kỳ dòng nào trong bảng DuLieuChiTiet sau khi xử lý. Bắt buộc mọi dòng đều phải được ánh xạ. Nếu không tìm thấy kết quả phù hợp nhất, hãy chọn một giá trị gần đúng nhất và ghi rõ trong GhiChu.
 - Xử lý toàn bộ dữ liệu: Nếu bảng DuLieuChiTiet đầu vào có N dòng, kết quả đầu ra cũng phải có N dòng tương ứng đã được xử lý. Không được ngắt quãng hay bỏ sót.
 - Chỉ trả về JSON: Kết quả cuối cùng CHỈ LÀ MỘT CHUỖI JSON DUY NHẤT, không kèm theo bất kỳ giải thích hay văn bản nào khác.
 """
