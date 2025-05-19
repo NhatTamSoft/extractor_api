@@ -21,6 +21,7 @@ from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
 import httpx
+from openai import OpenAI
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -29,6 +30,8 @@ router = APIRouter()
 
 # Cấu hình API keys từ biến môi trường
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+
+model_openai = os.getenv('MODEL_API_OPENAI')
 
 # Khởi tạo models
 model = genai.GenerativeModel(model_name="gemini-1.5-flash")
@@ -327,7 +330,6 @@ async def extract_multiple_images(
             
         # Lấy token từ header
         token = authorization.split(" ")[1]
-        
         # Giải mã token để lấy userID và donViID
         token_data = decode_jwt_token(token)
         user_id = token_data["userID"]
@@ -338,7 +340,7 @@ async def extract_multiple_images(
             "userID": user_id,
             "donViID": don_vi_id
         }
-        
+        print(request_data)
     except Exception as e:
         return JSONResponse(
             status_code=401,
@@ -412,22 +414,52 @@ async def extract_multiple_images(
 
         # Get the appropriate prompt based on loaiVanBan
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
-        # Prepare parts for Gemini API
-        parts = [prompt]
-        for data in all_data:
-            parts.append({
-                'mime_type': 'image/png',
-                'data': data['image_data']
-            })
-
+        
         try:
-            # Call Gemini API with all images at once
-            response = model.generate_content(parts)
-            response_text = response.text
+            # Chuẩn bị dữ liệu cho OpenAI
+            messages = [
+                {
+                    "role": "system",
+                    "content": """Bạn là một trợ lý AI chuyên nghiệp trong việc phân tích và trích xuất thông tin từ văn bản.
+                    ết quả trả về PHẢI là một JSON object với key là 'results'"""
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+
+            # Thêm hình ảnh vào messages
+            for data in all_data:
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{data['image_data']}"
+                            }
+                        }
+                    ]
+                })
+
+            # Gọi OpenAI API
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            response = client.chat.completions.create(
+                model=model_openai,
+                messages=messages,
+                temperature=0,
+                response_format={"type": "json_object"},
+                seed=42
+            )
+
+            # Xử lý response từ OpenAI
+            response_text = response.choices[0].message.content
             if response_text.strip().startswith("```json"):
                 response_text = response_text.strip()[7:-3].strip()
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
+            #print(response_text)
             # Nếu AI trả về lỗi rõ ràng
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -441,6 +473,7 @@ async def extract_multiple_images(
                 )
             try:
                 data_json = json.loads(response_text)
+                data_json = data_json["results"]
                 #print(data_json)
             except json.JSONDecodeError as e:
                 if response_text.strip().startswith("<"):
@@ -723,7 +756,7 @@ async def standardized_data(
         where convert(nvarchar(36), DuAnID)='{duAnID}'
         order by NgayKy, (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)"""
         dfVanBanAI = lay_du_lieu_tu_sql_server(query_van_ban)
-        
+        # print(query_van_ban)
         # B3: Lấy dữ liệu từ BangDuLieuChiTietAI
         chuoi_markdown_tenkmcp = ""
         chuoi_markdown_tenkmcp += "| STT | TenKMCP |\n"
@@ -741,7 +774,7 @@ async def standardized_data(
 
         # Xử lý ghép TenKMCP trong chuoi_markdown_tenkmcp với TenKMCP trong bảng KMCP
         promt_anh_xa_noi_dung_tuong_dong = """
-### Thực hiện ánh xạ nội dung tương đồng giữa bảng `DuLieuChiTiet` và bảng `KMCP` để gán `MaKMCP` cho mỗi dòng trong bảng `DuLieuChiTiet`. Tuyệt đối tuấn theo `ĐIỀU KIỆN BẮT BUỘC` bên dưới
+### Bạn là một hệ thống phân tích và ánh xạ từ ngữ thông minh. Hãy thực hiện so sánh và ánh xạ ý nghĩa giữa các khoản mục chi phí bảng `DuLieuChiTiet` được liệt kê theo bảng sau với danh mục chi phí chuẩn trong hệ thống bảng `KMCP`
 #### Bảng DuLieuChiTiet 
 """+chuoi_markdown_tenkmcp+"""
 #### Bảng KMCP 
@@ -900,55 +933,95 @@ CP699   Chi phí khác
 CP7 Chi phí dự phòng
 CP702   Chi phí dự phòng cho yếu tố trược giá
 
-### Kết quả đầu ra chuỗi json duy nhất với các trường thông tin
+### Yêu cầu nhiệm vụ:
+1. Tìm kiếm trong danh sách chi phí chuẩn (gồm cả tên nhóm và tên con chi tiết) mục có ý nghĩa tương đồng cao nhất với từng dòng chi phí trên.
+2. Kết quả đầu ra chuỗi json duy nhất với các trường thông tin
 - STT: STT của bảng DuLieuChiTiet
 - TenKMCP: Tên khoản mục gốc trước khi ánh xạ
 - TenKMCP_Moi: Tên khoản mục sau khi ánh xạ
 - MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng
-- GhiChu: Giải thích vì sao lại ánh xạ như vậy
-
-### ĐIỀU KIỆN BẮT BUỘC:
-- Bảo toàn DuLieuChiTiet.STT: Cột STT của bảng DuLieuChiTiet là khóa chính, giá trị không được thay đổi.
-- Ánh xạ dựa trên TenKMCP: Việc gán MaKMCP và TenKMCP_Moi phải dựa trên sự tương đồng về ý nghĩa giữa DuLieuChiTiet.TenKMCP (tên khoản mục gốc) và KMCP.TenKMCP, kể cả khi có sự khác biệt về từ ngữ hoặc mức độ chi tiết.
-- Cung cấp GhiChu: Mỗi ánh xạ phải đi kèm một giải thích ngắn gọn trong cột GhiChu về lý do lựa chọn MaKMCP đó. Trong trường hợp có sự mơ hồ, cần giải thích chi tiết hơn về các từ khóa được sử dụng, các khái niệm liên quan, và các giả định được đưa ra.
-- Không bỏ trống MaKMCP hoặc TenKMCP_Moi: TUYỆT ĐỐI không được để trống MaKMCP hoặc TenKMCP_Moi cho bất kỳ dòng nào trong bảng DuLieuChiTiet sau khi xử lý. Bắt buộc mọi dòng đều phải được ánh xạ. Nếu không tìm thấy kết quả phù hợp nhất, hãy chọn một giá trị gần đúng nhất và ghi rõ trong GhiChu.
-- Xử lý toàn bộ dữ liệu: Nếu bảng DuLieuChiTiet đầu vào có N dòng, kết quả đầu ra cũng phải có N dòng tương ứng đã được xử lý. Không được ngắt quãng hay bỏ sót.
-- Chỉ trả về JSON: Kết quả cuối cùng CHỈ LÀ MỘT CHUỖI JSON DUY NHẤT, không kèm theo bất kỳ giải thích hay văn bản nào khác.
+- GhiChu: Giải thích vì sao lại ánh xạ như vậy 
+**ĐIỀU KIỆN BẮT BUỘC:**
+- Chỉ chọn một MaKMCP có ý nghĩa gần nhất và phù hợp nhất cho mỗi khoản mục
+- Không được chọn nhiều hơn một mã KMCP cho một dòng
+- Không được suy diễn vượt quá ý nghĩa của cụm từ gốc
+- Ưu tiên nhóm chính trước, nếu không khớp thì tìm trong nhóm con
+- Các trường thông tin trong json KHÔNG gán ký tự đặc biệt
 """
         
-        response = model.generate_content([
-            promt_anh_xa_noi_dung_tuong_dong
-        ])
-        
-        # Xử lý response từ Gemini
-        response_text = response.text
-        if response_text.strip().startswith("```json"):
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
+        # Gọi OpenAI API để xử lý
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        response = client.chat.completions.create(
+            model=model_openai,
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Bạn là một trợ lý AI chuyên nghiệp trong việc ánh xạ và phân loại thông tin.
+                    Kết quả trả về PHẢI là một JSON object với key là 'results' chứa một mảng các kết quả ánh xạ."""
+                },
+                {
+                    "role": "user",
+                    "content": promt_anh_xa_noi_dung_tuong_dong
+                }
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+            seed=42  # Thêm seed để đảm bảo tính nhất quán
+        )
         
         try:
-            df_anh_xa = pd.read_json(response_text)
-            for _, row in df_anh_xa.iterrows():
-                query_update = f"""
-                update BangDuLieuChiTietAI
+            # Xử lý response từ OpenAI
+            response_text = response.choices[0].message.content
+            # Phân tích chuỗi JSON thành một đối tượng Python (dictionary)
+            dataJson = json.loads(response_text)
+
+            # Lấy ra list từ key "results"
+            result_list = dataJson["results"]
+            print("result_list>>>>>>>>")
+            print(result_list)
+            # Chuyển đổi list trở lại thành chuỗi JSON
+            new_response_text = json.dumps(result_list, indent=4, ensure_ascii=False)
+            # Chuyển đổi response thành DataFrame
+            dfBangDuLieuChiTietAI = pd.read_json(new_response_text)
+            # print("\nDữ liệu BangDuLieuChiTietAI:")
+            # print("=" * 80)
+            # for index, row in dfBangDuLieuChiTietAI.iterrows():
+            #     print(f"\nDòng {index + 1}:")
+            #     for column in dfBangDuLieuChiTietAI.columns:
+            #         print(f"{column}: {row[column]}")
+            #     print("-" * 40)
+            # print("=" * 80)
+            # Thực hiện cập nhật dữ liệu vào database
+            for index, row in dfBangDuLieuChiTietAI.iterrows():
+                query_insert = f"""
+                Update BangDuLieuChiTietAI
                 set
                 TenKMCP_AI=N'{row['TenKMCP_Moi']}',
                 KMCPID=(select top 1 KMCPID from dbo.KMCP km where replace(km.MaKMCP, '.', '')='{row['MaKMCP']}'),
-                GhiChuAI=N'{row['GhiChu']}'
+                GhiChuAI=N'{row['GhiChu'].replace("'", "")}'
                 where STT=N'{row['STT']}'
                 """
-                #print(f"Executing SQL query: {query_update}")
-                thuc_thi_truy_van(query_update)
+                #print(f"Executing SQL query: {query_insert}")
+                thuc_thi_truy_van(query_insert)
+                
         except Exception as e:
             return JSONResponse(
-                status_code=400,
+                status_code=500,
                 content={
-                    "status": "error", 
-                    "code": 400,
+                    "status": "error",
+                    "code": 500,
                     "message": "Lỗi khi xử lý kết quả ánh xạ từ AI",
                     "detail": str(e)
                 }
             )
-        
+        # print("\nDữ liệu VanBanAI:")
+        # print("=" * 80)
+        # for index, row in dfVanBanAI.iterrows():
+        #     print(f"\nDòng {index + 1}:")
+        #     for column in dfVanBanAI.columns:
+        #         print(f"{column}: {row[column]}")
+        #     print("-" * 40)
+        # print("=" * 80)
         if not dfVanBanAI.empty:
             for index, row in dfVanBanAI.iterrows():
                 van_ban_id = row['VanBanAIID']
@@ -1012,34 +1085,29 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             , KMCPID=N'{row2['KMCPID']}'
                             , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
                             , N'{van_ban_id}'
-                            , TenKMCP=N'{row2['TenKMCP_AI']}'
-                            , GiaTriDuToanKMCP=(select GiaTriDuToanKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCP_DC=(select GiaTriDuToanKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCPTang=(select GiaTriDuToanKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCPGiam=(select GiaTriDuToanKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
+                            , DuAnID=N'{duAnID}'
+                            , DauThauID=newid()
+                            , TenDauThau=TenDauThau
+                            , GiaTri=GiaTri
+                            , LoaiGoiThauID=LoaiGoiThauID
+                            , HinhThucDThID
+                            , PhuongThucDThID
+                            , LoaiHopDongID
+                            , ThoiGianToChuc
+                            , KeHoachThoiGianHopDong
+                            , VanBanID=VanBanAIID
+                            , GiaiDoan = (select GiaiDoan from dbo.VanBanAI vb where vb.VanBanAIID=dbo.BangDuLieuChiTietAI.VanBanAIID)
+                            from dbo.BangDuLieuChiTietAI where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
                             """
                             print(f"Executing SQL query: {query_insert}")
                             thuc_thi_truy_van(query_insert)
-        else:
-            dfBangDuLieuChiTietAI = pd.DataFrame()
-
-        # return JSONResponse(
-        #     status_code=200,
-        #     content={
-        #         "status": "success",
-        #         "code": 200,
-        #         "message": "Lấy dữ liệu thành công",
-        #         "data": dfVanBanAI.to_dict('records')
-        #     }
-        # )
     except Exception as e:
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
                 "code": 500,
-                "message": "Lỗi khi lấy dữ liệu",
+                "message": "Lỗi hệ thống",
                 "detail": str(e)
             }
         )
