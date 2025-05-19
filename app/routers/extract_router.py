@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import os
-import google.generativeai as genai
+import openai
 import base64
 from io import BytesIO
 from PIL import Image
@@ -26,10 +26,7 @@ load_dotenv()
 router = APIRouter()
 
 # Cấu hình API keys từ biến môi trường
-genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-
-# Khởi tạo models
-model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Khởi tạo PromptService
 prompt_service = PromptService()
@@ -236,17 +233,48 @@ async def extract_document(
             file_path,
             ocr_prompt,
             ocr_prompt,
-            model_name="gemini-1.5-flash",
+            model_name="gpt-4-vision-preview",
             output_image_dir="temp_image",
             loai_file="IMAGE"
         )
-        if pdf_text.strip().startswith("```json"):
-            pdf_text = pdf_text.strip()[7:-3].strip()
-        elif pdf_text.strip().startswith("```"):
-            pdf_text = pdf_text.strip()[3:-3].strip()
+
+        # Gọi OpenAI API để xử lý text
+        response = openai.ChatCompletion.create(
+            model="gpt-4-vision-preview",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Bạn là một trợ lý AI chuyên nghiệp trong việc trích xuất thông tin từ văn bản."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": ocr_prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{pdf_text}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=4096
+        )
+
+        response_text = response.choices[0].message.content
+
+        # Clean up response text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
 
         try:
-            data_json = json.loads(pdf_text)
+            data_json = json.loads(response_text)
         except json.JSONDecodeError as e:
             return JSONResponse(
                 status_code=400,
@@ -255,7 +283,7 @@ async def extract_document(
                     "code": 400,
                     "message": "Không thể phân tích kết quả từ AI",
                     "detail": str(e),
-                    "raw_response": pdf_text
+                    "raw_response": response_text
                 }
             )
 
@@ -410,18 +438,48 @@ async def extract_multiple_documents(
                 temp_file_path,
                 ocr_prompt,
                 ocr_prompt,
-                model_name="gemini-1.5-flash",
+                model_name="gpt-4o",
                 output_image_dir="temp_image",
                 loai_file="PDF"
             )
 
-            if pdf_text.strip().startswith("```json"):
-                pdf_text = pdf_text.strip()[7:-3].strip()
-            elif pdf_text.strip().startswith("```"):
-                pdf_text = pdf_text.strip()[3:-3].strip()
+            # Gọi OpenAI API để xử lý text
+            response = openai.ChatCompletion.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Bạn là một trợ lý AI chuyên nghiệp trong việc trích xuất thông tin từ văn bản."
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": ocr_prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{pdf_text}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=4096
+            )
+
+            response_text = response.choices[0].message.content
+
+            # Clean up response text
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
 
             try:
-                data_json = json.loads(pdf_text)
+                data_json = json.loads(response_text)
                 all_data.append({
                     "filename": file.filename,
                     "data": data_json
@@ -451,15 +509,24 @@ async def extract_multiple_documents(
         # Get the appropriate prompt for combining data
         combined_prompt = prompt_service.get_prompt(loaiVanBan)
 
-        # Prepare data for Gemini API
-        parts = [combined_prompt]
-        for data in all_data:
-            parts.append(json.dumps(data['data']))
+        # Gọi OpenAI API để kết hợp dữ liệu từ nhiều file
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Bạn là một trợ lý AI chuyên nghiệp trong việc kết hợp và phân tích thông tin từ nhiều văn bản."
+                },
+                {
+                    "role": "user",
+                    "content": f"{combined_prompt}\n\nDữ liệu từ các file:\n{json.dumps(all_data, indent=2)}"
+                }
+            ],
+            max_tokens=4096
+        )
 
-        # Call Gemini API with all data at once
-        response = model.generate_content(parts)
-        response_text = response.text
-
+        response_text = response.choices[0].message.content
+        
         # Clean up response text
         if response_text.strip().startswith("```json"):
             response_text = response_text.strip()[7:-3].strip()
