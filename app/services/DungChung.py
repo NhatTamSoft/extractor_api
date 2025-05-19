@@ -16,6 +16,7 @@ from openai import OpenAI
 from dotenv import load_dotenv # Thư viện để đọc file .env
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import jwt
 # %%
 # --- 2. Tải và cấu hình API Keys từ file .env ---
 # Tải các biến môi trường từ file .env trong cùng thư mục
@@ -573,3 +574,49 @@ def convert_currency_to_float(value: str) -> float:
         return float(value)
     except (ValueError, TypeError):
         return 0.0
+
+def decode_jwt_token(token: str) -> dict:
+    """
+    Giải mã JWT token và trả về thông tin userID và donViID.
+    
+    Args:
+        token (str): JWT token cần giải mã
+        
+    Returns:
+        dict: Dictionary chứa userID và donViID
+        
+    Raises:
+        Exception: Nếu token không hợp lệ hoặc không thể giải mã
+    """
+    try:
+        # Lấy secret key từ biến môi trường
+        secret_key = os.getenv("JWT_SECRET_KEY")
+        if not secret_key:
+            raise ValueError("Không tìm thấy JWT_SECRET_KEY trong file .env")
+            
+        # Giải mã token với options để bỏ qua audience validation
+        decoded = jwt.decode(
+            token, 
+            secret_key, 
+            algorithms=["HS256"],
+            options={
+                "verify_aud": False,  
+                "verify_exp": True,   
+                "verify_iat": True,   
+                "verify_nbf": True    
+            }
+        )
+        
+        if "UserId" not in decoded or "DonViID" not in decoded:
+            raise ValueError("Token không chứa đủ thông tin userID hoặc donViID")
+            
+        return {
+            "userID": decoded["UserId"],
+            "donViID": decoded["DonViID"]
+        }
+    except jwt.ExpiredSignatureError:
+        raise Exception("Token đã hết hạn")
+    except jwt.InvalidTokenError as e:
+        raise Exception(f"Token không hợp lệ: {str(e)}")
+    except Exception as e:
+        raise Exception(f"Lỗi khi giải mã token: {str(e)}")
