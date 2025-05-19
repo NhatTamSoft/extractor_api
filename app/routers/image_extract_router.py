@@ -629,6 +629,8 @@ async def extract_multiple_images(
                 return JSONResponse(
                     status_code=500,
                     content={
+
+                        
                         "status": "error",
                         "code": 500,
                         "message": "Lỗi khi upload file lên hệ thống QLDA",
@@ -663,8 +665,48 @@ async def extract_multiple_images(
 
 @router.get("/standardized_data")
 async def standardized_data(
-    duAnID: str
+    duAnID: str,
+    authorization: str = Header(...)
 ):
+    # Xác thực token
+    try:
+        # Kiểm tra header Authorization
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+            
+        # Lấy token từ header
+        token = authorization.split(" ")[1]
+        
+        # Giải mã token để lấy userID và donViID
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        
+        # Thêm thông tin user vào request
+        request_data = {
+            "userID": user_id,
+            "donViID": don_vi_id
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+
     try:
         # B1: Lấy dữ liệu từ ChucNangAI
         query_chuc_nang = "select NghiepVuID=ChucNangAIID, ThongTinChung, BangDuLieu from ChucNangAI order by STT"
