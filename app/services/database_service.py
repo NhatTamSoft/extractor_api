@@ -73,7 +73,9 @@ class DatabaseService:
                     DuAnID,
                     JsonAI,
                     DataOCR,
-                    TenFile
+                    TenFile, 
+                    UserID, 
+                    DonViID
                 ) VALUES (
                     :VanBanAIID,
                     :SoVanBan,
@@ -91,7 +93,9 @@ class DatabaseService:
                     :DuAnID,
                     :JsonAI,
                     :DataOCR,
-                    :TenFile
+                    :TenFile,
+                    :UserID, 
+                    :DonViID
                 )
             """)
             

@@ -288,6 +288,9 @@ async def extract_multiple_images(
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
 
+            van_ban_data["UserID"] = user_id
+            van_ban_data["DonViID"] = don_vi_id
+
             db_service = DatabaseService()
             result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
             
