@@ -752,7 +752,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 query_bangct = f"select BangDuLieuChiTietAIID=convert(nvarchar(36), BangDuLieuChiTietAIID), KMCPID=convert(nvarchar(36), KMCPID), TenKMCP_AI from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
                 df_bang_ct = lay_du_lieu_tu_sql_server(query_bangct)
                 # Xử lý thêm dữ liệu vào NTsoftDocumentAI
-                if ten_loai_van_ban in "QDPD_CT":    
+                if ten_loai_van_ban in "QDPD_CT;QDPD_DA":    
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
@@ -774,7 +774,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             #print(f"Executing SQL query: {query_insert}")
                             if thuc_thi_truy_van(query_insert) == False:
                                 print(f"Executing SQL query: {query_insert}")
-                if ten_loai_van_ban in "QDPDDT_CBDT":    
+                if ten_loai_van_ban in "QDPDDT_CBDT;QDPD_DT_THDT":    
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
