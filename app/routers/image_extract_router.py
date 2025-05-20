@@ -111,8 +111,8 @@ async def extract_multiple_images(
         van_ban_id = str(uuid.uuid4())
         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
-        print("===================================================prompt")
-        print(prompt)
+        # print("===================================================prompt")
+        # print(prompt)
         # Process each file
         temp_files = []
         for file in files:
@@ -310,9 +310,9 @@ async def extract_multiple_images(
                         "VanBanAIID": van_ban_id,
                         **{col: item.get(col, 0) for col in required_columns}
                     })
-                print("insert_bang_du_lieu_chi_tiet_ai=============")
-                print(bang_du_lieu_data)
-                print(required_columns)
+                # print("insert_bang_du_lieu_chi_tiet_ai=============")
+                # print(bang_du_lieu_data)
+                # print(required_columns)
                 bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
                     db, 
                     bang_du_lieu_data,
