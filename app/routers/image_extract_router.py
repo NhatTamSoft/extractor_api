@@ -111,8 +111,8 @@ async def extract_multiple_images(
         van_ban_id = str(uuid.uuid4())
         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
-        # print("===================================================prompt")
-        # print(prompt)
+        print("======================prompt==================")
+        print(prompt)
         # Process each file
         temp_files = []
         for file in files:
@@ -126,12 +126,11 @@ async def extract_multiple_images(
                         "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
                     }
                 )
-
             # Tạo tên file tạm thời với timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{file.filename}")
             temp_files.append(temp_file_path)
-
+            print(temp_file_path)
             # Lưu file tạm thời
             with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
@@ -270,7 +269,7 @@ async def extract_multiple_images(
                 "DataOCR": response_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
             }
-            if  loaiVanBan in "BCDX_CT;QDPD_CT;QDPD_DA;QDPD_KHLCNT_CBDT;QDPD_KHLCNT_THDT":
+            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPD_DA];[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -286,6 +285,32 @@ async def extract_multiple_images(
                     "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            if  f"[{loaiVanBan}]" in "[HOP_DONG]":
+                _LoaiVanBanID = "3F278B7B-6E81-4480-BFC6-80885DAEAFF1"
+                _GiaiDoan = "3"
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "LoaiVanBanID": _LoaiVanBanID,
+                    "GiaiDoanID": "",
+                    "GiaiDoan": _GiaiDoan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
                 }
 
             van_ban_data["UserID"] = user_id
@@ -469,6 +494,11 @@ async def standardized_data(
         )
 
     try:
+        # duAnID = ""
+        # query_VanBan = f"select DuAnID from VanBanAI where VanBanAIID='{vanBanAIID}'"
+        # _dfVanBanAI = lay_du_lieu_tu_sql_server(query_VanBan)
+        # if not _dfVanBanAI.empty:
+        #     duAnID = _dfVanBanAI.iloc[0]['DuAnID']
         # B1: Lấy dữ liệu từ ChucNangAI
         query_chuc_nang = "select NghiepVuID=ChucNangAIID, ThongTinChung, BangDuLieu from ChucNangAI order by STT"
         dfChucNangAI = lay_du_lieu_tu_sql_server(query_chuc_nang)
@@ -483,6 +513,7 @@ async def standardized_data(
         from dbo.VanBanAI 
         where convert(nvarchar(36), DuAnID)='{duAnID}'
         order by NgayKy, (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)"""
+        #print(query_van_ban)
         dfVanBanAI = lay_du_lieu_tu_sql_server(query_van_ban)
         # print(query_van_ban)
         # B3: Lấy dữ liệu từ BangDuLieuChiTietAI
@@ -668,7 +699,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
 - TenKMCP: Tên khoản mục gốc trước khi ánh xạ
 - TenKMCP_Moi: Tên khoản mục sau khi ánh xạ
 - MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng
-- GhiChu: Giải thích vì sao lại ánh xạ như vậy 
+- GhiChu: Giải thích vì sao lại ánh xạ như vậy (trong ghi chú không chứa ký tự đặc biệt)
 **ĐIỀU KIỆN BẮT BUỘC:**
 - Chỉ chọn một MaKMCP có ý nghĩa gần nhất và phù hợp nhất cho mỗi khoản mục
 - Không được chọn nhiều hơn một mã KMCP cho một dòng
@@ -685,7 +716,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 {
                     "role": "system",
                     "content": """Bạn là một trợ lý AI chuyên nghiệp trong việc ánh xạ và phân loại thông tin.
-                    Kết quả trả về PHẢI là một JSON object với key là 'results' chứa một mảng các kết quả ánh xạ."""
+                    Kết quả trả về PHẢI là một JSON"""
                 },
                 {
                     "role": "user",
@@ -696,19 +727,25 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
             #response_format={"type": "json_object"},
             seed=42  # Thêm seed để đảm bảo tính nhất quán
         )
-        
+        #print(promt_anh_xa_noi_dung_tuong_dong)
         try:
             # Xử lý response từ OpenAI
             response_text = response.choices[0].message.content
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
+            #print(response_text)
             # Phân tích chuỗi JSON thành một đối tượng Python (dictionary)
             dataJson = json.loads(response_text)
 
             # Lấy ra list từ key "results"
-            result_list = dataJson #["results"]
+            result_list = dataJson
             # print("result_list>>>>>>>>")
             # print(result_list)
             # Chuyển đổi list trở lại thành chuỗi JSON
             new_response_text = json.dumps(result_list, indent=4, ensure_ascii=False)
+            #print(new_response_text)
             # Chuyển đổi response thành DataFrame
             dfBangDuLieuChiTietAI = pd.read_json(new_response_text)
             # print("\nDữ liệu BangDuLieuChiTietAI:")
@@ -721,13 +758,14 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
             # print("=" * 80)
             # Thực hiện cập nhật dữ liệu vào database
             for index, row in dfBangDuLieuChiTietAI.iterrows():
-                query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')={}), GhiChuAI=N'{}' where STT=N'{}'".format(
-                    re.sub(r'[^a-zA-Z\s]', '', row['TenKMCP Moi']),
-                    re.sub(r'[^a-zA-Z\s]', '', row['MaKMCP']),
-                    re.sub(r'[^a-zA-Z\s]', '', row['GhiChu']),
+                query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), GhiChuAI=N'{}' where STT=N'{}'".format(
+                    row['TenKMCP_Moi'],
+                    row['MaKMCP'].replace("'", ""),
+                    row['GhiChu'].replace("'", ""),
                     row['STT']
                 )
-                #print(f"Executing SQL query: {query_insert}")
+
+                print(f"Executing SQL query: {query_insert}")
                 thuc_thi_truy_van(query_insert)
                 
         except Exception as e:
@@ -755,15 +793,17 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 query_bangct = f"select BangDuLieuChiTietAIID=convert(nvarchar(36), BangDuLieuChiTietAIID), KMCPID=convert(nvarchar(36), KMCPID), TenKMCP_AI from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
                 df_bang_ct = lay_du_lieu_tu_sql_server(query_bangct)
                 # Xử lý thêm dữ liệu vào NTsoftDocumentAI
-                if ten_loai_van_ban in "QDPD_CT;QDPD_DA":    
+                # print("=================ten_loai_van_ban===============")
+                # print(ten_loai_van_ban)
+                if f"[{ten_loai_van_ban}]" in "[QDPD_CT];[QDPD_DA]":    
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
                             delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
                             ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriTMDTKMCP,GiaTriTMDTKMCP_DC,GiaTriTMDTKMCPTang,GiaTriTMDTKMCPGiam,TongMucDauTuKMCPID_goc)
+                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, TongMucDauTuKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriTMDTKMCP,GiaTriTMDTKMCP_DC,GiaTriTMDTKMCPTang,GiaTriTMDTKMCPGiam,TongMucDauTuKMCPID_goc)
                             select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', TongMucDauTuKMCPID=newid()
                             , KMCPID=N'{row2['KMCPID']}'
                             , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
                             , N'{van_ban_id}'
@@ -777,15 +817,15 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             #print(f"Executing SQL query: {query_insert}")
                             if thuc_thi_truy_van(query_insert) == False:
                                 print(f"Executing SQL query: {query_insert}")
-                if ten_loai_van_ban in "QDPDDT_CBDT;QDPD_DT_THDT":    
+                if f"[{ten_loai_van_ban}]" in "[QDPDDT_CBDT];[QDPD_DT_THDT]":    
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
                             delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
                             ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
+                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, DuToanKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
                             select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', DuToanKMCPID=newid()
                             , KMCPID=N'{row2['KMCPID']}'
                             , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
                             , N'{van_ban_id}'
@@ -799,34 +839,61 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             print(f"Executing SQL query: {query_insert}")
                             thuc_thi_truy_van(query_insert)
 
-                if ten_loai_van_ban in "QDPD_KHLCNT_CBDT;QDPD_KHLCNT_THDT": # sử dụng cho 2 giai đoạn CB và TH
+                if f"[{ten_loai_van_ban}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
                             delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
                             ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
-                            select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            , KMCPID=N'{row2['KMCPID']}'
-                            , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            , N'{van_ban_id}'
-                            , DuAnID=N'{duAnID}'
-                            , DauThauID=newid()
-                            , TenDauThau=TenDauThau
-                            , GiaTri=GiaTri
-                            , LoaiGoiThauID=LoaiGoiThauID
-                            , HinhThucDThID
-                            , PhuongThucDThID
-                            , LoaiHopDongID
-                            , ThoiGianToChuc
-                            , KeHoachThoiGianHopDong
-                            , VanBanID=VanBanAIID
-                            , GiaiDoan = (select GiaiDoan from dbo.VanBanAI vb where vb.VanBanAIID=dbo.BangDuLieuChiTietAI.VanBanAIID)
-                            from dbo.BangDuLieuChiTietAI where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
+                            insert into dbo.NTSoftDocumentAI(DauThauID, DauThauCTID,TenDauThau,GiaTri
+                                ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
+                            SELECT
+                            DauThauID=newid(),
+                            DauThauCTID=newid(),
+                            TenDauThau,
+                            GiaTri=GiaTriGoiThau,
+                            LoaiGoiThauID=NULL, -- chưa xử lý
+                            HinhThucDThID=NULL, -- chưa xử lý
+                            PhuongThucDThID=NULL, -- chưa xử lý
+                            LoaiHopDongID=NULL, -- chưa xử lý
+                            ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
+                            KeHoachThoiGianHopDong=ThoiGianTHHopDong
+                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
                             """
                             print(f"Executing SQL query: {query_insert}")
                             thuc_thi_truy_van(query_insert)
+                if f"[{ten_loai_van_ban}]" in "[HOP_DONG]": # Hợp đồng mặc định là giai đoạn thực hiện
+                    if not df_bang_ct.empty:
+                        for _, row2 in df_bang_ct.iterrows():
+                            query_insert = f"""
+                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+                            ----------
+                            insert into dbo.NTSoftDocumentAI(DauThauID, DauThauCTID,TenDauThau,GiaTri
+                                ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
+                            SELECT
+                            DauThauID=newid(),
+                            DauThauCTID=newid(),
+                            TenDauThau,
+                            GiaTri=GiaTriGoiThau,
+                            LoaiGoiThauID=NULL, -- chưa xử lý
+                            HinhThucDThID=NULL, -- chưa xử lý
+                            PhuongThucDThID=NULL, -- chưa xử lý
+                            LoaiHopDongID=NULL, -- chưa xử lý
+                            ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
+                            KeHoachThoiGianHopDong=ThoiGianTHHopDong
+                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
+                            """
+                            print(f"Executing SQL query: {query_insert}")
+                            thuc_thi_truy_van(query_insert)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "code": 200,
+                "message": "Đã làm đẹp dữ liệu văn bản",
+                "detail": ""
+            }
+        )
     except Exception as e:
         return JSONResponse(
             status_code=500,

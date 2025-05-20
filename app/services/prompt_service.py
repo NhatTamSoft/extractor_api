@@ -20,7 +20,7 @@ class PromptService:
                     if not section.strip():
                         continue
                     # Trích xuất KyHieu từ phần
-                    ky_hieu_match = re.search(r'\*\*KyHieu\*\*:\s*"([^"]+)"', section)
+                    ky_hieu_match = re.search(r'\`KyHieu\`:\s*"([^"]+)"', section)
                     if not ky_hieu_match:
                         continue
                         
