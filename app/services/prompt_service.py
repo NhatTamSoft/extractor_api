@@ -11,7 +11,7 @@ class PromptService:
     def _load_prompts(self):
         """Tải các prompt từ file prompt"""
         try:
-            with open('data/promt_quettailieu.txt', 'r', encoding='utf-8') as file:
+            with open('data/promt_documentai.md', 'r', encoding='utf-8') as file:
                 content = file.read()
                 # Phân tách nội dung theo {{CHUCNANG01}}
                 sections = re.split(r'{{CHUCNANG\d+}}', content)
