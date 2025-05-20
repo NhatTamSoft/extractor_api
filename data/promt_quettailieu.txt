@@ -22,12 +22,12 @@ Chức năng **Quyết định phê duyệt chủ trương đầu tư**
 **GiaTriTMDTKMCPTang**: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
 **GiaTriTMDTKMCPGiam**: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
 ### Yêu cầu xử lý:
+- Kết quả trích xuất dễ dàng xuất ra dạng JSON.
 - Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự.
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa.
-- Kết quả trích xuất dễ dàng xuất ra dạng JSON.
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
-- Nếu không tìm thấy giá trị thì ghi `0`
+- Trong bảng BangDuLieu nếu các cột giá trì không có thì ghi `0`
 {{CHUCNANG02}} Chức năng **Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư**
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
@@ -129,8 +129,7 @@ Chức năng **Quyết định phê duyệt chủ trương đầu tư**
 - Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng
 - Nếu số tiền có dấu chấm (`.`) ngăn cách phần nghìn, vẫn giữ nguyên để dễ xử lý về sau
 - Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị tính
-{{CHUCNANG06}} Bạn là công cụ OCR thông minh, hãy đọc nội dung trên hình ảnh văn bản được cung cấp và trích xuất thông tin sau:
-### Chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
+{{CHUCNANG06}} Bạn là một trợ lý AI ChatGPT-Vision có khả năng đọc hiểu và phân tích hình ảnh chứa văn bản, bảng biểu và công thức tài chính. Hãy giúp tôi xem chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 **KyHieu**: "QDPD_KHLCNT_THDT"
@@ -154,6 +153,7 @@ Chức năng **Quyết định phê duyệt chủ trương đầu tư**
 **LoaiHopDong**: Trích cột loại hợp đồng
 **ThoiGianTHHopDong**: Trích cột thời gian thực hiện hợp đồng
 ### Yêu cầu xử lý:
+- Kết quả trả về là chuỗi JSON duy nhất
 - Bỏ qua dòng tiêu đề hoặc nhóm (VD: “Gói thầu dịch vụ tư vấn: 02 gói”), chỉ trích các gói có thông tin chi tiết.
 - Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
 - Nếu có dòng “Trong đó”, vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
