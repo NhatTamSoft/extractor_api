@@ -21,7 +21,10 @@ from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
 import httpx
+import re
+from app.services.DungChung import encode_image_to_base64 
 from openai import OpenAI
+
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -316,7 +319,7 @@ async def extract_multiple_images(
 ):
     # Xác thực token
     try:
-        # Kiểm tra header Authorization
+        #Kiểm tra header Authorization
         if not authorization.startswith("Bearer "):
             return JSONResponse(
                 status_code=401,
@@ -328,14 +331,14 @@ async def extract_multiple_images(
                 }
             )
             
-        # Lấy token từ header
+        #Lấy token từ header
         token = authorization.split(" ")[1]
         # Giải mã token để lấy userID và donViID
         token_data = decode_jwt_token(token)
         user_id = token_data["userID"]
         don_vi_id = token_data["donViID"]
         
-        # Thêm thông tin user vào request
+        #Thêm thông tin user vào request
         request_data = {
             "userID": user_id,
             "donViID": don_vi_id
@@ -358,8 +361,11 @@ async def extract_multiple_images(
         # Generate UUID only once and use it consistently
         van_ban_id = str(uuid.uuid4())
         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
-
+        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
+        print("===================================================prompt")
+        print(prompt)
         # Process each file
+        temp_files = []
         for file in files:
             if file.content_type not in ALLOWED_IMAGE_TYPES:
                 return JSONResponse(
@@ -376,90 +382,57 @@ async def extract_multiple_images(
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{file.filename}")
             temp_files.append(temp_file_path)
-            
+
             # Lưu file tạm thời
             with open(temp_file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
-            try:
-                with Image.open(temp_file_path) as img:
-                    buffered = BytesIO()
-                    img.save(buffered, format="PNG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode()
-            except Exception as e:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "code": 400,
-                        "message": f"File {file.filename} bị hỏng hoặc không thể đọc",
-                        "detail": str(e)
-                    }
-                )
-            all_data.append({
-                "filename": file.filename,
-                "image_data": img_str,
-                "temp_path": temp_file_path  # Lưu đường dẫn file tạm để có thể xử lý sau
-            })
-        if not all_data:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "code": 400,
-                    "message": "Không thể xử lý file",
-                    "detail": "Không thể xử lý bất kỳ file nào"
+
+            content_parts = [{"type": "text", "text": prompt}]
+        valid_image_paths = []
+        for image_name in temp_files:
+            # Trong Colab, files.upload() lưu file vào thư mục hiện tại
+            # image_path sẽ chính là image_name
+            image_path = image_name
+            print(f"  - Đang xử lý: {image_path}")
+            base64_image = encode_image_to_base64(image_path)
+            if base64_image:
+                image_url_object = {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                 }
-            )
+                content_parts.append(image_url_object)
+                valid_image_paths.append(image_path)
 
         # Get the appropriate prompt based on loaiVanBan
-        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
-        
         try:
             # Chuẩn bị dữ liệu cho OpenAI
+            # Thêm hình ảnh vào messages
             messages = [
                 {
-                    "role": "system",
-                    "content": """Bạn là một trợ lý AI chuyên nghiệp trong việc phân tích và trích xuất thông tin từ văn bản.
-                    ết quả trả về PHẢI là một JSON object với key là 'results'"""
-                },
-                {
                     "role": "user",
-                    "content": prompt
+                    "content": content_parts
                 }
             ]
-
-            # Thêm hình ảnh vào messages
-            for data in all_data:
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{data['image_data']}"
-                            }
-                        }
-                    ]
-                })
-
             # Gọi OpenAI API
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             response = client.chat.completions.create(
-                model=model_openai,
+                model="gpt-4o",  # Hoặc mô hình hỗ trợ xử lý nhiều ảnh khác
                 messages=messages,
-                temperature=0,
-                response_format={"type": "json_object"},
-                seed=42
+                max_tokens=4000  # Tăng max_tokens nếu cần cho kết quả dài hơn
             )
-
+            #print(response)
             # Xử lý response từ OpenAI
-            response_text = response.choices[0].message.content
+            response_text = response.choices[0].message.content.strip()
+            # print("response_text")
+            # print(response_text)
+            # return
             if response_text.strip().startswith("```json"):
                 response_text = response_text.strip()[7:-3].strip()
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
-            #print(response_text)
+            print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
+            print(response_text)
             # Nếu AI trả về lỗi rõ ràng
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -473,7 +446,7 @@ async def extract_multiple_images(
                 )
             try:
                 data_json = json.loads(response_text)
-                data_json = data_json["results"]
+                #data_json = data_json["results"]
                 #print(data_json)
             except json.JSONDecodeError as e:
                 if response_text.strip().startswith("<"):
@@ -538,6 +511,7 @@ async def extract_multiple_images(
                 "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
                 "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
                 "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                 "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "TenLoaiVanBan": loaiVanBan,
@@ -547,7 +521,7 @@ async def extract_multiple_images(
                 "DataOCR": response_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
             }
-            if  loaiVanBan in "BCDX_CT;QDPD_CT;QDPD_DA":
+            if  loaiVanBan in "BCDX_CT;QDPD_CT;QDPD_DA;QDPD_KHLCNT_CBDT;QDPD_KHLCNT_THDT":
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -587,7 +561,9 @@ async def extract_multiple_images(
                         "VanBanAIID": van_ban_id,
                         **{col: item.get(col, 0) for col in required_columns}
                     })
-                
+                print("insert_bang_du_lieu_chi_tiet_ai=============")
+                print(bang_du_lieu_data)
+                print(required_columns)
                 bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
                     db, 
                     bang_du_lieu_data,
@@ -788,14 +764,14 @@ CP105   Chi phí sử dụng đất, thuê đất tính trong thời gian xây d
 CP106   Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng
 CP107   Chi phí đầu tư vào đất
 CP199   Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư
-CP2 Chi phí xây dựng
-CP202   Chi phí xây dựng công trình chính
-CP203   Chi phí xây dựng công trình chính và phụ
-CP204   Chi phí xây dựng điều chỉnh
-CP205   Chi phí xây dựng trước thuế
-CP206   Chi phí xây dựng sau thuế
-CP207   Chi phí xây dựng công trình phụ
-CP250   Chi phí xây dựng khác
+CP2 Chi phí xây dựng hoặc xây lắp
+CP202   Chi phí xây dựng hoặc xây lắp công trình chính
+CP203   Chi phí xây dựng hoặc xây lắp công trình chính và phụ
+CP204   Chi phí xây dựng hoặc xây lắp điều chỉnh
+CP205   Chi phí xây dựng hoặc xây lắp trước thuế
+CP206   Chi phí xây dựng hoặc xây lắp sau thuế
+CP207   Chi phí xây dựng hoặc xây lắp công trình phụ
+CP250   Chi phí xây dựng hoặc xây lắp khác
 CP3 Chi phí thiết bị
 CP4 Chi phí quản lý dự án
 CP5 Chi phí tư vấn đầu tư xây dựng
@@ -965,7 +941,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 }
             ],
             temperature=0,
-            response_format={"type": "json_object"},
+            #response_format={"type": "json_object"},
             seed=42  # Thêm seed để đảm bảo tính nhất quán
         )
         
@@ -976,9 +952,9 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
             dataJson = json.loads(response_text)
 
             # Lấy ra list từ key "results"
-            result_list = dataJson["results"]
-            print("result_list>>>>>>>>")
-            print(result_list)
+            result_list = dataJson #["results"]
+            # print("result_list>>>>>>>>")
+            # print(result_list)
             # Chuyển đổi list trở lại thành chuỗi JSON
             new_response_text = json.dumps(result_list, indent=4, ensure_ascii=False)
             # Chuyển đổi response thành DataFrame
@@ -993,14 +969,12 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
             # print("=" * 80)
             # Thực hiện cập nhật dữ liệu vào database
             for index, row in dfBangDuLieuChiTietAI.iterrows():
-                query_insert = f"""
-                Update BangDuLieuChiTietAI
-                set
-                TenKMCP_AI=N'{row['TenKMCP_Moi']}',
-                KMCPID=(select top 1 KMCPID from dbo.KMCP km where replace(km.MaKMCP, '.', '')='{row['MaKMCP']}'),
-                GhiChuAI=N'{row['GhiChu'].replace("'", "")}'
-                where STT=N'{row['STT']}'
-                """
+                query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')={}), GhiChuAI=N'{}' where STT=N'{}'".format(
+                    re.sub(r'[^a-zA-Z\s]', '', row['TenKMCP Moi']),
+                    re.sub(r'[^a-zA-Z\s]', '', row['MaKMCP']),
+                    re.sub(r'[^a-zA-Z\s]', '', row['GhiChu']),
+                    row['STT']
+                )
                 #print(f"Executing SQL query: {query_insert}")
                 thuc_thi_truy_van(query_insert)
                 
@@ -1073,7 +1047,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             print(f"Executing SQL query: {query_insert}")
                             thuc_thi_truy_van(query_insert)
 
-                if ten_loai_van_ban in "QDPD_KHLCNT_THDT":
+                if ten_loai_van_ban in "QDPD_KHLCNT_CBDT;QDPD_KHLCNT_THDT": # sử dụng cho 2 giai đoạn CB và TH
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
