@@ -221,6 +221,10 @@ class DatabaseService:
                             chi_tiet[col] = 0
                 
                 # Execute the query
+                print("insert_chi_tiet_query")
+                print(insert_chi_tiet_query)
+                print("chi_tiet")
+                print(chi_tiet)
                 db.execute(insert_chi_tiet_query, chi_tiet)
             
             db.commit()

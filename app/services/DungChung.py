@@ -620,3 +620,7 @@ def decode_jwt_token(token: str) -> dict:
         raise Exception(f"Token không hợp lệ: {str(e)}")
     except Exception as e:
         raise Exception(f"Lỗi khi giải mã token: {str(e)}")
+    
+def encode_image_to_base64(image_path):
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
