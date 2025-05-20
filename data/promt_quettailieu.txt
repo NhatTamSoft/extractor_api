@@ -115,21 +115,20 @@ Chức năng **Quyết định phê duyệt chủ trương đầu tư**
 **DieuChinh**: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 **TenKMCP**: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
-**GiaTriDuToanKMCP**: Giá trị dự toán theo khoản mục chi phí (nếu có)
-**GiaTriDuToanKMCP_DC**: Giá trị dự toán điều chỉnh theo khoản mục chi phí (nếu có)
-**GiaTriDuToanKMCPTang**: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
-**GiaTriDuToanKMCPGiam**: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
+**GiaTriDuToanKMCP**: Giá trị dự toán theo khoản mục chi phí (nếu có), mặc định là 0
+**GiaTriDuToanKMCP_DC**: Giá trị dự toán điều chỉnh theo khoản mục chi phí (nếu có), mặc định là 0
+**GiaTriDuToanKMCPTang**: Giá trị dự toán theo khoản mục chi phí tăng (nếu có), mặc định là 0
+**GiaTriDuToanKMCPGiam**: Giá trị dự toán theo khoản mục chi phí giảm (nếu có), mặc định là 0
 ### Yêu cầu xử lý:
 - Kết quả trả về là chuỗi JSON duy nhất
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn
-- Nếu trong BangDuLieu các cột giá trị không có giá trị thì bắt buộc ghi là "0"
+- Trong BangDuLieu nếu các cột giá trị "" thì bắt buộc gán là "0"
 - Giữ nguyên đúng tên khoản mục như trên bảng (bao gồm cả chữ in hoa, dấu câu nếu có)
-- Với các dòng không có số liệu, để trống `GiaTriDuToanKMCP` và `GiaTriDuToanKMCP_DC` và `GiaTriDuToanKMCPTang` và `GiaTriDuToanKMCPGiam`
 - Giữ nguyên định dạng STT dạng lồng nhau (VD: `1.1`, `3.1`, `4.1`)
 - Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng
 - Nếu số tiền có dấu chấm (`.`) ngăn cách phần nghìn, vẫn giữ nguyên để dễ xử lý về sau
-- Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị
+- Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị tính
 {{CHUCNANG06}} Bạn là công cụ OCR thông minh, hãy đọc nội dung trên hình ảnh văn bản được cung cấp và trích xuất thông tin sau:
 ### Chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
