@@ -18,7 +18,7 @@ from app.core.database import get_db
 import shutil
 import re
 from fastapi.responses import JSONResponse
-from app.services.DungChung import read_text_from_pdf_combined, to_slug, convert_currency_to_float
+from app.services.DungChung import read_text_from_pdf_combined, to_slug, convert_currency_to_int
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -310,10 +310,10 @@ async def extract_document(
         if "BangDuLieu" in data_json:
             for item in data_json["BangDuLieu"]:
                 item["VanBanID"] = van_ban_id
-                item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
-                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
-                item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
-                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
+                item["GiaTriTMDTKMCP"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCP", "0")))
+                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCP_DC", "0")))
+                item["GiaTriTMDTKMCPTang"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCPTang", "0")))
+                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCPGiam", "0")))
         
         van_ban_data = {
             "VanBanAIID": van_ban_id,
@@ -570,10 +570,10 @@ async def extract_multiple_documents(
         if "BangDuLieu" in data_json:
             for item in data_json["BangDuLieu"]:
                 item["VanBanID"] = van_ban_id
-                item["GiaTriTMDTKMCP"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP", "0")))
-                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCP_DC", "0")))
-                item["GiaTriTMDTKMCPTang"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPTang", "0")))
-                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_float(str(item.get("GiaTriTMDTKMCPGiam", "0")))
+                item["GiaTriTMDTKMCP"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCP", "0")))
+                item["GiaTriTMDTKMCP_DC"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCP_DC", "0")))
+                item["GiaTriTMDTKMCPTang"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCPTang", "0")))
+                item["GiaTriTMDTKMCPGiam"] = convert_currency_to_int(str(item.get("GiaTriTMDTKMCPGiam", "0")))
         
         van_ban_data = {
             "VanBanAIID": van_ban_id,

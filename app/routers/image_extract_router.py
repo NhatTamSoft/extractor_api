@@ -13,10 +13,11 @@ from dotenv import load_dotenv
 from app.services.database_service import DatabaseService
 from app.services.prompt_service import PromptService
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
-from app.services.DungChung import convert_currency_to_float, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token
+from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token
 from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
@@ -24,6 +25,7 @@ import httpx
 import re
 from app.services.DungChung import encode_image_to_base64 
 from openai import OpenAI
+from unidecode import unidecode
 
 
 # Load biến môi trường từ file .env
@@ -113,6 +115,7 @@ async def extract_multiple_images(
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
         print("======================prompt==================")
         print(prompt)
+        #return
         # Process each file
         temp_files = []
         for file in files:
@@ -128,7 +131,9 @@ async def extract_multiple_images(
                 )
             # Tạo tên file tạm thời với timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{file.filename}")
+            # Chuyển đổi tên file sang tiếng Việt không dấu
+            filename_no_accent = unidecode(file.filename)
+            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{filename_no_accent}")
             temp_files.append(temp_file_path)
             print(temp_file_path)
             # Lưu file tạm thời
@@ -181,6 +186,7 @@ async def extract_multiple_images(
                 response_text = response_text.strip()[3:-3].strip()
             print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
             print(response_text)
+            return
             # Nếu AI trả về lỗi rõ ràng
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -247,9 +253,9 @@ async def extract_multiple_images(
                     item["VanBanID"] = van_ban_id
                     # Convert all numeric values based on required columns
                     for col in required_columns:
-                        if col.startswith('GiaTri') and item.get(col):
+                        if (col.startswith('GiaTri') or col.startswith('SoTien')) and item.get(col):
                             try:
-                                item[col] = convert_currency_to_float(str(item[col]))
+                                item[col] = convert_currency_to_int(str(item[col]))
                             except:
                                 item[col] = 0
             # dữ liệu mặc định
@@ -338,6 +344,40 @@ async def extract_multiple_images(
                         "VanBanAIID": van_ban_id,
                         **{col: item.get(col, 0) for col in required_columns}
                     })
+                #print("insert_bang_du_lieu_chi_tiet_ai=============")
+                #print(bang_du_lieu_data)
+                # Danh sách các khoản mục chi phí cần kiểm tra
+                # kmcp_list = [
+                #     "Chi phí bồi thường, hỗ trợ, tái định cư",
+                #     "Chi phí xây dựng hoặc xây lắp",
+                #     "Chi phí thiết bị", 
+                #     "Chi phí quản lý dự án",
+                #     "Chi phí tư vấn đầu tư xây dựng",
+                #     "Chi phí khác",
+                #     "Chi phí dự phòng"
+                # ]
+
+                # Lọc và xóa các dòng thỏa mãn điều kiện
+                # filtered_data = []
+                # for i in range(len(bang_du_lieu_data)):
+                #     current_row = bang_du_lieu_data[i]
+                #     current_kmcp = current_row.get("TenKMCP", "")
+                    
+                #     # Kiểm tra nếu TenKMCP chứa trong danh sách kmcp_list
+                #     if any(kmcp in current_kmcp for kmcp in kmcp_list):
+                #         # Kiểm tra dòng tiếp theo
+                #         if i < len(bang_du_lieu_data) - 1:
+                #             next_row = bang_du_lieu_data[i + 1]
+                #             next_kmcp = next_row.get("TenKMCP", "")
+                            
+                #             # Nếu TenKMCP của dòng tiếp theo khác với dòng hiện tại
+                #             if next_kmcp != current_kmcp:
+                #                 continue  # Bỏ qua dòng hiện tại
+                    
+                #     filtered_data.append(current_row)
+
+                # # Cập nhật lại bang_du_lieu_data với dữ liệu đã lọc
+                # bang_du_lieu_data = filtered_data
                 # print("insert_bang_du_lieu_chi_tiet_ai=============")
                 # print(bang_du_lieu_data)
                 # print(required_columns)
@@ -392,7 +432,23 @@ async def extract_multiple_images(
                             }
                         )
                     
+                    # Lấy response JSON từ API QLDA
                     qlda_response = response.json()
+                    
+                    try:
+                        # Nối các đường dẫn file trong data thành 1 chuỗi, phân cách bằng dấu *
+                        string_url_qlda_response = '*'.join(qlda_response['data'])
+                        # Thực thi câu lệnh SQL để cập nhật tên file trong bảng VanBanAI
+                        update_query = text(f"""
+                            UPDATE dbo.VanBanAI 
+                            SET tenFile = N'{string_url_qlda_response}'
+                            WHERE VanBanAIID = N'{van_ban_id}'
+                        """)
+                        db.execute(update_query)
+                        db.commit()
+                    except Exception as e:
+                        db.rollback()
+                        raise Exception(f"Lỗi khi cập nhật tên file trong bảng VanBanAI: {str(e)}")
 
                 return JSONResponse(
                     status_code=200,
@@ -511,7 +567,7 @@ async def standardized_data(
         , TenLoaiVanBan
         , STT_LoaiVanBan = (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)
         from dbo.VanBanAI 
-        where convert(nvarchar(36), DuAnID)='{duAnID}'
+        where convert(nvarchar(36), DuAnID)='{duAnID}' and isnull(TrangThai, 0) = 0  -- các văn bản chưa insert vào csdl
         order by NgayKy, (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)"""
         #print(query_van_ban)
         dfVanBanAI = lay_du_lieu_tu_sql_server(query_van_ban)
@@ -845,13 +901,15 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             query_insert = f"""
                             delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
                             ----------
-                            insert into dbo.NTSoftDocumentAI(DauThauID, DauThauCTID,TenDauThau,GiaTri
+                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID, TenKMCP, DauThauID, DauThauCTID,TenDauThau, GiaTriGoiThau, TenNguonVon, CoCauVonID
                                 ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
                             SELECT
-                            DauThauID=newid(),
+                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}', DauThauID=newid(),
                             DauThauCTID=newid(),
                             TenDauThau,
-                            GiaTri=GiaTriGoiThau,
+                            GiaTriGoiThau,
+                            TenNguonVon,
+                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
                             LoaiGoiThauID=NULL, -- chưa xử lý
                             HinhThucDThID=NULL, -- chưa xử lý
                             PhuongThucDThID=NULL, -- chưa xử lý
@@ -862,25 +920,40 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             """
                             print(f"Executing SQL query: {query_insert}")
                             thuc_thi_truy_van(query_insert)
+                if f"[{ten_loai_van_ban}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
+                    if not df_bang_ct.empty:
+                        for _, row2 in df_bang_ct.iterrows():
+                            query_insert = f"""
+                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+                            ----------
+                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID,TenKMCP,TenDauThau,KeHoachThoiGianHopDong,LoaiHopDongID,GiaTrungThau, CoCauVonID)
+                            SELECT
+                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',TenDauThau,
+                            KeHoachThoiGianHopDong=ThoiGianTHHopDong,
+                            LoaiHopDongID=NULL, -- chưa xử lý
+                            GiaTrungThau, 
+                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
+                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
+                            """
+                            print(f"Executing SQL query: {query_insert}")
+                            thuc_thi_truy_van(query_insert)
                 if f"[{ten_loai_van_ban}]" in "[HOP_DONG]": # Hợp đồng mặc định là giai đoạn thực hiện
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
                             query_insert = f"""
                             delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
                             ----------
-                            insert into dbo.NTSoftDocumentAI(DauThauID, DauThauCTID,TenDauThau,GiaTri
-                                ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
+                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID, VanBanAIID, TenKMCP, HopDongCTID, DauThauCTID,GiaTriHopDong,CoCauVonID
+                                ,GiaTriHopDongTang,GiaTriHopDongGiam,DuToanKMCPID,KMCPID)
                             SELECT
-                            DauThauID=newid(),
-                            DauThauCTID=newid(),
-                            TenDauThau,
-                            GiaTri=GiaTriGoiThau,
-                            LoaiGoiThauID=NULL, -- chưa xử lý
-                            HinhThucDThID=NULL, -- chưa xử lý
-                            PhuongThucDThID=NULL, -- chưa xử lý
-                            LoaiHopDongID=NULL, -- chưa xử lý
-                            ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
-                            KeHoachThoiGianHopDong=ThoiGianTHHopDong
+                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',HopDongCTID=newid(),
+                            DauThauCTID=NULL, -- khoá ngoại chưa xử lý
+                            GiaTriHopDong,
+                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
+                            GiaTriHopDongTang, -- khoá ngoại chưa xử lý
+                            GiaTriHopDongGiam, -- khoá ngoại chưa xử lý
+                            DuToanKMCPID=NULL, -- khoá ngoại chưa xử lý
+                            KMCPID -- chưa xử lý
                             FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
                             """
                             print(f"Executing SQL query: {query_insert}")

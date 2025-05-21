@@ -573,7 +573,18 @@ def convert_currency_to_float(value: str) -> float:
         # Chuyển đổi thành float
         return float(value)
     except (ValueError, TypeError):
-        return 0.0
+        return 0
+    
+def convert_currency_to_int(value: str) -> int:
+    try:
+        # Loại bỏ tất cả các ký tự không phải số và dấu chấm
+        value = ''.join(c for c in value if c.isdigit() or c == '.')
+        # Loại bỏ dấu chấm ngăn cách hàng nghìn
+        value = value.replace('.', '')
+        # Chuyển đổi thành float
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
 
 def decode_jwt_token(token: str) -> dict:
     """
