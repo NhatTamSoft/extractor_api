@@ -26,6 +26,8 @@ import re
 from app.services.DungChung import encode_image_to_base64 
 from openai import OpenAI
 from unidecode import unidecode
+from azure.ai.formrecognizer import DocumentAnalysisClient
+from azure.core.credentials import AzureKeyCredential
 
 
 # Load biến môi trường từ file .env
@@ -56,6 +58,13 @@ ALLOWED_IMAGE_TYPES = {
     'image/bmp',
     'image/webp'
 }
+
+# Azure Form Recognizer configuration
+AZURE_ENDPOINT = os.getenv('AZURE_FORM_RECOGNIZER_ENDPOINT')
+AZURE_KEY = os.getenv('AZURE_FORM_RECOGNIZER_KEY')
+
+# Initialize Azure client
+azure_client = DocumentAnalysisClient(AZURE_ENDPOINT, AzureKeyCredential(AZURE_KEY))
 
 class MultiImageExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
@@ -495,6 +504,140 @@ async def extract_multiple_images(
                     "detail": str(e)
                 }
             )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
+        )
+    finally:
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
+@router.post("/image_extract_multi_azure")
+async def extract_multiple_images_azure(
+    files: List[UploadFile] = File(...),
+    authorization: str = Header(...)
+):
+    # Xác thực token
+    try:
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+            
+        token = authorization.split(" ")[1]
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+
+    temp_files = []
+    try:
+        # Load require_fields from JSON file
+        with open('data/require_fields.json', 'r', encoding='utf-8') as f:
+            require_fields = json.load(f)
+        
+        # Create a mapping of field names to their descriptions
+        field_mapping = {field['tenTruong']: field['moTa'] for field in require_fields}
+        
+        # Process each file
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename_no_accent = unidecode(file.filename)
+            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{filename_no_accent}")
+            temp_files.append(temp_file_path)
+            
+            with open(temp_file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+        # Process files with Azure Form Recognizer
+        extracted_data = {}
+        
+        for temp_file in temp_files:
+            with open(temp_file, "rb") as f:
+                poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
+                result = poller.result()
+
+                # Extract text based on field descriptions
+                for page in result.pages:
+                    for line in page.lines:
+                        # Check if the line contains any field description
+                        for field_name, description in field_mapping.items():
+                            if description.lower() in line.content.lower():
+                                # Extract the value after the description
+                                value = line.content.split(description, 1)[1].strip()
+                                if value.startswith(':'):
+                                    value = value[1:].strip()
+                                extracted_data[field_name] = value
+                                break
+
+                # Extract tables if needed
+                for table in result.tables:
+                    table_data = []
+                    headers = None
+                    for row_index in range(table.row_count):
+                        row_cells = [cell.content if cell.content else "null" for cell in table.cells if cell.row_index == row_index]
+                        if row_index == 0:
+                            headers = row_cells
+                        else:
+                            row_dict = {headers[i] if i < len(headers) else f"Column_{i}": cell for i, cell in enumerate(row_cells)}
+                            for i in range(len(row_cells), len(headers)):
+                                row_dict[headers[i]] = "null"
+                            table_data.append(row_dict)
+                    
+                    if table_data:
+                        extracted_data["tables"] = table_data
+
+        # Validate extracted fields
+        missing_fields = [field['tenTruong'] for field in require_fields if field['tenTruong'] not in extracted_data]
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "code": 200,
+                "message": "Trích xuất dữ liệu thành công",
+                "data": {
+                    "extracted_data": extracted_data,
+                    "missing_fields": missing_fields,
+                    "field_mapping": field_mapping
+                }
+            }
+        )
+
     except Exception as e:
         return JSONResponse(
             status_code=500,
