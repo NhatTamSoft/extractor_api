@@ -74,7 +74,7 @@ class DatabaseService:
                     van_ban_data['NgayKyCanCu'] = None # Hoặc xử lý theo cách khác
             if van_ban_data.get('GiaTri'):
                 try:
-                    van_ban_data['GiaTri'] = convert_currency_to_int(van_ban_data['GiaTri'])
+                    van_ban_data['GiaTri'] = convert_currency_to_int(str(van_ban_data['GiaTri']))
                 except ValueError as e:
                     # Nếu không muốn dừng thực thi ở đây, có thể ghi log và tiếp tục
                     # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
@@ -152,6 +152,18 @@ class DatabaseService:
                     van_ban_data.setdefault('LoaiVanBanID', "b38eb6d6-ecb5-418d-9f2f-60469ed5fcf1")
                 van_ban_data.setdefault('GiaiDoanID', "7BAE2A20-4377-4DE5-87B6-C905C955A882")
                 van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[QDPD_KQLCNT_CBDT]": # Phê duyệt KQLCNT giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "DC93EA8C-78C5-43C4-BCFF-5BDD92F1A615")
+                van_ban_data.setdefault('GiaiDoanID', "7811B145-D396-4CE8-8D82-1A0C9C6215CE")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            elif f"[{loaiVanBan}]" == "[QDPD_KQLCNT_THDT]": # Phê duyệt KQLCNT giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "40A3C05A-EC69-4DF2-BD25-35040DBEB60A")
+                van_ban_data.setdefault('GiaiDoanID', "DB41D788-140E-42B0-8533-BC2B68D17C1E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[HOP_DONG]": # Phê duyệt KQLCNT giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "3F278B7B-6E81-4480-BFC6-80885DAEAFF1")
+                van_ban_data.setdefault('GiaiDoanID', "B0F363A5-3421-4439-B7E7-52452178E21E")
+                van_ban_data.setdefault('GiaiDoan', "3")
             else: # Ngược lại
                 van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
                 van_ban_data.setdefault('GiaiDoanID', "00000000-0000-0000-0000-000000000000")
@@ -220,6 +232,8 @@ class DatabaseService:
             # Thực thi câu lệnh query
             try:
                 db.execute(insert_van_ban_ai_query, final_van_ban_data_for_sql)
+                print("SQL Query:", insert_van_ban_ai_query_str)
+                print("Data values:", final_van_ban_data_for_sql)
                 db.commit()
             except Exception as e:
                 db.rollback()

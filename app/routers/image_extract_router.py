@@ -27,7 +27,6 @@ from app.services.DungChung import encode_image_to_base64
 from openai import OpenAI
 from unidecode import unidecode
 
-
 # Load biến môi trường từ file .env
 load_dotenv()
 
@@ -276,7 +275,7 @@ async def extract_multiple_images(
                 "DataOCR": response_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
             }
-            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPD_DA];[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPDDT_CBDT];[QDPD_DT_THDT];[QDPD_DA]":
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -297,7 +296,47 @@ async def extract_multiple_images(
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
-            if  f"[{loaiVanBan}]" in "[HOP_DONG]":
+            elif  f"[{loaiVanBan}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[HOP_DONG]":
                 _LoaiVanBanID = "3F278B7B-6E81-4480-BFC6-80885DAEAFF1"
                 _GiaiDoan = "3"
                 van_ban_data = {
@@ -307,7 +346,12 @@ async def extract_multiple_images(
                     "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
                     "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

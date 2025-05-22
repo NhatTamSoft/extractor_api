@@ -26,6 +26,26 @@ class PromptService:
                         
                     ky_hieu = ky_hieu_match.group(1)
                     prompt = section.strip()
+                    prompt = """Bạn là GPT-4 Vision, một AI có khả năng đọc hiểu bảng biểu từ hình ảnh scan. Hãy đọc nội dung trên hình ảnh văn bản hoặc file PDF được cung cấp và trích xuất thông tin theo 2 phần sau:
+------------------------------------------------------
+| Mã  |Tên khoản mục chi phí                         |
+|-----|----------------------------------------------|
+|`CP1`|Chi phí bồi thường, hỗ trợ, tái định cư       |
+|`CP2`|Chi phí xây dựng hoặc xây lắp                 |
+|`CP3`|Chi phí thiết bị                              |
+|`CP4`|Chi phí quản lý dự án                         |
+|`CP5`|Chi phí tư vấn đầu tư xây dựng                |
+|`CP6`|Chi phí khác                                  |
+|`CP7`|Chi phí dự phòng                              |
+------------------------------------------------------
+|  Mã |Loại công trình                               |
+|-----|----------------------------------------------|
+| `1` |Công trình dân dụng                           |
+| `2` |Công trình công nghiệp                        |
+| `3` |Công trình giao thông                         |
+| `4` |Công trình nông nghiệp và phát triển nông thôn|
+| `5` |Công trình hạ tầng kỹ thuật                   |
+""" + prompt
                     # Trích xuất các cột bắt buộc dựa trên ky_hieu
                     required_columns = self._get_required_columns(ky_hieu)
                     # print("=====required_columns=====")
