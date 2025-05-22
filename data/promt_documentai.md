@@ -42,6 +42,7 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 `GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
 ### Yêu cầu xử lý:
 - Kết quả trả về là chuỗi JSON duy nhất
+- BangDuLieu tôi muốn lấy tất cả chi tiết, không bỏ bất kỳ dòng nào
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn
 - Trong BangDuLieu nếu các cột giá trị "" thì bắt buộc gán là "0"
@@ -51,7 +52,7 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
 {{CHUCNANG03}} Chức năng `Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư`
 ### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KHLCNT giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KHLCNT giai đoạn chuẩn bị đầu tư"
-### Thông tin chung của văn bản:
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KHLCNT_CBDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
@@ -71,7 +72,7 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 `LoaiHopDong`: Trích cột loại hợp đồng
 `ThoiGianTHHopDong`: Trích cột thời gian thực hiện hợp đồng
 ### Yêu cầu xử lý:
-- Kết quả trích xuất dễ dàng xuất ra dạng JSON.
+- Kết quả trả về là chuỗi JSON duy nhất
 - Bỏ qua dòng tiêu đề hoặc nhóm (VD: “Gói thầu dịch vụ tư vấn: 02 gói”), chỉ trích các gói có thông tin chi tiết.
 - Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
@@ -95,7 +96,7 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 `GiaTriTMDTKMCPTang`: Giá trị tổng mức đầu tư theo khoản mục chi phí tăng (nếu có)
 `GiaTriTMDTKMCPGiam`: Giá trị tổng mức đầu tư theo khoản mục chi phí giảm (nếu có)
 `Yêu cầu xử lý:`
-- Kết quả trích xuất dễ dàng xuất ra dạng JSON.
+- Kết quả trả về là chuỗi JSON duy nhất
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
@@ -105,17 +106,17 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 `KyHieu`: "QDPD_DT_THDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
-`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”.
-`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
-`CoQuanBanHanh`: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên.
-`TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng “KT. CHỦ TỊCH” hoặc “CHỦ TỊCH”
+`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản
+`CoQuanBanHanh`: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên
+`TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo..."
+`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
-`GiaTriDuToanKMCP`: Giá trị dự toán theo khoản mục chi phí (nếu có), mặc định là 0
-`GiaTriDuToanKMCP_DC`: Giá trị dự toán điều chỉnh theo khoản mục chi phí (nếu có), mặc định là 0
-`GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có), mặc định là 0
-`GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có), mặc định là 0
+`GiaTriDuToanKMCP`: Giá trị dự toán theo khoản mục chi phí (nếu có)
+`GiaTriDuToanKMCP_DC`: Giá trị dự toán điều chỉnh theo khoản mục chi phí (nếu có)
+`GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có)
+`GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có)
 ### Yêu cầu xử lý:
 - Kết quả trả về là chuỗi JSON duy nhất
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
@@ -155,14 +156,14 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 - Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
 - Nếu có dòng “Trong đó”, vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
-{{CHUCNANG07}} Chức năng `Hợp đồng`
+{{CHUCNANG07}} Bạn là GPT-4 Vision – một AI có khả năng phân tích hình ảnh và trích xuất dữ liệu bảng biểu chính xác chức năng `Hợp đồng`
 ### Văn bản để nhận dạng thông tin là: "Hợp đồng"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "HOP_DONG"
-`SoHopDong`: Trích số hợp đồng
+`SoVanBan`: Trích số hợp đồng
 `NgayKy`: Trích ngày ký hợp đồng, định dạng (dd/MM/yyyy)
-`NgayHieuLuc`: Trích ngày hiệu lực hợp đồng, định dạng (dd/MM/yyyy)
-`NgayKetThuc`: Trích ngày hết hạn hoặc ngày kết thúc hợp đồng, định dạng (dd/MM/yyyy)
+`NgayHieuLuc`: Ngày hiệu lực hợp đồng, định dạng (dd/MM/yyyy)
+`NgayKetThuc`: Ngày hết hạn hoặc ngày kết thúc hợp đồng, định dạng (dd/MM/yyyy)
 `NguoiKy`: Lấy người ký hợp đồng bên chủ đầu tư
 `ChucDanhNguoiKy`: Lấy chức danh người ký hợp đồng bên chủ đầu tư
 `CoQuanBanHanh`: Lấy tên cơ quan ban hành
@@ -256,16 +257,15 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 `NguoiKy`: Trích tên người ký tại mục "LÃNH ĐẠO ĐƠN VỊ" hoặc “BAN QUẢN LÝ DỰ ÁN”, dưới chữ ký
 `ChucDanhNguoiKy`: Trích dòng nằm `ngay phía trên tên người ký`
 `CoQuanBanHanh`: Trích sau dòng có cụm từ “Chủ đầu tư:” hoặc “Chủ đầu tư/Ban QLDA:”
-`TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
+`TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `;`)
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `DienGiai`: Trích từ cột "Nội dung thanh toán"
 `GiaTriDTDuocDuyet`: Trích từ cột "Dự toán được duyệt hoặc giá trị hợp đồng"
 `GiaTriLKKC`: Trích từ cột "Lũy kế số vốn đã thanh toán từ khởi công đến cuối kỳ trước (Vốn trong nước)"
 `SoTienTTKyNay`: Trích từ cột "Số đề nghị tạm ứng, thanh toán khối lượng hoàn thành kỳ này (Vốn trong nước)"
 ### Yêu cầu xử lý:
-- Không suy diễn nội dung ngoài văn bản.
-- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang.
-- Kết quả phải có thể chuyển sang định dạng JSON hoặc dùng nhập vào hệ thống phần mềm.
+- Kết quả trả về theo định dạng JSON
+- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
 {{CHUCNANG11}} Chức năng `Giải ngân vốn đầu tư`
 ### Chứng từ để nhận dạng thông tin là `GIẤY RÚT VỐN`, mẫu số 05/TT
@@ -328,7 +328,7 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 - Đảm bảo định dạng số tiền giữ dấu ngăn cách hàng nghìn
 - Nếu không có thông tin ở ô, để trống hoặc ghi `"Không có"`
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
-{{CHUCNANG12}} Chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn chuẩn bị đầu tư`
+{{CHUCNANG12}} Bạn là GPT-4 Vision – một AI có khả năng phân tích hình ảnh và trích xuất dữ liệu bảng biểu chính xác chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn chuẩn bị đầu tư`
 ### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KQLCNT giai đoạn chuẩn bị đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KQLCNT_CBDT"
@@ -341,10 +341,30 @@ Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 `TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng “QUYẾT ĐỊNH” (thường bắt đầu bằng “Về việc…”)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 ### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenGoiThau`: Trích nội dung tiêu đề ngay dưới dòng “QUYẾT ĐỊNH” (thường bắt đầu bằng “Về việc…”), sau cụm từ "Kết quả lựa chọn nhà thầu"
+`TenDauThau`: Trích nội dung tiêu đề ngay dưới dòng “QUYẾT ĐỊNH” (thường bắt đầu bằng “Về việc…”), sau cụm từ "Kết quả lựa chọn nhà thầu"
 `ThoiGianTHHopDong`: Trích từ dòng “Thời gian thực hiện hợp đồng: … ngày”
 `LoaiHopDong`: Trích từ dòng “Loại hợp đồng: …” (ví dụ: “Hợp đồng trọn gói”)
-`GiaGoiThau`: Trích số tiền tại dòng “Giá chỉ định thầu: … đồng”
+`GiaTriGoiThau`: Trích số tiền tại dòng “Giá chỉ định thầu: … đồng”
+### Yêu cầu xử lý:
+- Kết quả trả về theo định dạng JSON
+- Nếu số tiền có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
+{{CHUCNANG13}} Bạn là GPT-4 Vision – một AI có khả năng phân tích hình ảnh và trích xuất dữ liệu bảng biểu chính xác chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn thực hiện đầu tư`
+### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KQLCNT giai đoạn thực hiện đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+`KyHieu`: "QDPD_KQLCNT_THDT"
+`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+`SoVanBanCanCu`: Trích `nguyên số quyết định` phê duyệt kế hoạch lựa chọn nhà thầu hoặc quyết định phê duyệt điều chỉnh kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ..."có chứa cụm từ "kế hoạch lựa chọn nhà thầu..."
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy).
+`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
+`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
+`CoQuanBanHanh`: Trích nguyên văn phần tên cơ quan ban hành ở góc trái phía trên.
+`TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng “QUYẾT ĐỊNH” (thường bắt đầu bằng “Về việc…”)
+`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+`TenDauThau`: Trích nội dung tiêu đề ngay dưới dòng “QUYẾT ĐỊNH” (thường bắt đầu bằng “Về việc…”), sau cụm từ "Kết quả lựa chọn nhà thầu"
+`ThoiGianTHHopDong`: Trích từ dòng “Thời gian thực hiện hợp đồng: … ngày”
+`LoaiHopDong`: Trích từ dòng “Loại hợp đồng: …” (ví dụ: “Hợp đồng trọn gói”)
+`GiaTriGoiThau`: Trích số tiền tại dòng “Giá chỉ định thầu: … đồng”, có thể có định dạng số có dấu phân cách hàng nghìn
 ### Yêu cầu xử lý:
 - Kết quả trả về theo định dạng JSON
 - Nếu số tiền có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN

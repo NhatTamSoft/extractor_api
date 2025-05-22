@@ -156,7 +156,8 @@ async def extract_multiple_images(
                 }
                 content_parts.append(image_url_object)
                 valid_image_paths.append(image_path)
-
+        print("valid_image_paths")
+        print(valid_image_paths)
         # Get the appropriate prompt based on loaiVanBan
         try:
             # Chuẩn bị dữ liệu cho OpenAI
