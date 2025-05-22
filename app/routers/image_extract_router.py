@@ -17,7 +17,7 @@ from sqlalchemy import text
 from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
-from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token
+from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token, LayMaDoiTuong
 from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
@@ -156,8 +156,8 @@ async def extract_multiple_images(
                 }
                 content_parts.append(image_url_object)
                 valid_image_paths.append(image_path)
-        print("valid_image_paths")
-        print(valid_image_paths)
+        # print("valid_image_paths")
+        # print(valid_image_paths)
         # Get the appropriate prompt based on loaiVanBan
         try:
             # Chuẩn bị dữ liệu cho OpenAI
@@ -187,7 +187,7 @@ async def extract_multiple_images(
                 response_text = response_text.strip()[3:-3].strip()
             print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
             print(response_text)
-            return
+            #return
             # Nếu AI trả về lỗi rõ ràng
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -280,8 +280,12 @@ async def extract_multiple_images(
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
                     "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
@@ -567,6 +571,9 @@ async def standardized_data(
         , SoVanBan, NgayKy=convert(nvarchar(10), NgayKy, 111), NguoiKy, ChucDanhNguoiKy, CoQuanBanHanh, TrichYeu, DieuChinh=isnull(DieuChinh, 0) 
         , TenLoaiVanBan
         , STT_LoaiVanBan = (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)
+        , CoQuanBanHanh
+        , NguoiKy
+        , ChucDanhNguoiKy
         from dbo.VanBanAI 
         where convert(nvarchar(36), DuAnID)='{duAnID}' and isnull(TrangThai, 0) = 0  -- các văn bản chưa insert vào csdl
         order by NgayKy, (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)"""
@@ -852,6 +859,26 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 # Xử lý thêm dữ liệu vào NTsoftDocumentAI
                 # print("=================ten_loai_van_ban===============")
                 # print(ten_loai_van_ban)
+
+                # Xử lý LayMaDoiTuong -> Cho Cơ quan ban hành
+                ten_toi_tuong = row['CoQuanBanHanh']
+                la_ca_nhan = "0"
+                doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
+                try:
+                    query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_ToChuc=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
+                    thuc_thi_truy_van(query_update_doi_tuong)
+                except Exception as e:
+                    print(f"Lỗi khi cập nhật DoiTuongID_ToChuc: {str(e)}")
+                # Xử lý LayMaDoiTuong -> Cho Người ký
+                ten_toi_tuong = row['NguoiKy']
+                la_ca_nhan = "1"
+                doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
+                try:
+                    query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_CaNhan=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
+                    thuc_thi_truy_van(query_update_doi_tuong)
+                except Exception as e:
+                    print(f"Lỗi khi cập nhật DoiTuongID_CaNhan: {str(e)}")
+
                 if f"[{ten_loai_van_ban}]" in "[QDPD_CT];[QDPD_DA]":    
                     if not df_bang_ct.empty:
                         for _, row2 in df_bang_ct.iterrows():
@@ -870,6 +897,11 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                             , GiaTriTMDTKMCPTang=(select GiaTriTMDTKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
                             , GiaTriTMDTKMCPGiam=(select GiaTriTMDTKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
                             , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
+                            ---------- Cập nhật giá trị văn bản
+                            update dbo.VanBanAI 
+                            set 
+                            GiaTri = (select GiaTriTMDTKMCP=isnull(sum(GiaTriTMDTKMCP), 0) from dbo.BangDuLieuChiTietAI ai where ai.VanBanAIID='{van_ban_id}') 
+                            where VanBanAIID='{van_ban_id}'
                             """
                             #print(f"Executing SQL query: {query_insert}")
                             if thuc_thi_truy_van(query_insert) == False:

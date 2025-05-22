@@ -635,3 +635,42 @@ def decode_jwt_token(token: str) -> dict:
 def encode_image_to_base64(image_path):
     with open(image_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
+
+def LayMaDoiTuong(don_vi_id: str, user_id: str, ten_toi_tuong: str, la_ca_nhan: str) -> str:
+    """
+    Lấy mã đối tượng từ CSDL hoặc tạo mới nếu chưa tồn tại
+    
+    Args:
+        don_vi_id (str): ID đơn vị
+        user_id (str): ID người dùng
+        ten_toi_tuong (str): Tên đối tượng cần tìm
+        la_ca_nhan (str): Có phải cá nhân hay không
+        
+    Returns:
+        str: ID đối tượng
+    """
+    # Kiểm tra đối tượng đã tồn tại chưa
+    query_check = f"""
+    Select DoiTuongID from dbo.DoiTuong 
+    where TenDoiTuong=N'{ten_toi_tuong}' and DonViID=N'{don_vi_id}'
+    """
+    result = lay_du_lieu_tu_sql_server(query_check)
+    
+    # Nếu đã tồn tại thì trả về DoiTuongID
+    if not result.empty:
+        return result.iloc[0]['DoiTuongID']
+        
+    # Nếu chưa tồn tại thì tạo mới
+    doi_tuong_id = str(uuid.uuid4())
+    query_insert = f"""
+    Insert into dbo.DoiTuong (DoiTuongID, MaDoiTuong, TenDoiTuong, LaCaNhan, DonViID, UserID)
+    Select 
+        DoiTuongID=N'{doi_tuong_id}',
+        MaDoiTuong=dbo.Func_GenerateMaDoiTuong(N'{don_vi_id}'),
+        TenDoiTuong=N'{ten_toi_tuong}',
+        LaCaNhan=N'{la_ca_nhan}',
+        DonViID=N'{don_vi_id}',
+        UserID=N'{user_id}'
+    """
+    thuc_thi_truy_van(query_insert)    
+    return doi_tuong_id

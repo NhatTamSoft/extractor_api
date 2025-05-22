@@ -64,7 +64,22 @@ class DatabaseService:
                     # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
                     print(f"Lỗi chuyển đổi ngày tháng cho NgayKy: {van_ban_data['NgayKy']}. Lỗi: {e}")
                     van_ban_data['NgayKy'] = None # Hoặc xử lý theo cách khác
-            
+            if van_ban_data.get('NgayKyCanCu'):
+                try:
+                    van_ban_data['NgayKyCanCu'] = datetime.strptime(van_ban_data['NgayKyCanCu'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                except ValueError as e:
+                    # Nếu không muốn dừng thực thi ở đây, có thể ghi log và tiếp tục
+                    # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
+                    print(f"Lỗi chuyển đổi ngày tháng cho NgayKyCanCu: {van_ban_data['NgayKyCanCu']}. Lỗi: {e}")
+                    van_ban_data['NgayKyCanCu'] = None # Hoặc xử lý theo cách khác
+            if van_ban_data.get('GiaTri'):
+                try:
+                    van_ban_data['GiaTri'] = convert_currency_to_int(van_ban_data['GiaTri'])
+                except ValueError as e:
+                    # Nếu không muốn dừng thực thi ở đây, có thể ghi log và tiếp tục
+                    # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
+                    print(f"Lỗi chuyển đổi số cho GiaTri: {van_ban_data['GiaTri']}. Lỗi: {e}")
+                    van_ban_data['GiaTri'] = 0 # Hoặc xử lý theo cách khác
             if van_ban_data.get('NgayHieuLuc') and isinstance(van_ban_data.get('NgayHieuLuc'), str) and van_ban_data.get('NgayHieuLuc') != "":
                 try:
                     van_ban_data['NgayHieuLuc'] = datetime.strptime(van_ban_data['NgayHieuLuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
