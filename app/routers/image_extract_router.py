@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Form, Header
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel
 import os
 import google.generativeai as genai
@@ -29,6 +29,7 @@ from unidecode import unidecode
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 import tempfile
+import fitz  # PyMuPDF for PDF processing
 
 
 # Load biến môi trường từ file .env
@@ -60,6 +61,8 @@ ALLOWED_IMAGE_TYPES = {
     'image/webp'
 }
 
+ALLOWED_PDF_TYPE = 'application/pdf'
+
 # Azure Form Recognizer configuration
 AZURE_ENDPOINT = os.getenv('AZURE_FORM_RECOGNIZER_ENDPOINT')
 AZURE_KEY = os.getenv('AZURE_FORM_RECOGNIZER_KEY')
@@ -69,6 +72,10 @@ azure_client = DocumentAnalysisClient(AZURE_ENDPOINT, AzureKeyCredential(AZURE_K
 
 class MultiImageExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
+
+class DocumentExtractRequest(BaseModel):
+    file_type: str  # 'image' or 'pdf'
+    pages: Optional[List[int]] = None  # For PDF, specify which pages to process
 
 @router.post("/image_extract_multi")
 async def extract_multiple_images(
@@ -1422,4 +1429,376 @@ async def extract_multiple_images_azure_gemini(
         "status": "success",
         "data": combined_data
     }
+
+@router.post("/document_extract")
+async def extract_document(
+    files: List[UploadFile] = File(...),
+    file_type: str = Form(...),  # 'image' or 'pdf'
+    pages: Optional[str] = Form(None)  # Comma-separated list of page numbers for PDF
+):
+    """
+    Extract information from documents (images or PDFs)
+    
+    Parameters:
+    - files: List of uploaded files (images or a single PDF)
+    - file_type: Type of document ('image' or 'pdf')
+    - pages: For PDF files, specify which pages to process (comma-separated numbers)
+    - authorization: Authorization header
+    """
+    # Validate file type
+    if file_type not in ['image', 'pdf']:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Invalid file type",
+                "detail": "file_type must be either 'image' or 'pdf'"
+            }
+        )
+
+    # Validate files based on type
+    if file_type == 'image':
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"Invalid file type for {file.filename}",
+                        "detail": f"Expected image file, got {file.content_type}"
+                    }
+                )
+    else:  # PDF
+        if len(files) > 1:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Only one PDF file can be uploaded at a time",
+                    "detail": "Multiple files are only allowed for images"
+                }
+            )
+        if files[0].content_type != ALLOWED_PDF_TYPE:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Invalid file type",
+                    "detail": "Expected PDF file"
+                }
+            )
+
+    # Parse pages parameter for PDF
+    selected_pages = None
+    if file_type == 'pdf' and pages:
+        try:
+            selected_pages = [int(p.strip()) for p in pages.split(',')]
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Invalid pages parameter",
+                    "detail": "Pages must be comma-separated numbers"
+                }
+            )
+
+    # Load require_fields from Markdown file
+    try:
+        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Parse markdown content to extract field information
+        require_fields = []
+        current_field = None
+        
+        for line in content.split('\n'):
+            if line.startswith('## '):
+                if current_field:
+                    require_fields.append(current_field)
+                field_name = line.split('. ')[1].strip()
+                current_field = {
+                    "tenTruong": field_name,
+                    "moTa": "",
+                    "extractionRules": {}
+                }
+            elif line.startswith('**Mô tả:**'):
+                if current_field:
+                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
+            elif line.startswith('**Quy tắc trích xuất:**'):
+                continue
+            elif line.startswith('- **'):
+                if current_field:
+                    key = line.split('**')[1].replace(':**', '').strip()
+                    value = line.split(':**')[1].strip()
+                    current_field["extractionRules"][key] = value
+            elif '| Mã | Giá trị |' in line:
+                if current_field:
+                    mapping = {}
+                    continue
+            elif line.startswith('  | '):
+                if current_field and 'mapping' not in current_field["extractionRules"]:
+                    current_field["extractionRules"]["mapping"] = {}
+                parts = line.strip().split('|')
+                if len(parts) >= 3:
+                    code = parts[1].strip()
+                    value = parts[2].strip()
+                    current_field["extractionRules"]["mapping"][code] = value
+                    
+        if current_field:
+            require_fields.append(current_field)
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi đọc file require_fields.md",
+                "detail": str(e)
+            }
+        )
+
+    # Initialize combined data
+    combined_data = {}
+
+    try:
+        if file_type == 'image':
+            # Process each image file
+            for file in files:
+                await process_image_file(file, require_fields, combined_data)
+        else:
+            # Process PDF file
+            await process_pdf_file(files[0], selected_pages, require_fields, combined_data)
+
+        return {
+            "status": "success",
+            "data": combined_data
+        }
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Error processing document",
+                "detail": str(e)
+            }
+        )
+
+async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict):
+    """Process a single image file"""
+    try:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.flush()
+
+            # Initialize Azure client
+            endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
+            key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+            document_analysis_client = DocumentAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
+
+            # Start the document analysis
+            with open(temp_file.name, "rb") as f:
+                poller = document_analysis_client.begin_analyze_document(
+                    "prebuilt-layout", document=f
+                )
+            result = poller.result()
+
+            # Extract text content
+            full_text = ""
+            for page in result.pages:
+                full_text += f"\nPage {page.page_number}:\n"
+                for line in page.lines:
+                    full_text += line.content + "\n"
+
+            # Process with OpenAI
+            await process_with_openai(full_text, require_fields, combined_data)
+
+    except Exception as e:
+        raise Exception(f"Error processing image file {file.filename}: {str(e)}")
+    finally:
+        if os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
+
+async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], require_fields: List[Dict], combined_data: Dict):
+    """Process a PDF file"""
+    temp_file = None
+    pdf_document = None
+    try:
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        content = await file.read()
+        temp_file.write(content)
+        temp_file.flush()
+        temp_file.close()  # Close the file before opening with PyMuPDF
+
+        # Open PDF
+        pdf_document = fitz.open(temp_file.name)
+        
+        # If no pages specified, process all pages
+        if not selected_pages:
+            selected_pages = list(range(1, pdf_document.page_count + 1))
+        
+        # Validate page numbers
+        if max(selected_pages) > pdf_document.page_count:
+            raise ValueError(f"Page number exceeds PDF length ({pdf_document.page_count} pages)")
+
+        # Process each selected page
+        for page_num in selected_pages:
+            # Get page
+            page = pdf_document[page_num - 1]
+            
+            # Convert page to image
+            pix = page.get_pixmap()
+            img_data = pix.tobytes("png")
+            
+            # Create temporary image file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as img_file:
+                img_file.write(img_data)
+                img_file.flush()
+                img_file.close()  # Close the file before processing
+
+                # Initialize Azure client
+                endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
+                key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+                document_analysis_client = DocumentAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
+
+                # Process with Azure
+                with open(img_file.name, "rb") as f:
+                    poller = document_analysis_client.begin_analyze_document(
+                        "prebuilt-layout", document=f
+                    )
+                result = poller.result()
+
+                # Extract text content
+                full_text = f"\nPage {page_num}:\n"
+                for line in result.pages[0].lines:
+                    full_text += line.content + "\n"
+
+                # Process with OpenAI
+                await process_with_openai(full_text, require_fields, combined_data)
+
+                # Clean up temporary image file
+                try:
+                    os.remove(img_file.name)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary image file {img_file.name}: {str(e)}")
+
+    except Exception as e:
+        raise Exception(f"Error processing PDF file {file.filename}: {str(e)}")
+    finally:
+        # Clean up resources
+        if pdf_document:
+            pdf_document.close()
+        if temp_file and os.path.exists(temp_file.name):
+            try:
+                os.remove(temp_file.name)
+            except Exception as e:
+                print(f"Warning: Could not delete temporary PDF file {temp_file.name}: {str(e)}")
+
+async def process_with_openai(text: str, require_fields: List[Dict], combined_data: Dict):
+    """Process text with OpenAI"""
+    try:
+        # Prepare the prompt for OpenAI
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"""
+                        Extract and map information from the following OCR text to the specified fields.
+                        Return ONLY a JSON object with the following structure:
+                        {{
+                            "docId": "string or null",
+                            "arcDocCode": "string or null",
+                            "maintenance": "string or null",
+                            "typeName": "string or null",
+                            "codeNumber": "string or null",
+                            "codeNotation": "string or null",
+                            "issuedDate": "string or null",
+                            "organName": "string or null",
+                            "subject": "string or null",
+                            "language": "string or null",
+                            "numberOfPage": "string or null",
+                            "inforSign": "string or null",
+                            "keyword": "string or null",
+                            "mode": "string or null",
+                            "confidenceLevel": "string or null",
+                            "autograph": "string or null",
+                            "format": "string or null",
+                            "process": "string or null",
+                            "riskRecovery": "string or null",
+                            "riskRecoveryStatus": "string or null",
+                            "description": "string or null"
+                        }}
+
+                        Field definitions and extraction rules:
+                        {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                        General rules:
+                        1. Look for information based on the extraction rules specified in the field definition
+                        2. Pay attention to the location hints in the rules
+                        3. Use the provided keywords to identify relevant information
+                        4. Follow the specified format requirements
+                        5. Use the mapping tables when provided
+                        6. Use default values when specified
+                        7. Set to null if information cannot be found
+                        8. For dates, use DD/MM/YYYY format
+                        9. For numbers, remove thousand separators
+
+                        OCR Text:
+                        {text}
+
+                        Remember: Return ONLY the JSON object, no other text or explanation.
+                        """
+                    }
+                ]
+            }
+        ]
+
+        # Call OpenAI API
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=4000,
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+
+        # Process response
+        response_text = response.choices[0].message.content.strip()
+        
+        # Clean up response text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
+
+        # Parse the response
+        mapped_data = json.loads(response_text)
+        
+        # Update combined data
+        for field, value in mapped_data.items():
+            if field not in combined_data or combined_data[field] is None:
+                combined_data[field] = value
+            elif value is not None:
+                combined_data[field] = value
+
+    except Exception as e:
+        raise Exception(f"Error in OpenAI processing: {str(e)}")
 
