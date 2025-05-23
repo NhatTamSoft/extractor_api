@@ -181,17 +181,17 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "HOP_DONG"
 `SoVanBan`: Trích số hợp đồng
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kết quả lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kết quả lựa chọn nhà thầu" 
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." quyết định phê duyệt kết quả lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kết quả lựa chọn nhà thầu" 
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kết quả lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kết quả lựa chọn nhà thầu"
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." quyết định phê duyệt kết quả lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kết quả lựa chọn nhà thầu"
 `NgayKy`: Trích thông tin ngày ký, sau dòng "Hôm nay ..., ngày ..." định dạng (dd/MM/yyyy)
 `NgayHieuLuc`: Trích ngày "hiệu lực" hoặc "ngày có hiệu lực" hợp đồng, ngay dưới dòng "Điều khoản chung" định dạng (dd/MM/yyyy)
 `NgayKetThuc`: Trích ngày "hết hạn" hoặc ngày "kết thúc hợp đồng", định dạng (dd/MM/yyyy)
-`NguoiKy`: Trích tên người đại diện chủ đầu tư
-`ChucDanhNguoiKy`: Trích tên chức vụ người đại diện chủ đầu tư
-`NguoiKy_NhaThau`: Trích tên người đại diện nhà thầu
-`ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện nhà thầu
-`CoQuanBanHanh`: Trích tên đơn vị chủ đầu tư, tại dòng "Tên giao dịch (Chủ đầu tư): ..." hoặc "Bên A: ..."
-`TenNhaThau`: Trích từ dòng "tên nhà thầu", tại dòng "Tên giao dịch (Nhà thầu): ..." hoặc "Nhà thầu: ..." hoặc "Bên B: ..."
+`CoQuanBanHanh`: Trích tên đơn vị chủ đầu tư, tại dòng "Tên giao dịch (Chủ đầu tư): ..." hoặc "Bên A: ..." hoặc "Tên đơn vị giao thầu:..."
+`NguoiKy`: Trích tên người đại diện "Chủ đầu tư" hoặc "Bên A: ..." hoặc "Đơn vị giao thầu:..."
+`ChucDanhNguoiKy`: Trích tên chức vụ người đại diện "Chủ đầu tư" hoặc "Bên A: ..." hoặc "Đơn vị giao thầu:..."
+`TenNhaThau`: Trích từ dòng "tên nhà thầu", tại dòng "Tên giao dịch (Nhà thầu): ..." hoặc "Nhà thầu: ..." hoặc "Bên B: ..." hoặc "Tên đơn vị nhận thầu:..."
+`NguoiKy_NhaThau`: Trích tên người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
+`ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `TrichYeu`: Lấy trích yếu văn bản
 ### Bảng khối lượng công việc của hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `GiaTriHopDong`:  Lấy giá trị hợp đồng (Giá trị đã có thuế hoặc Giá trị sau thuế)
@@ -203,41 +203,40 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 {{CHUCNANG08}} Chức năng `Phụ lục hợp đồng`
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "PL_HOP_DONG"
-`SoPLHD`: Lấy số phụ lục hợp đồng
-`NgayKyPLHD`: Lấy ngày ký phụ lục hợp đồng, định dạng (dd/MM/yyyy)
-`SoVanBan`: Lấy số hợp đồng
-`NgayKy`: Lấy ngày ký hợp đồng, định dạng (dd/MM/yyyy)
-`TenNhaThau`: Lấy tên nhà thầu
-`ThanhToanLanThu`: Lấy lần thanh toán
-`NguoiKy`: Lấy đại diện chủ đầu tư/Ban quản lý dự án
-`ChucDanhNguoiKy`: Lấy chức danh người ký đại diện chủ đầu tư/Ban quản lý dự án
-`CoQuanBanHanh`: Lấy tên cơ quan ban hành
-`TrichYeu`: Lấy trích yếu văn bản
+`SoVanBan`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:..."
+`SoPLHopDong`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:..."
+`NgayKy`: Lấy ngày ký phụ lục hợp đồng, sau dòng "Hôm nay ..., ngày ..." định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích `số hợp đồng`, tại dòng "Căn cứ Hợp đồng..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, tại dòng "Căn cứ Hợp đồng..." định dạng (dd/MM/yyyy)
+`CoQuanBanHanh`: Trích tên đơn vị chủ đầu tư, tại dòng "Tên giao dịch (Chủ đầu tư): ..." hoặc "Bên A: ..." hoặc "Tên đơn vị giao thầu:..."
+`NguoiKy`: Trích tên người đại diện "Chủ đầu tư" hoặc "Bên A: ..." hoặc "Đơn vị giao thầu:..."
+`ChucDanhNguoiKy`: Trích tên chức vụ người đại diện "Chủ đầu tư" hoặc "Bên A: ..." hoặc "Đơn vị giao thầu:..."
+`TenNhaThau`: Trích từ dòng "tên nhà thầu", tại dòng "Tên giao dịch (Nhà thầu): ..." hoặc "Nhà thầu: ..." hoặc "Bên B: ..." hoặc "Tên đơn vị nhận thầu:..."
+`NguoiKy_NhaThau`: Trích tên người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
+`ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
+`TrichYeu`: Lấy trích yếu phụ lục hợp đồng, thường bắt đầu bằng "Về việc..." hoặc "V/v..."
 ### Bảng khối lượng công việc của phụ lục hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenDauThau`: Lấy tên gói thầu
-`TenKMCP`: Tách khoản mục chi phí tại thông tin `tên gói thầu` gán vào cột `TenKMCP`
-`GiaTrungThau`: Lấy giá gói thầu
-`GiaTriHopDong`: Lấy giá trị hợp đồng
-`GiaTriHopDongTang`: Lấy giá trị hợp đồng tăng
-`GiaTriHopDongGiam`: Lấy giá trị hợp đồng giảm
+`GiaTriHopDong`: Lấy giá trị phụ lục hợp đồng
 ### Yêu cầu xử lý:
-- Trích nguyên văn theo tài liệu, không thêm suy diễn.
-- Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
+- Kết quả xuất ra dạng JSON duy nhất
+- Trích nguyên văn theo tài liệu, không thêm suy diễn
+- Nếu giá trị GiaTriHopDong có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
+- Nếu có đơn vị tiền tệ, bỏ qua ký hiệu đơn vị tính
 {{CHUCNANG09}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) thông qua hợp đồng`
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.a/TT"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "KLCVHT_THD"
 `SoBBNghiemThu`: Số biên bản nghiệm thu (trích sau dòng “Biên bản nghiệm thu số...” hoặc dòng tương đương)
 `NgayKy`: Ngày ký chứng từ (trích sau dòng “..., ngày ... tháng ... năm ...” ở phần cuối), định dạng (dd/MM/yyyy)
-`SoVanBan`: Số hợp đồng chính (trích sau cụm “Hợp đồng số...”)
+`SoHopDong`: Số hợp đồng chính (trích sau cụm “Hợp đồng số...”)
 `SoPLHopDong`: Số phụ lục hợp đồng (nếu có, trích sau cụm “Phụ lục số...” hoặc “Phụ lục bổ sung số...”)
 `LanThanhToan`: Lần thanh toán (trích sau cụm từ “Thanh toán lần thứ...”)
 `NhaThau`: Tên nhà thầu (trích sau dòng “Nhà thầu:” hoặc “Đơn vị thi công...”)
 `NguoiKy`: Trích tên người ký văn bản:
-- `Tìm tại phần cuối trang`, thường ngay dưới dòng “ĐẠI DIỆN CHỦ ĐẦU TƯ” hoặc “ĐẠI DIỆN NHÀ THẦU”.
-- Là dòng chữ `in hoa hoặc in thường có họ tên đầy đủ`, nằm trên chữ ký tay.
+- Tìm tại phần cuối trang, thường ngay dưới dòng “ĐẠI DIỆN CHỦ ĐẦU TƯ” hoặc “ĐẠI DIỆN NHÀ THẦU”.
+- Là dòng chữ **in hoa hoặc in thường có họ tên đầy đủ**, nằm trên chữ ký tay.
 - Nếu có đóng dấu, tên người ký nằm bên dưới.
-`ChucDanhNguoiKy`: Trích dòng nằm `ngay phía trên tên người ký`, ví dụ: “Giám đốc”, “Phó giám đốc”, “Kế toán trưởng”, “Chủ tịch”, “KT. Chủ tịch – Phó Chủ tịch”.
+`ChucDanhNguoiKy`: Trích dòng nằm "ngay phía trên tên người ký", ví dụ: “Giám đốc”, “Phó giám đốc”, “Kế toán trưởng”, “Chủ tịch”, “KT. Chủ tịch – Phó Chủ tịch”.
 `CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ “Chủ đầu tư:” hoặc “Đại diện chủ đầu tư”)
 `TrichYeu`: Gán cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số:" Trích sau cụm từ "Thanh toán lần thứ:"
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
@@ -259,6 +258,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang.
 - Kết quả phải có thể chuyển sang định dạng JSON hoặc dùng nhập vào hệ thống phần mềm.
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
+--------------------
 {{CHUCNANG10}} Chức năng `Giải ngân vốn đầu tư`
 ### Chứng từ để nhận dạng thông tin là `GIẤY ĐỀ NGHỊ THANH TOÁN VỐN`, mẫu số 04.a/TT
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":

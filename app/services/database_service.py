@@ -57,44 +57,51 @@ class DatabaseService:
         try:
             # Xử lý chuyển đổi định dạng ngày nếu cột NgayKy tồn tại và có giá trị
             if van_ban_data.get('NgayKy'):
-                try:
-                    van_ban_data['NgayKy'] = datetime.strptime(van_ban_data['NgayKy'], '%d/%m/%Y').strftime('%Y-%m-%d')
-                except ValueError as e:
-                    # Nếu không muốn dừng thực thi ở đây, có thể ghi log và tiếp tục
-                    # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
-                    print(f"Lỗi chuyển đổi ngày tháng cho NgayKy: {van_ban_data['NgayKy']}. Lỗi: {e}")
-                    van_ban_data['NgayKy'] = None # Hoặc xử lý theo cách khác
+                if van_ban_data['NgayKy'] == "":
+                    van_ban_data['NgayKy'] = None
+                else:
+                    try:
+                        van_ban_data['NgayKy'] = datetime.strptime(van_ban_data['NgayKy'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError as e:
+                        print(f"Lỗi chuyển đổi ngày tháng cho NgayKy: {van_ban_data['NgayKy']}. Lỗi: {e}")
+                        van_ban_data['NgayKy'] = None
+
             if van_ban_data.get('NgayKyCanCu'):
-                try:
-                    van_ban_data['NgayKyCanCu'] = datetime.strptime(van_ban_data['NgayKyCanCu'], '%d/%m/%Y').strftime('%Y-%m-%d')
-                except ValueError as e:
-                    # Nếu không muốn dừng thực thi ở đây, có thể ghi log và tiếp tục
-                    # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
-                    print(f"Lỗi chuyển đổi ngày tháng cho NgayKyCanCu: {van_ban_data['NgayKyCanCu']}. Lỗi: {e}")
-                    van_ban_data['NgayKyCanCu'] = None # Hoặc xử lý theo cách khác
+                if van_ban_data['NgayKyCanCu'] == "":
+                    van_ban_data['NgayKyCanCu'] = None
+                else:
+                    try:
+                        van_ban_data['NgayKyCanCu'] = datetime.strptime(van_ban_data['NgayKyCanCu'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError as e:
+                        print(f"Lỗi chuyển đổi ngày tháng cho NgayKyCanCu: {van_ban_data['NgayKyCanCu']}. Lỗi: {e}")
+                        van_ban_data['NgayKyCanCu'] = None
+
             if van_ban_data.get('GiaTri'):
                 try:
                     van_ban_data['GiaTri'] = convert_currency_to_int(str(van_ban_data['GiaTri']))
                 except ValueError as e:
-                    # Nếu không muốn dừng thực thi ở đây, có thể ghi log và tiếp tục
-                    # Hoặc đặt NgayKy thành None hoặc một giá trị mặc định khác
                     print(f"Lỗi chuyển đổi số cho GiaTri: {van_ban_data['GiaTri']}. Lỗi: {e}")
-                    van_ban_data['GiaTri'] = 0 # Hoặc xử lý theo cách khác
-            if van_ban_data.get('NgayHieuLuc') and isinstance(van_ban_data.get('NgayHieuLuc'), str) and van_ban_data.get('NgayHieuLuc') != "":
-                try:
-                    van_ban_data['NgayHieuLuc'] = datetime.strptime(van_ban_data['NgayHieuLuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
-                except ValueError:
-                    print(f"Lỗi định dạng NgayHieuLuc: {van_ban_data['NgayHieuLuc']}. Để giá trị gốc.")
-                    # Giữ giá trị gốc hoặc đặt là None nếu không parse được
-                    # van_ban_data['NgayHieuLuc'] = None
+                    van_ban_data['GiaTri'] = 0
 
-            if van_ban_data.get('NgayKetThuc') and isinstance(van_ban_data.get('NgayKetThuc'), str) and van_ban_data.get('NgayKetThuc') != "":
-                try:
-                    van_ban_data['NgayKetThuc'] = datetime.strptime(van_ban_data['NgayKetThuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
-                except ValueError:
-                    print(f"Lỗi định dạng NgayKetThuc: {van_ban_data['NgayKetThuc']}. Để giá trị gốc.")
-                    # Giữ giá trị gốc hoặc đặt là None nếu không parse được
-                    # van_ban_data['NgayKetThuc'] = None
+            if van_ban_data.get('NgayHieuLuc'):
+                if van_ban_data['NgayHieuLuc'] == "":
+                    van_ban_data['NgayHieuLuc'] = None
+                else:
+                    try:
+                        van_ban_data['NgayHieuLuc'] = datetime.strptime(van_ban_data['NgayHieuLuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError:
+                        print(f"Lỗi định dạng NgayHieuLuc: {van_ban_data['NgayHieuLuc']}. Để giá trị gốc.")
+                        van_ban_data['NgayHieuLuc'] = None
+
+            if van_ban_data.get('NgayKetThuc'):
+                if van_ban_data['NgayKetThuc'] == "":
+                    van_ban_data['NgayKetThuc'] = None
+                else:
+                    try:
+                        van_ban_data['NgayKetThuc'] = datetime.strptime(van_ban_data['NgayKetThuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError:
+                        print(f"Lỗi định dạng NgayKetThuc: {van_ban_data['NgayKetThuc']}. Để giá trị gốc.")
+                        van_ban_data['NgayKetThuc'] = None
 
 
             # Đặt các giá trị mặc định hoặc tính toán cho các trường dựa trên loaiVanBan
@@ -163,6 +170,10 @@ class DatabaseService:
             elif f"[{loaiVanBan}]" == "[HOP_DONG]": # Hợp đồng giai đoạn thực hiện dự án
                 van_ban_data.setdefault('LoaiVanBanID', "3F278B7B-6E81-4480-BFC6-80885DAEAFF1")
                 van_ban_data.setdefault('GiaiDoanID', "B0F363A5-3421-4439-B7E7-52452178E21E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[PL_HOP_DONG]": # Phụ lục hợp đồng giai đoạn thực hiện đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "750CAD7D-BAED-4F61-988A-824B1AF8B0CA")
+                van_ban_data.setdefault('GiaiDoanID', "A6671AF3-F6C3-436B-85BE-71A0BEC3E2F5")
                 van_ban_data.setdefault('GiaiDoan', "3")
             elif f"[{loaiVanBan}]" == "[GIAI_NGAN]": # Hợp đồng giai đoạn thực hiện dự án
                 van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
@@ -236,8 +247,8 @@ class DatabaseService:
             # Thực thi câu lệnh query
             try:
                 db.execute(insert_van_ban_ai_query, final_van_ban_data_for_sql)
-                print("SQL Query:", insert_van_ban_ai_query_str)
-                print("Data values:", final_van_ban_data_for_sql)
+                # In ra dữ liệu trước khi insert vào VanBanAI
+                print("INSERT INTO VanBanAI (" + ", ".join(columns) + ") VALUES (" + ", ".join([f"'{str(value)}'" if isinstance(value, str) else str(value) for value in final_van_ban_data_for_sql.values()]) + ")")
                 db.commit()
             except Exception as e:
                 db.rollback()
