@@ -160,9 +160,13 @@ class DatabaseService:
                 van_ban_data.setdefault('LoaiVanBanID', "40A3C05A-EC69-4DF2-BD25-35040DBEB60A")
                 van_ban_data.setdefault('GiaiDoanID', "DB41D788-140E-42B0-8533-BC2B68D17C1E")
                 van_ban_data.setdefault('GiaiDoan', "3")
-            elif f"[{loaiVanBan}]" == "[HOP_DONG]": # Phê duyệt KQLCNT giai đoạn thực hiện dự án
+            elif f"[{loaiVanBan}]" == "[HOP_DONG]": # Hợp đồng giai đoạn thực hiện dự án
                 van_ban_data.setdefault('LoaiVanBanID', "3F278B7B-6E81-4480-BFC6-80885DAEAFF1")
                 van_ban_data.setdefault('GiaiDoanID', "B0F363A5-3421-4439-B7E7-52452178E21E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[GIAI_NGAN]": # Hợp đồng giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
+                van_ban_data.setdefault('GiaiDoanID', "5E1E0E80-4712-4A9F-A591-CEB87062C04E") #Giải ngân thông qua hợp đồng GĐTHĐT
                 van_ban_data.setdefault('GiaiDoan', "3")
             else: # Ngược lại
                 van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")

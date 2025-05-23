@@ -267,7 +267,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NgayChungTu`: Trích ngày ở góc trên bên phải văn bản (sau dòng "Ngày ... tháng ... năm ..."), định dạng (dd/MM/yyyy)
 `SoHopDong`: Trích sau cụm từ “Căn cứ hợp đồng số...”
 `SoPLHopDong`: Trích sau cụm từ “Phụ lục bổ sung hợp đồng số...” (nếu có)
-`SoBXDKLCVHT`: Trích sau cụm từ “biên bản nghiệm thu khối lượng hoàn thành theo mẫu số...”
+`SoBXDKLCVHT`: Trích sau cụm từ “biên bản nghiệm thu khối lượng hoàn thành theo mẫu số…”
 `TenDVThuHuong`: Lấy tên đơn vị thụ hưởng
 `SoTKDVThuHuong`: Lấy số tài khoản đơn vị thụ hưởng
 `ThuocNguonVon`: Trích sau dòng “Thuộc nguồn vốn:”
@@ -275,9 +275,9 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NienDo`: Trích sau dòng “Năm:”
 `SoTien`: Lấy tổng số tiền đề nghị tạm ứng, thanh toán bằng số
 `NguoiKy`: Trích tên người ký tại mục "LÃNH ĐẠO ĐƠN VỊ" hoặc “BAN QUẢN LÝ DỰ ÁN”, dưới chữ ký
-`ChucDanhNguoiKy`: Trích dòng nằm `ngay phía trên tên người ký`
+`ChucDanhNguoiKy`: Trích dòng nằm ngay phía trên tên người ký
 `CoQuanBanHanh`: Trích sau dòng có cụm từ “Chủ đầu tư:” hoặc “Chủ đầu tư/Ban QLDA:”
-`TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `;`)
+`TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `DienGiai`: Trích từ cột "Nội dung thanh toán"
 `GiaTriDTDuocDuyet`: Trích từ cột "Dự toán được duyệt hoặc giá trị hợp đồng"
@@ -285,6 +285,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `SoTienTTKyNay`: Trích từ cột "Số đề nghị tạm ứng, thanh toán khối lượng hoàn thành kỳ này (Vốn trong nước)"
 ### Yêu cầu xử lý:
 - Kết quả trả về theo định dạng JSON
+- Không suy diễn nội dung ngoài văn bản.
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
 - Nếu giá trị có dấu chấm `.` ngăn cách phần nghìn thì bỏ dấu `.`,  nếu không có giá trị ghi `0`, giá trị là SỐ NGUYÊN
 {{CHUCNANG11}} Chức năng `Giải ngân vốn đầu tư`
