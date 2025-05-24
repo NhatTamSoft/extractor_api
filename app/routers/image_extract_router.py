@@ -26,6 +26,7 @@ import re
 from app.services.DungChung import encode_image_to_base64 
 from openai import OpenAI
 from unidecode import unidecode
+import traceback
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -252,14 +253,20 @@ async def extract_multiple_images(
             # Convert currency values in the response
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
-                    item["VanBanID"] = van_ban_id
-                    # Convert all numeric values based on required columns
-                    for col in required_columns:
-                        if (col.startswith('GiaTri') or col.startswith('SoTien')) and item.get(col):
-                            try:
+                    try:
+                        print("Kiểm tra van_ban_id: ", van_ban_id)
+                        item["VanBanID"] = van_ban_id
+                        # Convert all numeric values based on required columns
+                        for col in required_columns:
+                            print("Cột kiểm tra:", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien')):
                                 item[col] = convert_currency_to_int(str(item[col]))
-                            except:
-                                item[col] = 0
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                        print(f"\033[31m- Item gây lỗi: {json.dumps(item, ensure_ascii=False, indent=2)}\033[0m")
+            
             # dữ liệu mặc định
             van_ban_data = {
                 "VanBanAIID": van_ban_id,
@@ -481,50 +488,13 @@ async def extract_multiple_images(
                 )
 
             # Insert BangDuLieu data if it exists
-            if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
+            if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
                 bang_du_lieu_data = []
                 for item in data_json["BangDuLieu"]:
                     bang_du_lieu_data.append({
                         "VanBanAIID": van_ban_id,
                         **{col: item.get(col, 0) for col in required_columns}
                     })
-                #print("insert_bang_du_lieu_chi_tiet_ai=============")
-                #print(bang_du_lieu_data)
-                # Danh sách các khoản mục chi phí cần kiểm tra
-                # kmcp_list = [
-                #     "Chi phí bồi thường, hỗ trợ, tái định cư",
-                #     "Chi phí xây dựng hoặc xây lắp",
-                #     "Chi phí thiết bị", 
-                #     "Chi phí quản lý dự án",
-                #     "Chi phí tư vấn đầu tư xây dựng",
-                #     "Chi phí khác",
-                #     "Chi phí dự phòng"
-                # ]
-
-                # Lọc và xóa các dòng thỏa mãn điều kiện
-                # filtered_data = []
-                # for i in range(len(bang_du_lieu_data)):
-                #     current_row = bang_du_lieu_data[i]
-                #     current_kmcp = current_row.get("TenKMCP", "")
-                    
-                #     # Kiểm tra nếu TenKMCP chứa trong danh sách kmcp_list
-                #     if any(kmcp in current_kmcp for kmcp in kmcp_list):
-                #         # Kiểm tra dòng tiếp theo
-                #         if i < len(bang_du_lieu_data) - 1:
-                #             next_row = bang_du_lieu_data[i + 1]
-                #             next_kmcp = next_row.get("TenKMCP", "")
-                            
-                #             # Nếu TenKMCP của dòng tiếp theo khác với dòng hiện tại
-                #             if next_kmcp != current_kmcp:
-                #                 continue  # Bỏ qua dòng hiện tại
-                    
-                #     filtered_data.append(current_row)
-
-                # # Cập nhật lại bang_du_lieu_data với dữ liệu đã lọc
-                # bang_du_lieu_data = filtered_data
-                # print("insert_bang_du_lieu_chi_tiet_ai=============")
-                # print(bang_du_lieu_data)
-                # print(required_columns)
                 bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
                     db, 
                     bang_du_lieu_data,
@@ -540,7 +510,8 @@ async def extract_multiple_images(
                             "detail": bang_du_lieu_result.get("error", "Unknown error")
                         }
                     )
-
+            else:
+                print("Văn bản này không có chi tiết bảng dữ liệu")
             # After successful processing and database operations
             try:
                 # Get QLDA upload URL from environment
@@ -631,7 +602,7 @@ async def extract_multiple_images(
                     "status": "error",
                     "code": 400,
                     "message": "Lỗi khi xử lý ảnh",
-                    "detail": str(e)
+                    "detail": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
                 }
             )
     except Exception as e:

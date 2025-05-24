@@ -3,6 +3,7 @@ from sqlalchemy import text
 from typing import Dict, List, Any
 import uuid
 from datetime import datetime
+import traceback
 from app.services.DungChung import convert_currency_to_int
 import json
 
@@ -49,7 +50,7 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi thêm văn bản",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
 
     @staticmethod
@@ -266,7 +267,7 @@ class DatabaseService:
                 return {
                     "success": False,
                     "message": "Lỗi khi thực hiện insert vào database VanBanAI",
-                    "error": str(e),
+                    "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}",
                     "query": insert_van_ban_ai_query_str, # Thêm câu query để debug
                     "data_sent": final_van_ban_data_for_sql # Thêm data đã gửi để debug
                 }
@@ -282,7 +283,7 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi xử lý chung khi thêm văn bản AI",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
 
     @staticmethod
@@ -343,7 +344,7 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
 
 
@@ -403,7 +404,7 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
 
     @staticmethod
@@ -448,5 +449,5 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi lưu dữ liệu",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             } 

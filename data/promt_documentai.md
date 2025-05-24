@@ -19,21 +19,12 @@
 `GiaTriTMDTKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị tổng mức đầu tư tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriTMDTKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị tổng mức đầu tư giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### 🚫 **Quy tắc loại bỏ khoản mục chi phí**:
-Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây thì:
-❌ **Không xuất dòng không thuộc danh sách khoản mục chi phí**
-✅ **Chỉ xuất các dòng thuộc danh sách khoản mục chi phí**
-### 📌 Danh sách khoản mục chi phí:
-* Chi phí bồi thường, hỗ trợ, tái định cư
-* Chi phí xây dựng
-* Chi phí thiết bị
-* Chi phí quản lý dự án
-* Chi phí tư vấn đầu tư xây dựng
-* Chi phí khác
-* Chi phí dự phòng
+Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây thì:
+❌ **Không xuất dòng không thuộc "Danh sách Khoản mục chi phí"**
+✅ **Chỉ xuất các dòng thuộc "Danh sách Khoản mục chi phí"**
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Kết quả trả về là chuỗi JSON duy nhất
 - Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
@@ -57,12 +48,11 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 ### Bảng số liệu dự toán, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên của khoản mục chi phí
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Kết quả trả về là chuỗi JSON duy nhất
 - BangDuLieu tôi muốn lấy tất cả chi tiết, không bỏ bất kỳ dòng nào
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn
@@ -96,7 +86,6 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `LoaiHopDong`: Trích cột loại hợp đồng
 `ThoiGianTHHopDong`: Trích cột thời gian thực hiện hợp đồng
 ### Yêu cầu xử lý:
-- Kết quả trả về là chuỗi JSON duy nhất
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Tách từng dòng con trong phần "Trong đó" ra như một gói thầu độc lập (nếu có)
 {{CHUCNANG04}} Bạn là một trợ lý AI ChatGPT-Vision có khả năng đọc hiểu và phân tích hình ảnh chứa văn bản, bảng biểu và công thức tài chính. Hãy giúp tôi xem chức năng `"Quyết định phê duyệt dự án"`
@@ -116,10 +105,13 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `GiaTriTMDTKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriTMDTKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị tổng mức đầu tư tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriTMDTKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị tổng mức đầu tư giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`Yêu cầu xử lý:`
+### 🚫 **Quy tắc loại bỏ khoản mục chi phí**:
+Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây thì:
+❌ **Không xuất dòng không thuộc "Danh sách Khoản mục chi phí"**
+✅ **Chỉ xuất các dòng thuộc "Danh sách Khoản mục chi phí"**
+### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Kết quả trả về là chuỗi JSON duy nhất
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -142,12 +134,12 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPTang`: Giá trị dự toán theo khoản mục chi phí tăng (nếu có) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPGiam`: Giá trị dự toán theo khoản mục chi phí giảm (nếu có) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Kết quả trả về là chuỗi JSON duy nhất
+- BangDuLieu tôi muốn lấy tất cả chi tiết, không bỏ bất kỳ dòng nào
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn
 - Trong BangDuLieu nếu các cột giá trị "" thì bắt buộc gán là "0"
@@ -155,7 +147,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 - Giữ nguyên định dạng STT dạng lồng nhau (VD: `1.1`, `3.1`, `4.1`)
 - Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc
+- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
 {{CHUCNANG06}} Chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
@@ -180,7 +172,6 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `LoaiHopDong`: Trích cột loại hợp đồng
 `ThoiGianTHHopDong`: Trích cột thời gian thực hiện hợp đồng
 ### Yêu cầu xử lý:
-- Kết quả trả về là chuỗi JSON duy nhất
 - Bỏ qua dòng tiêu đề hoặc nhóm (VD: "Gói thầu dịch vụ tư vấn: 02 gói"), chỉ trích các gói có thông tin chi tiết.
 - Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
 - Nếu có dòng "Trong đó", vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
@@ -204,9 +195,8 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `TrichYeu`: Lấy trích yếu văn bản
 ### Bảng khối lượng công việc của hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`GiaTriHopDong`:  Lấy giá trị hợp đồng (Giá trị đã có thuế hoặc Giá trị sau thuế)
+`GiaTriHopDong`:  Lấy giá trị hợp đồng (Giá trị đã có thuế hoặc Giá trị sau thuế) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn), nếu không có thì lấy bằng "0"
 ### Yêu cầu xử lý:
-- Kết quả xuất ra dạng JSON duy nhất
 - Trích nguyên văn theo tài liệu, không thêm suy diễn
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
@@ -214,7 +204,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "PL_HOP_DONG"
 `SoVanBan`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:..."
-`SoPLHopDong`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:..."
+`SoPLHopDong`: Giống cột `SoVanBan`
 `NgayKy`: Lấy ngày ký phụ lục hợp đồng, sau dòng "Hôm nay ..., ngày ..." định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Trích `số hợp đồng`, tại dòng "Căn cứ Hợp đồng..."
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, tại dòng "Căn cứ Hợp đồng..." định dạng (dd/MM/yyyy)
@@ -226,9 +216,8 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `TrichYeu`: Lấy trích yếu phụ lục hợp đồng, thường bắt đầu bằng "Về việc..." hoặc "V/v..."
 ### Bảng khối lượng công việc của phụ lục hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`GiaTriHopDong`: Lấy giá trị phụ lục hợp đồng (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTriHopDong`: Lấy giá trị phụ lục hợp đồng (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn), nếu không có thì lấy bằng 0
 ### Yêu cầu xử lý:
-- Kết quả xuất ra dạng JSON duy nhất
 - Trích nguyên văn theo tài liệu, không thêm suy diễn
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
@@ -240,7 +229,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ...") định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)
-`SoHopDong`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
+`SoHopDong`: Giống cột `SoVanBanCanCu`
 `SoPLHopDong`: Số phụ lục hợp đồng (nếu có, trích sau cụm "Phụ lục số..." hoặc "Phụ lục bổ sung số...")
 `LanThanhToan`: Lần thanh toán (trích sau cụm từ "Thanh toán lần thứ..."). Ví dụ: "01", "02", "03"
 `TenNhaThau`: Tên nhà thầu (trích sau dòng "Nhà thầu:" hoặc "Đơn vị thi công...")
@@ -250,7 +239,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
             - Nếu có đóng dấu, tên người ký nằm bên dưới
 `ChucDanhNguoiKy`: Trích dòng nằm "ngay phía trên tên người ký", ví dụ: "Giám đốc", "Phó giám đốc", "Kế toán trưởng", "Chủ tịch", "KT. Chủ tịch – Phó Chủ tịch".
 `CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư")
-`TrichYeu`: Gán cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số: ..." Trích sau cụm từ "Thanh toán lần thứ:"
+`TrichYeu`: Trích cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số: ..." Trích sau cụm từ "Thanh toán lần thứ:"
 `GiaTriHopDong`: Trích `giá trị hợp đồng` tại dòng "`1. Giá trị hợp đồng (giá trị dự toán được duyệt...)" (kiểu số) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TamUngChuaThuaHoi`: Trích `giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước` tại dòng "2. Giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước" (kiểu số)
 `ThanhToanDenCuoiKyTruoc`: Trích `số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước` tại dòng "3. Số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước" (kiểu số)
@@ -266,10 +255,8 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `TenKMCP`: Tên công việc được ghi trong cột "Tên công việc"
 `GiaTriNghiemThu`: Trích giá trị `thực hiện kỳ này` trong bảng dữ liệu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Kết quả xuất ra dạng JSON duy nhất
 - Không suy diễn nội dung ngoài văn bản
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
-- Kết quả phải có thể chuyển sang định dạng JSON hoặc dùng nhập vào hệ thống phần mềm
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
 {{CHUCNANG10}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) không thông qua hợp đồng`
@@ -280,7 +267,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ..." định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)
-`SoHopDong`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
+`SoHopDong`: Giống cột `SoVanBanCanCu`
 `SoPLHopDong`: Số phụ lục hợp đồng (nếu có, trích sau cụm "Phụ lục số..." hoặc "Phụ lục bổ sung số...")
 `LanThanhToan`: Lần thanh toán (trích sau cụm từ "Thanh toán lần thứ...")
 `TenNhaThau`: Tên nhà thầu (trích sau dòng "Nhà thầu:" hoặc "Đơn vị thi công...")
@@ -290,7 +277,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 - Nếu có đóng dấu, tên người ký nằm bên dưới.
 `ChucDanhNguoiKy`: Trích dòng nằm "ngay phía trên tên người ký", ví dụ: "Giám đốc", "Phó giám đốc", "Kế toán trưởng", "Chủ tịch", "KT. Chủ tịch – Phó Chủ tịch".
 `CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư")
-`TrichYeu`: Gán cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số: ..." Trích sau cụm từ "Thanh toán lần thứ:"
+`TrichYeu`: Trích cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số: ..." Trích sau cụm từ "Thanh toán lần thứ:"
 `GiaTriHopDong`: Trích `giá trị hợp đồng` tại dòng "`1. Giá trị hợp đồng (giá trị dự toán được duyệt...)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TamUngChuaThuaHoi`: Trích `giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước` tại dòng "2. Giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước"
 `ThanhToanDenCuoiKyTruoc`: Trích `số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước` tại dòng "3. Số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước"
@@ -316,10 +303,8 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `TTLuyKeDenHetKyNay`: Thành tiền lũy kế đến hết kỳ này (cột 12) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GhiChu`: Thông tin ghi chú (cột 13), nếu có
 ### Yêu cầu xử lý:
-- Kết quả xuất ra dạng JSON duy nhất
 - Không suy diễn nội dung ngoài văn bản
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang.
-- Kết quả phải có thể chuyển sang định dạng JSON hoặc dùng nhập vào hệ thống phần mềm.
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
 {{CHUCNANG11}} Chức năng `Giải ngân vốn đầu tư`
@@ -329,7 +314,7 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `SoVanBan`: Trích số hiệu ở đầu văn bản sau chữ "Số:"
 `NgayKy`: Trích ngày ở góc trên bên phải văn bản (dưới dòng "Độc lập - Tự do - Hạnh phúc"), định dạng (dd/MM/yyyy)
 `SoHopDong`: Trích số hợp đồng sau cụm từ "Căn cứ hợp đồng số:..."
-`SoVanBanCanCu`: Trích số hợp đồng sau cụm từ "Căn cứ hợp đồng số:..."
+`SoVanBanCanCu`: Giống cột `SoHopDong`
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." của hợp đồng, cùng dòng `SoHopDong` định dạng (dd/MM/yyyy)
 `SoPLHopDong`: Trích số phụ lục hợp đồng sau cụm từ "Phụ lục bổ sung hợp đồng số:..."
 `TenNguonVon`: Trích sau dòng "Thuộc nguồn vốn:"
@@ -344,7 +329,6 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NoiDung`: Trích từ cột "Nội dung thanh toán"
 `SoTien`: Trích từ cột "Số đề nghị tạm ứng, thanh toán khối lượng hoàn thành kỳ này (Vốn trong nước)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Kết quả trả về theo định dạng JSON
 - Không suy diễn nội dung ngoài văn bản.
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -375,7 +359,6 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NienDo`: Năm kế hoạch vốn (cột 6)
 `SoTien`: Tổng số tiền (cột 7) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Kết quả trả về theo định dạng JSON
 - Không suy diễn nội dung ngoài văn bản.
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -404,7 +387,6 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `NienDo`: Trích từ cột "Năm kế hoạch vốn (Năm KHV)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `SoTien`: Trích từ cột "Số cơ quan kiểm soát, thanh toán duyệt thanh toán" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Kết quả trả về theo định dạng JSON
 - Không suy diễn nội dung ngoài văn bản.
 - Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -431,7 +413,6 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
 `GiaTrungThau`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Kết quả trả về theo định dạng JSON
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
 {{CHUCNANG15}} Chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn thực hiện đầu tư`
 ### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KQLCNT giai đoạn thực hiện đầu tư"
@@ -455,6 +436,5 @@ Nếu một dòng **thuộc danh sách khoản mục chi phí** dưới đây th
 `LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
 `GiaTrungThau`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..."
 ### Yêu cầu xử lý:
-- Kết quả trả về theo định dạng JSON
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.

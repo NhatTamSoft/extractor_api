@@ -27,16 +27,19 @@ class PromptService:
                     ky_hieu = ky_hieu_match.group(1)
                     prompt = section.strip()
                     prompt = """Bạn là GPT-4 Vision, một AI có khả năng đọc hiểu bảng biểu từ hình ảnh scan. Hãy đọc nội dung trên hình ảnh văn bản hoặc file PDF được cung cấp và trích xuất thông tin theo 2 phần sau:
+** Danh sách Khoản mục chi phí
 ------------------------------------------------------
 | Mã  |Tên khoản mục chi phí                         |
 |-----|----------------------------------------------|
 |`CP1`|Chi phí bồi thường, hỗ trợ, tái định cư       |
-|`CP2`|Chi phí xây dựng hoặc xây lắp                 |
+|`CP2`|Chi phí xây dựng                              |
 |`CP3`|Chi phí thiết bị                              |
 |`CP4`|Chi phí quản lý dự án                         |
 |`CP5`|Chi phí tư vấn đầu tư xây dựng                |
 |`CP6`|Chi phí khác                                  |
 |`CP7`|Chi phí dự phòng                              |
+
+** Danh sách Loại công trình
 ------------------------------------------------------
 |  Mã |Loại công trình                               |
 |-----|----------------------------------------------|
@@ -45,32 +48,18 @@ class PromptService:
 | `3` |Công trình giao thông                         |
 | `4` |Công trình nông nghiệp và phát triển nông thôn|
 | `5` |Công trình hạ tầng kỹ thuật                   |
+
 """ + prompt + """
 🎯 Yêu cầu: Trích **chính xác tên cơ quan trực tiếp ban hành văn bản** theo các quy tắc sau:
----
-✅ **QUY TẮC XỬ LÝ:**
-1. Nếu phần mở đầu có **2 dòng liên tiếp**, cần phân biệt:
-   - Trường hợp 1: **Nếu dòng 1 là cơ quan chủ quản (VD: “UBND TỈNH…”) và dòng 2 là đơn vị trực thuộc (VD: “BAN QLDA…”)** → chỉ lấy dòng **thứ hai**.
-   - Trường hợp 2 (**đặc biệt**): Nếu cả 2 dòng đều thuộc tên một cơ quan hành chính duy nhất như:
-     ```
-     ỦY BAN NHÂN DÂN  
-     HUYỆN LONG HỒ
-     ```
-     hoặc:
-     ```
-     SỞ GIÁO DỤC VÀ ĐÀO TẠO  
-     TỈNH VĨNH LONG
-     ```
-     → **ghép cả 2 dòng** thành **một tên đầy đủ**, kết quả là:
-     **“ỦY BAN NHÂN DÂN HUYỆN LONG HỒ”**
-2. Nếu chỉ có **1 dòng duy nhất** thì lấy nguyên dòng đó.
-3. Giữ nguyên định dạng chữ IN HOA theo thể thức hành chính.  
-   Không chuyển sang viết thường, không thêm địa danh nếu không phải một phần của tên cơ quan.
----
-🛑 **Không lấy tên cơ quan chủ quản nếu văn bản có đơn vị trực thuộc (quy tắc 1.1)**  
-✅ **Phải ghép đủ 2 dòng nếu đó là tên cơ quan hành chính cấp tỉnh/huyện (quy tắc 1.2)**
+* Nếu văn bản có:
+  * Dòng 1 là cơ quan chủ quản (VD: “UBND TỈNH...”)
+  * Dòng 2 là tên địa phương (VD: “HUYỆN...”)
+  * Dòng 3 là đơn vị trực thuộc (VD: “BAN QLDA...”)
+    → **Chỉ lấy dòng 3** làm cơ quan ban hành.
+* Nếu chỉ có 1 dòng hoặc 2 dòng mà không có đơn vị trực thuộc → có thể ghép lại (VD: “ỦY BAN NHÂN DÂN HUYỆN ...”).
+✅ Không bao giờ lấy cơ quan chủ quản nếu có đơn vị cấp dưới trực tiếp ký văn bản.
 
-🎯 Yêu cầu: Trích **Số hiệu văn bản** đúng chính xác, giữ nguyên ký hiệu đầy đủ, bao gồm dấu tiếng Việt. Đặc biệt:
+🎯 Yêu cầu: Trích **SoVanBan**, **SoVanBanCanCu** hoặc **TrichYeu** đúng chính xác, giữ nguyên ký hiệu đầy đủ, bao gồm dấu tiếng Việt. Đặc biệt:
 🔒 Bắt buộc giữ nguyên các chữ viết tắt có dấu trong số hiệu văn bản, gồm:
 - **"QĐ"** - viết tắt của "Quyết định"
 - **"HĐND"** - viết tắt của "Hội đồng nhân dân"
@@ -78,6 +67,21 @@ class PromptService:
 - **"TĐ"** - viết tắt của "Thẩm định"
 - **"HĐTĐ"** - viết tắt của "Hội đồng thẩm định"
 - Các từ viết tắt khác có chữ **"Đ"**, **không được chuyển thành "D"**
+
+🎯 Yêu cầu: Kết quả xuất ra dạng JSON duy nhất có dạng
+```
+{
+    "ThongTinChung": {
+        "tên cột": "giá trị"
+    },
+    "BangDuLieu": [
+        {
+            "tên cột": "giá trị"
+        }
+        ...
+    ]
+}
+```
 """
                     # Trích xuất các cột bắt buộc dựa trên ky_hieu
                     required_columns = self._get_required_columns(ky_hieu)
