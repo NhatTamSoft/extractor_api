@@ -175,7 +175,18 @@ class DatabaseService:
                 van_ban_data.setdefault('LoaiVanBanID', "750CAD7D-BAED-4F61-988A-824B1AF8B0CA")
                 van_ban_data.setdefault('GiaiDoanID', "A6671AF3-F6C3-436B-85BE-71A0BEC3E2F5")
                 van_ban_data.setdefault('GiaiDoan', "3")
-            elif f"[{loaiVanBan}]" == "[GIAI_NGAN]": # Hợp đồng giai đoạn thực hiện dự án
+            elif f"[{loaiVanBan}]" == "[KLCVHT_THD]": # Bảng xác nhận KLCV hoàn thành thông qua hợp đồng giai đoạn thực hiện đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "1BB503D3-79C0-48BE-818A-2D8D3F71EF20")
+                van_ban_data.setdefault('GiaiDoanID', "DF70801A-78BE-431D-86D7-4ACFD882B20E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[KLCVHT_NHD]": # Bảng xác nhận KLCV hoàn thành thông qua hợp đồng giai đoạn chuẩn bị đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "D3956185-6DF4-4DEE-BF5C-F6B89416BD91")
+                van_ban_data.setdefault('GiaiDoanID', "748EFF1A-3FCE-4E67-BBB4-F5486E1980C1")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            # [GIAI_NGAN_DNTT]	13. Giải ngân (Giấy đề nghị thanh toán vốn 04.a/TT)
+            # [GIAI_NGAN_GRV]	14. Giải ngân (Giấy rút vốn 05/TT)
+            # [GIAI_NGAN_THV]	15. Giải ngân (Giấy đề nghị thu hồi vốn 04.b/TT)
+            elif f"[{loaiVanBan}]" == "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
                 van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
                 van_ban_data.setdefault('GiaiDoanID', "5E1E0E80-4712-4A9F-A591-CEB87062C04E") #Giải ngân thông qua hợp đồng GĐTHĐT
                 van_ban_data.setdefault('GiaiDoan', "3")

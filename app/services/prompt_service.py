@@ -45,7 +45,40 @@ class PromptService:
 | `3` |Công trình giao thông                         |
 | `4` |Công trình nông nghiệp và phát triển nông thôn|
 | `5` |Công trình hạ tầng kỹ thuật                   |
-""" + prompt
+""" + prompt + """
+🎯 Yêu cầu: Trích **chính xác tên cơ quan trực tiếp ban hành văn bản** theo các quy tắc sau:
+---
+✅ **QUY TẮC XỬ LÝ:**
+1. Nếu phần mở đầu có **2 dòng liên tiếp**, cần phân biệt:
+   - Trường hợp 1: **Nếu dòng 1 là cơ quan chủ quản (VD: “UBND TỈNH…”) và dòng 2 là đơn vị trực thuộc (VD: “BAN QLDA…”)** → chỉ lấy dòng **thứ hai**.
+   - Trường hợp 2 (**đặc biệt**): Nếu cả 2 dòng đều thuộc tên một cơ quan hành chính duy nhất như:
+     ```
+     ỦY BAN NHÂN DÂN  
+     HUYỆN LONG HỒ
+     ```
+     hoặc:
+     ```
+     SỞ GIÁO DỤC VÀ ĐÀO TẠO  
+     TỈNH VĨNH LONG
+     ```
+     → **ghép cả 2 dòng** thành **một tên đầy đủ**, kết quả là:
+     **“ỦY BAN NHÂN DÂN HUYỆN LONG HỒ”**
+2. Nếu chỉ có **1 dòng duy nhất** thì lấy nguyên dòng đó.
+3. Giữ nguyên định dạng chữ IN HOA theo thể thức hành chính.  
+   Không chuyển sang viết thường, không thêm địa danh nếu không phải một phần của tên cơ quan.
+---
+🛑 **Không lấy tên cơ quan chủ quản nếu văn bản có đơn vị trực thuộc (quy tắc 1.1)**  
+✅ **Phải ghép đủ 2 dòng nếu đó là tên cơ quan hành chính cấp tỉnh/huyện (quy tắc 1.2)**
+
+🎯 Yêu cầu: Trích **Số hiệu văn bản** đúng chính xác, giữ nguyên ký hiệu đầy đủ, bao gồm dấu tiếng Việt. Đặc biệt:
+🔒 Bắt buộc giữ nguyên các chữ viết tắt có dấu trong số hiệu văn bản, gồm:
+- **"QĐ"** - viết tắt của "Quyết định"
+- **"HĐND"** - viết tắt của "Hội đồng nhân dân"
+- **"HĐ"** - viết tắt của "Hợp đồng" hoặc "Hội đồng"
+- **"TĐ"** - viết tắt của "Thẩm định"
+- **"HĐTĐ"** - viết tắt của "Hội đồng thẩm định"
+- Các từ viết tắt khác có chữ **"Đ"**, **không được chuyển thành "D"**
+"""
                     # Trích xuất các cột bắt buộc dựa trên ky_hieu
                     required_columns = self._get_required_columns(ky_hieu)
                     # print("=====required_columns=====")

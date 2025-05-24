@@ -232,16 +232,18 @@ async def extract_multiple_images(
             # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
             missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
             if missing_fields:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "code": 400,
-                        "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
-                        "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
-                        "missing_fields": missing_fields
-                    }
-                )
+                # return JSONResponse(
+                #     status_code=400,
+                #     content={
+                #         "status": "error",
+                #         "code": 400,
+                #         "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
+                #         "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                #         "missing_fields": missing_fields
+                #     }
+                # )
+                print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
+                print(f"Thiếu các trường: {', '.join(missing_fields)}")
 
             # Set UUIDs in the response data
             data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
@@ -391,19 +393,66 @@ async def extract_multiple_images(
                     "UserID": user_id,
                     "DonViID": don_vi_id
                 }
-            elif  f"[{loaiVanBan}]" in "[GIAI_NGAN]":
+            elif  f"[{loaiVanBan}]" in "[KLCVHT_THD]":
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
-                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
                     "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "LanThanhToan": data_json["ThongTinChung"].get("LanThanhToan", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTriHopDong": data_json["ThongTinChung"].get("GiaTriHopDong", "0"),
+                    "TamUngChuaThuaHoi": data_json["ThongTinChung"].get("TamUngChuaThuaHoi", "0"),
+                    "ThanhToanDenCuoiKyTruoc": data_json["ThongTinChung"].get("ThanhToanDenCuoiKyTruoc", "0"),
+                    "LuyKeDenCuoiKy": data_json["ThongTinChung"].get("LuyKeDenCuoiKy", "0"),
+                    "ThanhToanThuHoiTamUng": data_json["ThongTinChung"].get("ThanhToanThuHoiTamUng", "0"),
+                    "GiaiNganKyNay": data_json["ThongTinChung"].get("GiaiNganKyNay", "0"),
+                    "TamUngGiaiNganKyNayKyTruoc": data_json["ThongTinChung"].get("TamUngGiaiNganKyNayKyTruoc", "0"),
+                    "ThanhToanKLHTKyTruoc": data_json["ThongTinChung"].get("ThanhToanKLHTKyTruoc", "0"),
+                    "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
+                    "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
+                    "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+            
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                     "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
                     "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
-                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
@@ -414,6 +463,8 @@ async def extract_multiple_images(
                 }
             van_ban_data["UserID"] = user_id
             van_ban_data["DonViID"] = don_vi_id
+
+            
 
             db_service = DatabaseService()
             result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
