@@ -26,8 +26,8 @@ class PromptService:
                         
                     ky_hieu = ky_hieu_match.group(1)
                     prompt = section.strip()
-                    prompt = """Bạn là GPT-4 Vision, một AI có khả năng đọc hiểu bảng biểu từ hình ảnh scan. Hãy đọc nội dung trên hình ảnh văn bản hoặc file PDF được cung cấp và trích xuất thông tin theo 2 phần sau:
-** Danh sách Khoản mục chi phí
+                    prompt = """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới:
+** Danh mục Khoản mục chi phí
 ------------------------------------------------------
 | Mã  |Tên khoản mục chi phí                         |
 |-----|----------------------------------------------|
@@ -39,7 +39,7 @@ class PromptService:
 |`CP6`|Chi phí khác                                  |
 |`CP7`|Chi phí dự phòng                              |
 
-** Danh sách Loại công trình
+** Danh mục Loại công trình
 ------------------------------------------------------
 |  Mã |Loại công trình                               |
 |-----|----------------------------------------------|

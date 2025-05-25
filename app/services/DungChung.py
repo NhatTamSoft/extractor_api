@@ -108,7 +108,7 @@ def pdf_to_images(pdf_path, zoom=2.0):
     return images
 
 # --- Hàm trích xuất văn bản từ ảnh bằng Gemini với prompt cụ thể ---
-def extract_text_from_images_with_prompt(images, prompt, model_name="gemini-1.5-flash", max_retries=2, initial_delay=5):
+def extract_text_from_images_with_prompt(images, prompt, model_name="gemini-2.0-flash", max_retries=2, initial_delay=5):
     """
     Sử dụng mô hình Gemini để trích xuất văn bản từ danh sách ảnh với một prompt cụ thể.
     Bao gồm cơ chế thử lại đơn giản khi gặp lỗi API.
@@ -222,7 +222,7 @@ def extract_text_from_images_with_prompt(images, prompt, model_name="gemini-1.5-
     return "" # Trả về rỗng nếu tất cả các lần thử lại đều thất bại
 
 # --- Hàm chính để đọc PDF (kết hợp text và OCR) ---
-def read_text_from_pdf_combined(file_path, specific_ocr_prompt_text_pdf, ocr_prompt, model_name="gemini-1.5-flash", output_image_dir="temp_image", loai_file="IMAGE"):
+def read_text_from_pdf_combined(file_path, specific_ocr_prompt_text_pdf, ocr_prompt, model_name="gemini-2.0-flash", output_image_dir="temp_image", loai_file="IMAGE"):
     """
     Đọc nội dung văn bản từ file PDF.
     Ưu tiên trích xuất text trực tiếp, nếu không được sẽ dùng Gemini OCR với prompt cụ thể.

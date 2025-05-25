@@ -5,7 +5,7 @@
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `SoVanBanCanCu`: Trích "số hiệu văn bản" Báo cáo thẩm định báo cáo đề xuất chủ trương đầu tư, tại dòng "Căn cứ Báo cáo thẩm định số..." hoặc "Căn cứ Báo cáo số ..." có chứa cụm từ "báo cáo đề xuất chủ trương đầu tư..."
 `NgayKyCanCu`: Trích "ngày...tháng...năm ... Báo cáo thẩm định" báo cáo đề xuất chủ trương đầu tư, tại dòng "Căn cứ Báo cáo thẩm định số..." hoặc "Căn cứ Báo cáo số ..." có chứa cụm từ "báo cáo đề xuất chủ trương đầu tư..."  định dạng (dd/MM/yyyy)
-`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ... định dạng (dd/MM/yyyy)
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ..." định dạng (dd/MM/yyyy)
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH".
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
@@ -88,7 +88,7 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 ### Yêu cầu xử lý:
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Tách từng dòng con trong phần "Trong đó" ra như một gói thầu độc lập (nếu có)
-{{CHUCNANG04}} Bạn là một trợ lý AI ChatGPT-Vision có khả năng đọc hiểu và phân tích hình ảnh chứa văn bản, bảng biểu và công thức tài chính. Hãy giúp tôi xem chức năng `"Quyết định phê duyệt dự án"`
+{{CHUCNANG04}} Chức năng "Quyết định phê duyệt dự án"
 `Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt dự án hoặc phê duyệt điều chỉnh phê duyệt dự án"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_DA"
@@ -398,7 +398,7 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
-`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng "dd/MM/yyyy"
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.

@@ -27,6 +27,7 @@ from app.services.DungChung import encode_image_to_base64
 from openai import OpenAI
 from unidecode import unidecode
 import traceback
+import PIL
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -39,7 +40,7 @@ genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 model_openai = os.getenv('MODEL_API_OPENAI')
 
 # Khởi tạo models
-model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 
 # Khởi tạo PromptService
 prompt_service = PromptService()
@@ -115,6 +116,7 @@ async def extract_multiple_images(
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
         print("======================prompt==================")
         print(prompt)
+        print("======================end prompt==================")
         #return
         # Process each file
         temp_files = []
@@ -160,35 +162,35 @@ async def extract_multiple_images(
         # print(valid_image_paths)
         # Get the appropriate prompt based on loaiVanBan
         try:
-            # Chuẩn bị dữ liệu cho OpenAI
-            # Thêm hình ảnh vào messages
-            messages = [
-                {
-                    "role": "user",
-                    "content": content_parts
-                }
-            ]
-            # Gọi OpenAI API
-            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-            response = client.chat.completions.create(
-                model="gpt-4o",  # Hoặc mô hình hỗ trợ xử lý nhiều ảnh khác
-                messages=messages,
-                max_tokens=4000  # Tăng max_tokens nếu cần cho kết quả dài hơn
-            )
-            #print(response)
-            # Xử lý response từ OpenAI
-            response_text = response.choices[0].message.content.strip()
-            # print("response_text")
-            # print(response_text)
-            # return
-            if response_text.strip().startswith("```json"):
-                response_text = response_text.strip()[7:-3].strip()
-            elif response_text.strip().startswith("```"):
-                response_text = response_text.strip()[3:-3].strip()
-            print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
-            print(response_text)
-            #return
-            # Nếu AI trả về lỗi rõ ràng
+            # Chuẩn bị dữ liệu cho Gemini
+            content_parts = [prompt]
+            for image_path in valid_image_paths:
+                image = PIL.Image.open(image_path)
+                content_parts.append(image)
+
+            # Gọi Gemini API
+            try:
+                response = model.generate_content(content_parts)
+                response_text = response.text.strip()
+                
+                if response_text.strip().startswith("```json"):
+                    response_text = response_text.strip()[7:-3].strip()
+                elif response_text.strip().startswith("```"):
+                    response_text = response_text.strip()[3:-3].strip()
+                
+                print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
+                print(response_text)
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi xử lý ảnh",
+                        "detail": str(e)
+                    }
+                )
+            # Xử lý response từ Gemini
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
                     status_code=400,
