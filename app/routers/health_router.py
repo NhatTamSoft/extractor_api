@@ -11,3 +11,4 @@ async def health_check():
         "status": "healthy",
         "message": "API is running normally"
     } 
+

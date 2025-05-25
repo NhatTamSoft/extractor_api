@@ -1,16 +1,16 @@
-{{CHUCNANG01}} Chức năng `Quyết định phê duyệt chủ trương đầu tư`
+{{CHUCNANG02}} Chức năng `Quyết định phê duyệt chủ trương đầu tư`
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_CT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ..." định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Trích "số hiệu văn bản" Báo cáo thẩm định báo cáo đề xuất chủ trương đầu tư, tại dòng "Căn cứ Báo cáo thẩm định số..." hoặc "Căn cứ Báo cáo số ..." có chứa cụm từ "báo cáo đề xuất chủ trương đầu tư..."
 `NgayKyCanCu`: Trích "ngày...tháng...năm ... Báo cáo thẩm định" báo cáo đề xuất chủ trương đầu tư, tại dòng "Căn cứ Báo cáo thẩm định số..." hoặc "Căn cứ Báo cáo số ..." có chứa cụm từ "báo cáo đề xuất chủ trương đầu tư..."  định dạng (dd/MM/yyyy)
-`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ..." định dạng (dd/MM/yyyy)
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH".
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về chủ trương...".
-`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn:", nếu không có để ""
+`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "tổng mức đầu tư", thường bắt đầu bằng "tổng mức đầu tư..." hoặc "... kinh phí" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
@@ -22,6 +22,17 @@
 Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây thì:
 ❌ **Không xuất dòng không thuộc "Danh sách Khoản mục chi phí"**
 ✅ **Chỉ xuất các dòng thuộc "Danh sách Khoản mục chi phí"**
+**Danh sách Khoản mục chi phí**
+| Mã  |Tên khoản mục chi phí                         |
+|-----|----------------------------------------------|
+|`CP1`|Chi phí bồi thường, hỗ trợ, tái định cư       |
+|`CP2`|Chi phí xây dựng                              |
+|`CP3`|Chi phí thiết bị                              |
+|`CP4`|Chi phí quản lý dự án                         |
+|`CP5`|Chi phí tư vấn đầu tư xây dựng                |
+|`CP6`|Chi phí khác                                  |
+|`CP7`|Chi phí dự phòng                              |
+
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
@@ -30,46 +41,63 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG02}} Chức năng `Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư`
+- Không bao giờ được bịa ra số liệu, không được đoán, không được làm tròn. Nếu không tìm thấy số liệu hoặc không chắc chắn, phải trả về null hoặc "N/A".
+
+
+
+{{CHUCNANG03}} Chức năng `Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư`
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPDDT_CBDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích "số hiệu văn bản" phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư, tại dòng "Căn cứ Quyết định số..." có chứa cụm từ "phê duyệt chủ trương đầu tư..."
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư, tại dòng "Căn cứ Quyết định số..." có chứa cụm từ "phê duyệt chủ trương đầu tư..." định dạng (dd/MM/yyyy)
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
-`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH".
+`SoVanBanCanCu`: Trích "số hiệu văn bản" Báo cáo thẩm định dự toán..., tại dòng "Căn cứ Báo cáo thẩm định dự toán..." có chứa cụm từ "Báo cáo thẩm định dự toán..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Báo cáo thẩm định dự toán..., tại dòng "Căn cứ Báo cáo thẩm định dự toán..." có chứa cụm từ "Báo cáo thẩm định dự toán..." định dạng (dd/MM/yyyy)
+`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH" hoặc "KT. GIÁM ĐỐC" hoặc "GIÁM ĐỐC".
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo..."
-`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn:", nếu không có để ""
-`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá trị dự toán", thường bắt đầu bằng "Giá trị báo cáo kinh tế kỹ thật..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
+`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá trị dự toán", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
 ### Bảng số liệu dự toán, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenKMCP`: Tên của khoản mục chi phí
+`TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+
+### 🚫 **Quy tắc loại bỏ Loại công trình**:
+Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây thì:
+❌ **Không xuất dòng không thuộc "Danh sách Loại công trình"**
+✅ **Chỉ xuất các dòng thuộc "Danh sách Loại công trình"**
+**Danh sách Loại công trình**
+|  Mã |Loại công trình                               |
+|-----|----------------------------------------------|
+| `1` |Công trình dân dụng                           |
+| `2` |Công trình công nghiệp                        |
+| `3` |Công trình giao thông                         |
+| `4` |Công trình nông nghiệp và phát triển nông thôn|
+| `5` |Công trình hạ tầng kỹ thuật                   |
+
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- BangDuLieu tôi muốn lấy tất cả chi tiết, không bỏ bất kỳ dòng nào
+- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
-- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn
-- Trong BangDuLieu nếu các cột giá trị "" thì bắt buộc gán là "0"
-- Giữ nguyên đúng tên khoản mục như trên bảng (bao gồm cả chữ in hoa, dấu câu nếu có)
-- Giữ nguyên định dạng STT dạng lồng nhau (VD: `1.1`, `3.1`, `4.1`)
-- Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG03}} Chức năng `Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư`
+
+
+
+{{CHUCNANG04}} Chức năng `Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư`
 ### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KHLCNT giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KHLCNT giai đoạn chuẩn bị đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KHLCNT_CBDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Trích "số hiệu văn bản" quyết định phê duyệt dự toán nhiệm vụ, tại dòng "Căn cứ Quyết định số..." có chứa cụm từ "phê duyệt dự toán nhiệm vụ..."
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." quyết định phê duyệt dự toán nhiệm vụ, tại dòng "Căn cứ Quyết định số..." có chứa cụm từ "phê duyệt dự toán nhiệm vụ..." định dạng (dd/MM/yyyy)
-`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH".
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
@@ -86,22 +114,57 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `LoaiHopDong`: Trích cột loại hợp đồng
 `ThoiGianTHHopDong`: Trích cột thời gian thực hiện hợp đồng
 ### Yêu cầu xử lý:
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Tách từng dòng con trong phần "Trong đó" ra như một gói thầu độc lập (nếu có)
-{{CHUCNANG04}} Chức năng "Quyết định phê duyệt dự án"
+
+
+
+{{CHUCNANG05}} Chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn chuẩn bị đầu tư`
+### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KQLCNT giai đoạn chuẩn bị đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+`KyHieu`: "QDPD_KQLCNT_CBDT"
+`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng "dd/MM/yyyy"
+`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
+`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
+`CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
+`TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng "QUYẾT ĐỊNH" (thường bắt đầu bằng "Về việc...")
+`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
+`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+`TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
+`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
+`ThoiGianTHHopDong`: Trích từ dòng "Thời gian thực hiện hợp đồng: ... ngày"
+`LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
+`GiaTrungThau`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+### Yêu cầu xử lý:
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
+- Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
+- Tách từng dòng con trong phần "Trong đó" ra như một gói thầu độc lập (nếu có)
+
+
+{{CHUCNANG06}} Chức năng "Quyết định phê duyệt dự án"
 `Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt dự án hoặc phê duyệt điều chỉnh phê duyệt dự án"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_DA"
 `Thông tin chung của văn bản`:
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích "số hiệu văn bản" phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư, tại dòng "Căn cứ Quyết định số..." có chứa cụm từ "phê duyệt chủ trương đầu tư..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư, tại dòng "Căn cứ Quyết định số..." có chứa cụm từ "phê duyệt chủ trương đầu tư..." định dạng (dd/MM/yyyy)
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH".
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt...".
+`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
+`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "tổng mức đầu tư", thường bắt đầu bằng "tổng mức đầu tư..." hoặc "... kinh phí" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenKMCP`: Tên của khoản mục chi phí
+`TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
 `GiaTriTMDTKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriTMDTKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị tổng mức đầu tư tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriTMDTKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị tổng mức đầu tư giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
@@ -109,14 +172,29 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây thì:
 ❌ **Không xuất dòng không thuộc "Danh sách Khoản mục chi phí"**
 ✅ **Chỉ xuất các dòng thuộc "Danh sách Khoản mục chi phí"**
+**Danh sách Khoản mục chi phí**
+| Mã  |Tên khoản mục chi phí                         |
+|-----|----------------------------------------------|
+|`CP1`|Chi phí bồi thường, hỗ trợ, tái định cư       |
+|`CP2`|Chi phí xây dựng                              |
+|`CP3`|Chi phí thiết bị                              |
+|`CP4`|Chi phí quản lý dự án                         |
+|`CP5`|Chi phí tư vấn đầu tư xây dựng                |
+|`CP6`|Chi phí khác                                  |
+|`CP7`|Chi phí dự phòng                              |
+
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Không suy diễn hoặc bổ sung thông tin không có trong văn bản.
-- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn.
+- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG05}} Chức năng `Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư`
+
+
+
+{{CHUCNANG07}} Chức năng `Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư`
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_DT_THDT"
@@ -124,31 +202,42 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Trích "số hiệu văn bản" quyết định chủ trương đầu tư hoặc điều chỉnh chủ trương đầu tư, tại dòng "Căn cứ Quyết định ..." có chứa cụm từ "chủ trương đầu tư..."
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." quyết định chủ trương đầu tư hoặc điều chỉnh chủ trương đầu tư, tại dòng "Căn cứ Quyết định ..." có chứa cụm từ "chủ trương đầu tư..." định dạng (dd/MM/yyyy)
-`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH"
-`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản
+`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản, ngay dưới dòng "KT. CHỦ TỊCH" hoặc "CHỦ TỊCH" hoặc "KT. GIÁM ĐỐC" hoặc "GIÁM ĐỐC".
+`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo..."
-`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn:", nếu không có để ""
-`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá trị dự toán", thường bắt đầu bằng "Giá trị báo cáo kinh tế kỹ thật..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
+`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá trị dự toán", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenKMCP`: Tên của khoản mục chi phí (ví dụ: "Chi phí xây dựng")
+`TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+### 🚫 **Quy tắc loại bỏ Loại công trình**:
+Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây thì:
+❌ **Không xuất dòng không thuộc "Danh sách Loại công trình"**
+✅ **Chỉ xuất các dòng thuộc "Danh sách Loại công trình"**
+**Danh sách Loại công trình**
+|  Mã |Loại công trình                               |
+|-----|----------------------------------------------|
+| `1` |Công trình dân dụng                           |
+| `2` |Công trình công nghiệp                        |
+| `3` |Công trình giao thông                         |
+| `4` |Công trình nông nghiệp và phát triển nông thôn|
+| `5` |Công trình hạ tầng kỹ thuật                   |
+
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- BangDuLieu tôi muốn lấy tất cả chi tiết, không bỏ bất kỳ dòng nào
+- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
-- Giữ nguyên định dạng và nội dung khi trích xuất, trừ khi cần làm rõ để dễ hiểu hơn
-- Trong BangDuLieu nếu các cột giá trị "" thì bắt buộc gán là "0"
-- Giữ nguyên đúng tên khoản mục như trên bảng (bao gồm cả chữ in hoa, dấu câu nếu có)
-- Giữ nguyên định dạng STT dạng lồng nhau (VD: `1.1`, `3.1`, `4.1`)
-- Bỏ qua phần tiêu đề bảng, chỉ lấy dữ liệu từ phần nội dung bảng
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG06}} Chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
+
+
+{{CHUCNANG08}} Chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt KHLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KHLCNT giai đoạn thực hiện đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KHLCNT_THDT"
@@ -172,12 +261,40 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `LoaiHopDong`: Trích cột loại hợp đồng
 `ThoiGianTHHopDong`: Trích cột thời gian thực hiện hợp đồng
 ### Yêu cầu xử lý:
-- Bỏ qua dòng tiêu đề hoặc nhóm (VD: "Gói thầu dịch vụ tư vấn: 02 gói"), chỉ trích các gói có thông tin chi tiết.
-- Gộp các dòng con nếu cùng thuộc một gói (VD: gộp chi phí thành phần vào dòng chính nếu cần).
-- Nếu có dòng "Trong đó", vẫn ghi rõ giá trị nhưng có thể để trống các cột hình thức lựa chọn và thời gian nếu không có thông tin riêng.
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG07}} Chức năng `Hợp đồng`
+- Tách từng dòng con trong phần "Trong đó" ra như một gói thầu độc lập (nếu có)
+
+
+
+{{CHUCNANG09}} Chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn thực hiện đầu tư`
+### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KQLCNT giai đoạn thực hiện đầu tư"
+### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+`KyHieu`: "QDPD_KQLCNT_THDT"
+`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
+`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
+`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
+`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
+`CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
+`TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng "QUYẾT ĐỊNH" (thường bắt đầu bằng "Về việc...")
+`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
+`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
+`TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
+`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
+`ThoiGianTHHopDong`: Trích từ dòng "Thời gian thực hiện hợp đồng: ... ngày"
+`LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
+`GiaTrungThau`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..."
+### Yêu cầu xử lý:
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
+- Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
+- Tách từng dòng con trong phần "Trong đó" ra như một gói thầu độc lập (nếu có)
+
+
+{{CHUCNANG10}} Chức năng `Hợp đồng`
 ### Văn bản để nhận dạng thông tin là: "Hợp đồng"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "HOP_DONG"
@@ -197,10 +314,12 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 ### Bảng khối lượng công việc của hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `GiaTriHopDong`:  Lấy giá trị hợp đồng (Giá trị đã có thuế hoặc Giá trị sau thuế) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn), nếu không có thì lấy bằng "0"
 ### Yêu cầu xử lý:
-- Trích nguyên văn theo tài liệu, không thêm suy diễn
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG08}} Chức năng `Phụ lục hợp đồng`
+
+
+
+{{CHUCNANG11}} Chức năng `Phụ lục hợp đồng`
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "PL_HOP_DONG"
 `SoVanBan`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:..."
@@ -218,10 +337,12 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 ### Bảng khối lượng công việc của phụ lục hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `GiaTriHopDong`: Lấy giá trị phụ lục hợp đồng (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn), nếu không có thì lấy bằng 0
 ### Yêu cầu xử lý:
-- Trích nguyên văn theo tài liệu, không thêm suy diễn
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG09}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) thông qua hợp đồng`
+
+
+
+{{CHUCNANG12}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) thông qua hợp đồng`
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.a/TT"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "KLCVHT_THD"
@@ -240,26 +361,25 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `ChucDanhNguoiKy`: Trích dòng nằm "ngay phía trên tên người ký", ví dụ: "Giám đốc", "Phó giám đốc", "Kế toán trưởng", "Chủ tịch", "KT. Chủ tịch – Phó Chủ tịch".
 `CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư")
 `TrichYeu`: Trích cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số: ..." Trích sau cụm từ "Thanh toán lần thứ:"
-`GiaTriHopDong`: Trích `giá trị hợp đồng` tại dòng "`1. Giá trị hợp đồng (giá trị dự toán được duyệt...)" (kiểu số) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`TamUngChuaThuaHoi`: Trích `giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước` tại dòng "2. Giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước" (kiểu số)
-`ThanhToanDenCuoiKyTruoc`: Trích `số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước` tại dòng "3. Số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước" (kiểu số)
-`LuyKeDenCuoiKy`: Trích `luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này` tại dòng "4. Luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này" (kiểu số)
-`ThanhToanThuHoiTamUng`: Trích `thanh toán để thu hồi tạm ứng` tại dòng "5. Thanh toán để thu hồi tạm ứng" (kiểu số)
-`GiaiNganKyNay`: Trích `giá trị đề nghị giải ngân kỳ này` tại dòng "6. giá trị đề nghị giải ngân kỳ này" (kiểu số)
-`TamUngGiaiNganKyNayKyTruoc`: Trích `số tiền tạm ứng` ngay dưới dòng "số tiền bằng chữ..." (kiểu số)
-`ThanhToanKLHTKyTruoc`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "số tiền bằng chữ..." (kiểu số)
-`LuyKeGiaiNgan`: Trích `số tiền` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (kiểu số)
-`TamUngThanhToan`: Trích `số tiền tạm ứng` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (kiểu số)
-`ThanhToanKLHT`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (kiểu số)
+`GiaTriHopDong`: Trích `giá trị hợp đồng` tại dòng "`1. Giá trị hợp đồng (giá trị dự toán được duyệt...)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`TamUngChuaThuaHoi`: Trích `giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước` tại dòng "2. Giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`ThanhToanDenCuoiKyTruoc`: Trích `số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước` tại dòng "3. Số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`LuyKeDenCuoiKy`: Trích `luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này` tại dòng "4. Luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`ThanhToanThuHoiTamUng`: Trích `thanh toán để thu hồi tạm ứng` tại dòng "5. Thanh toán để thu hồi tạm ứng" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaiNganKyNay`: Trích `giá trị đề nghị giải ngân kỳ này` tại dòng "6. giá trị đề nghị giải ngân kỳ này" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`TamUngGiaiNganKyNayKyTruoc`: Trích `số tiền tạm ứng` ngay dưới dòng "số tiền bằng chữ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`ThanhToanKLHTKyTruoc`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "số tiền bằng chữ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`LuyKeGiaiNgan`: Trích `số tiền` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`TamUngThanhToan`: Trích `số tiền tạm ứng` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`ThanhToanKLHT`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên công việc được ghi trong cột "Tên công việc"
 `GiaTriNghiemThu`: Trích giá trị `thực hiện kỳ này` trong bảng dữ liệu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Không suy diễn nội dung ngoài văn bản
-- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG10}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) không thông qua hợp đồng`
+
+{{CHUCNANG13}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) không thông qua hợp đồng`
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.b/TT"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "KLCVHT_NHD"
@@ -303,11 +423,12 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `TTLuyKeDenHetKyNay`: Thành tiền lũy kế đến hết kỳ này (cột 12) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GhiChu`: Thông tin ghi chú (cột 13), nếu có
 ### Yêu cầu xử lý:
-- Không suy diễn nội dung ngoài văn bản
-- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang.
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG11}} Chức năng `Giải ngân vốn đầu tư`
+
+
+
+{{CHUCNANG14}} Chức năng `Giải ngân vốn đầu tư`
 ### Chứng từ để nhận dạng thông tin là `GIẤY ĐỀ NGHỊ THANH TOÁN VỐN`, mẫu số 04.a/TT
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "GIAI_NGAN_DNTT"
@@ -329,11 +450,12 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `NoiDung`: Trích từ cột "Nội dung thanh toán"
 `SoTien`: Trích từ cột "Số đề nghị tạm ứng, thanh toán khối lượng hoàn thành kỳ này (Vốn trong nước)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Không suy diễn nội dung ngoài văn bản.
-- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG12}} Chức năng `Giải ngân vốn đầu tư`
+
+
+
+{{CHUCNANG15}} Chức năng `Giải ngân vốn đầu tư`
 ### Chứng từ để nhận dạng thông tin là `GIẤY RÚT VỐN`, mẫu số 05/TT
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "GIAI_NGAN_GRV"
@@ -359,11 +481,12 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `NienDo`: Năm kế hoạch vốn (cột 6)
 `SoTien`: Tổng số tiền (cột 7) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Không suy diễn nội dung ngoài văn bản.
-- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG13}} Chức năng `Giải ngân vốn đầu tư`
+
+
+
+{{CHUCNANG16}} Chức năng `Giải ngân vốn đầu tư`
 ### Chứng từ để nhận dạng thông tin là `GIẤY ĐỀ NGHỊ THU HỒI VỐN`, mẫu số 04.b/TT
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "GIAI_NGAN_THV"
@@ -387,54 +510,5 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `NienDo`: Trích từ cột "Năm kế hoạch vốn (Năm KHV)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `SoTien`: Trích từ cột "Số cơ quan kiểm soát, thanh toán duyệt thanh toán" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 ### Yêu cầu xử lý:
-- Không suy diễn nội dung ngoài văn bản.
-- Với phần chữ ký, OCR cần nhận dạng rõ `vị trí – thứ tự` các dòng chữ ở cuối trang
+- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG14}} Chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn chuẩn bị đầu tư`
-### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh KQLCNT giai đoạn chuẩn bị đầu tư"
-### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
-`KyHieu`: "QDPD_KQLCNT_CBDT"
-`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
-`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng "dd/MM/yyyy"
-`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
-`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
-`CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
-`TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng "QUYẾT ĐỊNH" (thường bắt đầu bằng "Về việc...")
-`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
-`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
-### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
-`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
-`ThoiGianTHHopDong`: Trích từ dòng "Thời gian thực hiện hợp đồng: ... ngày"
-`LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
-`GiaTrungThau`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-### Yêu cầu xử lý:
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-{{CHUCNANG15}} Chức năng `Quyết định phê duyệt kết quả lựa chọn nhà thầu (viết tắt: "KQLCNT") giai đoạn thực hiện đầu tư`
-### Văn bản để nhận dạng thông tin là`: "Quyết định phê duyệt KQLCNT giai đoạn thực hiện đầu tư, quyết định điều chỉnh KQLCNT giai đoạn thực hiện đầu tư"
-### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
-`KyHieu`: "QDPD_KQLCNT_THDT"
-`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
-`NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
-`NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
-`ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
-`CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
-`TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng "QUYẾT ĐỊNH" (thường bắt đầu bằng "Về việc...")
-`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
-`GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
-### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
-`TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
-`ThoiGianTHHopDong`: Trích từ dòng "Thời gian thực hiện hợp đồng: ... ngày"
-`LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
-`GiaTrungThau`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..."
-### Yêu cầu xử lý:
-- Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
