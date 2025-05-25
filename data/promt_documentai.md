@@ -40,8 +40,7 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
-- Không bao giờ được bịa ra số liệu, không được đoán, không được làm tròn. Nếu không tìm thấy số liệu hoặc không chắc chắn, phải trả về null hoặc "N/A".
+- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc
 
 
 

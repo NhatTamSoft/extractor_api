@@ -2,7 +2,6 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, 
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import os
-import google.generativeai as genai
 import base64
 from io import BytesIO
 from PIL import Image
@@ -34,13 +33,7 @@ load_dotenv()
 
 router = APIRouter()
 
-# Cấu hình API keys từ biến môi trường
-genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-
 model_openai = os.getenv('MODEL_API_OPENAI')
-
-# Khởi tạo models
-model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 
 # Khởi tạo PromptService
 prompt_service = PromptService()
@@ -165,6 +158,10 @@ async def extract_multiple_images(
             # Chuẩn bị dữ liệu cho OpenAI
             # Thêm hình ảnh vào messages
             messages = [
+                {
+                    "role": "system",
+                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
+                },
                 {
                     "role": "user",
                     "content": content_parts
