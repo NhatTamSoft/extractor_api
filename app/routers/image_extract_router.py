@@ -1810,3 +1810,194 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
             except Exception as e:
                 print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
 
+@router.post("/image_extract_azure_mapping")
+async def extract_multiple_images_azure_mapping(
+    files: List[UploadFile] = File(...),
+    loaiVanBan: Optional[str] = None,
+    authorization: str = Header(...)
+):
+    # Xác thực token
+    try:
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+            
+        token = authorization.split(" ")[1]
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+
+    temp_files = []
+    try:
+        # Process each file
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
+
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_file.flush()
+                temp_files.append(temp_file.name)
+
+        # Get prompt from prompt service
+        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
+
+        # Process each file with Azure Form Recognizer
+        combined_text = ""
+        for temp_file in temp_files:
+            try:
+                # Extract data with Azure Form Recognizer
+                with open(temp_file, "rb") as f:
+                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
+                    result = poller.result()
+
+                # Collect text and tables
+                for page in result.pages:
+                    for line in page.lines:
+                        combined_text += line.content + "\n"
+
+                # Process tables if any
+                for table in result.tables:
+                    combined_text += "\nBảng:\n"
+                    for row_index in range(table.row_count):
+                        row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
+                        combined_text += " | ".join(row_cells) + "\n"
+
+            except Exception as e:
+                print(f"Error processing file {temp_file}: {str(e)}")
+                continue
+
+        # Process extracted text with OpenAI
+        try:
+            # Prepare messages for OpenAI
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    Extract and map information from the following text to the specified fields.
+                    Return ONLY a JSON object with the following structure:
+                    {{
+                        "ThongTinChung": {{
+                            "SoVanBan": "string or null",
+                            "NgayKy": "string or null",
+                            "NguoiKy": "string or null",
+                            "ChucDanhNguoiKy": "string or null",
+                            "CoQuanBanHanh": "string or null",
+                            "TrichYeu": "string or null",
+                            "DieuChinh": "string or null"
+                        }},
+                        "BangDuLieu": [
+                            {{
+                                "TenKMCP": "string",
+                                "GiaTriTMDTKMCP": "number",
+                                "GiaTriTMDTKMCPTang": "number",
+                                "GiaTriTMDTKMCPGiam": "number"
+                            }}
+                        ]
+                    }}
+
+                    Field definitions and extraction rules:
+                    {prompt}
+
+                    Extracted text:
+                    {combined_text}
+
+                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    """
+                }
+            ]
+
+            # Call OpenAI API
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=4000,
+                temperature=0,
+                response_format={"type": "json_object"}
+            )
+
+            # Process response
+            response_text = response.choices[0].message.content.strip()
+            
+            # Clean up response text
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
+
+            # Parse JSON response
+            data = json.loads(response_text)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "code": 200,
+                    "message": "Xử lý văn bản thành công",
+                    "data": data
+                }
+            )
+
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi xử lý văn bản",
+                    "detail": str(e)
+                }
+            )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
+        )
+    finally:
+        # Clean up temporary files
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
+
