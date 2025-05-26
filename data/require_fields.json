@@ -1,0 +1,217 @@
+[
+  {
+    "tenTruong": "docId",
+    "moTa": "Mã định danh tài liệu",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở đầu văn bản",
+      "keywords": ["Mã số", "Mã định danh", "Số hiệu"],
+      "format": "Chuỗi ký tự",
+      "examples": ["VB-2024-001", "HD-2024-123"]
+    }
+  },
+  {
+    "tenTruong": "arcDocCode",
+    "moTa": "Mã lưu trữ tài liệu (gồm: mã cơ quan lưu trữ + mã hồ sơ + số thứ tự tài liệu trong hồ sơ)",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở đầu văn bản",
+      "format": "[mã cơ quan]-[mã hồ sơ]-[số thứ tự]",
+      "examples": ["UBND-2024-001", "BQL-2024-123"]
+    }
+  },
+  {
+    "tenTruong": "maintenance",
+    "moTa": "Thời hạn lưu trữ",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở cuối văn bản",
+      "keywords": ["Lưu trữ", "Thời hạn bảo quản"],
+      "mapping": {
+        "01": "Vĩnh viễn",
+        "02": "70 năm",
+        "03": "50 năm",
+        "04": "30 năm",
+        "05": "20 năm",
+        "06": "10 năm",
+        "07": "Khác"
+      }
+    }
+  },
+  {
+    "tenTruong": "typeName",
+    "moTa": "Tên loại tài liệu",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở đầu văn bản",
+      "keywords": ["QUYẾT ĐỊNH", "NGHỊ QUYẾT", "HỢP ĐỒNG", "BIÊN BẢN"],
+      "mapping": {
+        "01": "Nghị quyết",
+        "02": "Quyết định",
+        "03": "Hợp đồng",
+        "04": "Biên bản"
+      }
+    }
+  },
+  {
+    "tenTruong": "codeNumber",
+    "moTa": "Số của tài liệu",
+    "extractionRules": {
+      "location": "Thường xuất hiện sau 'Số:' ở đầu văn bản",
+      "format": "Số nguyên hoặc chuỗi ký tự",
+      "examples": ["123", "123/QĐ-UBND"]
+    }
+  },
+  {
+    "tenTruong": "codeNotation",
+    "moTa": "Ký hiệu của tài liệu",
+    "extractionRules": {
+      "location": "Thường xuất hiện cùng với số văn bản",
+      "format": "Chuỗi ký tự",
+      "examples": ["QĐ-UBND", "NQ-HĐND"]
+    }
+  },
+  {
+    "tenTruong": "issuedDate",
+    "moTa": "Ngày, tháng, năm tài liệu",
+    "extractionRules": {
+      "location": "Thường xuất hiện sau 'ngày' ở đầu văn bản",
+      "format": "DD/MM/YYYY",
+      "examples": ["01/01/2024", "31/12/2024"]
+    }
+  },
+  {
+    "tenTruong": "organName",
+    "moTa": "Tên cơ quan, tổ chức, cá nhân ban hành tài liệu",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở đầu văn bản",
+      "keywords": ["ỦY BAN NHÂN DÂN", "BAN QUẢN LÝ", "SỞ"],
+      "examples": ["ỦY BAN NHÂN DÂN TỈNH", "BAN QUẢN LÝ DỰ ÁN"]
+    }
+  },
+  {
+    "tenTruong": "subject",
+    "moTa": "Trích yếu nội dung",
+    "extractionRules": {
+      "location": "Thường xuất hiện sau loại văn bản",
+      "keywords": ["Về việc", "V/v"],
+      "examples": ["Về việc phê duyệt dự án..."]
+    }
+  },
+  {
+    "tenTruong": "language",
+    "moTa": "Ngôn ngữ",
+    "extractionRules": {
+      "default": "01",
+      "mapping": {
+        "01": "Tiếng Việt",
+        "02": "Tiếng Anh",
+        "11": "Khác"
+      }
+    }
+  },
+  {
+    "tenTruong": "numberOfPage",
+    "moTa": "Số lượng trang",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở cuối mỗi trang",
+      "format": "Số nguyên",
+      "examples": ["5", "10"]
+    }
+  },
+  {
+    "tenTruong": "inforSign",
+    "moTa": "Ký hiệu thông tin",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở đầu văn bản",
+      "keywords": ["MẬT", "KHẨN", "THƯỜNG"]
+    }
+  },
+  {
+    "tenTruong": "keyword",
+    "moTa": "Từ khóa",
+    "extractionRules": {
+      "location": "Có thể xuất hiện ở bất kỳ vị trí nào",
+      "type": "Danh sách các từ khóa quan trọng",
+      "examples": ["dự án", "đầu tư", "xây dựng"]
+    }
+  },
+  {
+    "tenTruong": "mode",
+    "moTa": "Chế độ sử dụng",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở đầu văn bản",
+      "mapping": {
+        "01": "Công khai",
+        "02": "Sử dụng có điều kiện",
+        "03": "Mật"
+      }
+    }
+  },
+  {
+    "tenTruong": "confidenceLevel",
+    "moTa": "Mức độ tin cậy",
+    "extractionRules": {
+      "default": "02",
+      "mapping": {
+        "01": "Gốc điện tử",
+        "02": "Số hóa",
+        "03": "Hỗn hợp"
+      }
+    }
+  },
+  {
+    "tenTruong": "autograph",
+    "moTa": "Bút tích",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở cuối văn bản",
+      "keywords": ["Có chữ ký số", "Có chữ ký tay"]
+    }
+  },
+  {
+    "tenTruong": "format",
+    "moTa": "Tình trạng vật lý",
+    "extractionRules": {
+      "default": "01",
+      "mapping": {
+        "01": "Tốt",
+        "02": "Bình thường",
+        "03": "Hỏng"
+      }
+    }
+  },
+  {
+    "tenTruong": "process",
+    "moTa": "Quy trình xử lý",
+    "extractionRules": {
+      "mapping": {
+        "0": "Không có quy trình xử lý đi kèm",
+        "1": "Có quy trình xử lý đi kèm"
+      }
+    }
+  },
+  {
+    "tenTruong": "riskRecovery",
+    "moTa": "Chế độ dự phòng",
+    "extractionRules": {
+      "mapping": {
+        "0": "Không",
+        "1": "Có"
+      }
+    }
+  },
+  {
+    "tenTruong": "riskRecoveryStatus",
+    "moTa": "Tình trạng dự phòng",
+    "extractionRules": {
+      "mapping": {
+        "01": "Đã dự phòng",
+        "02": "Chưa dự phòng"
+      }
+    }
+  },
+  {
+    "tenTruong": "description",
+    "moTa": "Ghi chú",
+    "extractionRules": {
+      "location": "Thường xuất hiện ở cuối văn bản",
+      "type": "Văn bản tự do"
+    }
+  }
+]

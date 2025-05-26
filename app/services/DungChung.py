@@ -108,7 +108,7 @@ def pdf_to_images(pdf_path, zoom=2.0):
     return images
 
 # --- Hàm trích xuất văn bản từ ảnh bằng Gemini với prompt cụ thể ---
-def extract_text_from_images_with_prompt(images, prompt, model_name="gemini-1.5-flash", max_retries=2, initial_delay=5):
+def extract_text_from_images_with_prompt(images, prompt, model_name="gemini-2.0-flash", max_retries=2, initial_delay=5):
     """
     Sử dụng mô hình Gemini để trích xuất văn bản từ danh sách ảnh với một prompt cụ thể.
     Bao gồm cơ chế thử lại đơn giản khi gặp lỗi API.
@@ -222,7 +222,7 @@ def extract_text_from_images_with_prompt(images, prompt, model_name="gemini-1.5-
     return "" # Trả về rỗng nếu tất cả các lần thử lại đều thất bại
 
 # --- Hàm chính để đọc PDF (kết hợp text và OCR) ---
-def read_text_from_pdf_combined(file_path, specific_ocr_prompt_text_pdf, ocr_prompt, model_name="gemini-1.5-flash", output_image_dir="temp_image", loai_file="IMAGE"):
+def read_text_from_pdf_combined(file_path, specific_ocr_prompt_text_pdf, ocr_prompt, model_name="gemini-2.0-flash", output_image_dir="temp_image", loai_file="IMAGE"):
     """
     Đọc nội dung văn bản từ file PDF.
     Ưu tiên trích xuất text trực tiếp, nếu không được sẽ dùng Gemini OCR với prompt cụ thể.
@@ -573,7 +573,18 @@ def convert_currency_to_float(value: str) -> float:
         # Chuyển đổi thành float
         return float(value)
     except (ValueError, TypeError):
-        return 0.0
+        return 0
+    
+def convert_currency_to_int(value: str) -> int:
+    try:
+        # Loại bỏ tất cả các ký tự không phải số và dấu chấm
+        value = ''.join(c for c in value if c.isdigit() or c == '.')
+        # Loại bỏ dấu chấm ngăn cách hàng nghìn
+        value = value.replace('.', '')
+        # Chuyển đổi thành float
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
 
 def decode_jwt_token(token: str) -> dict:
     """
@@ -620,3 +631,46 @@ def decode_jwt_token(token: str) -> dict:
         raise Exception(f"Token không hợp lệ: {str(e)}")
     except Exception as e:
         raise Exception(f"Lỗi khi giải mã token: {str(e)}")
+    
+def encode_image_to_base64(image_path):
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+def LayMaDoiTuong(don_vi_id: str, user_id: str, ten_toi_tuong: str, la_ca_nhan: str) -> str:
+    """
+    Lấy mã đối tượng từ CSDL hoặc tạo mới nếu chưa tồn tại
+    
+    Args:
+        don_vi_id (str): ID đơn vị
+        user_id (str): ID người dùng
+        ten_toi_tuong (str): Tên đối tượng cần tìm
+        la_ca_nhan (str): Có phải cá nhân hay không
+        
+    Returns:
+        str: ID đối tượng
+    """
+    # Kiểm tra đối tượng đã tồn tại chưa
+    query_check = f"""
+    Select DoiTuongID from dbo.DoiTuong 
+    where TenDoiTuong=N'{ten_toi_tuong}' and DonViID=N'{don_vi_id}'
+    """
+    result = lay_du_lieu_tu_sql_server(query_check)
+    
+    # Nếu đã tồn tại thì trả về DoiTuongID
+    if not result.empty:
+        return result.iloc[0]['DoiTuongID']
+        
+    # Nếu chưa tồn tại thì tạo mới
+    doi_tuong_id = str(uuid.uuid4())
+    query_insert = f"""
+    Insert into dbo.DoiTuong (DoiTuongID, MaDoiTuong, TenDoiTuong, LaCaNhan, DonViID, UserID)
+    Select 
+        DoiTuongID=N'{doi_tuong_id}',
+        MaDoiTuong=dbo.Func_GenerateMaDoiTuong(N'{don_vi_id}'),
+        TenDoiTuong=N'{ten_toi_tuong}',
+        LaCaNhan=N'{la_ca_nhan}',
+        DonViID=N'{don_vi_id}',
+        UserID=N'{user_id}'
+    """
+    thuc_thi_truy_van(query_insert)    
+    return doi_tuong_id

@@ -3,7 +3,9 @@ from sqlalchemy import text
 from typing import Dict, List, Any
 import uuid
 from datetime import datetime
-from app.services.DungChung import convert_currency_to_float
+import traceback
+from app.services.DungChung import convert_currency_to_int
+import json
 
 class DatabaseService:
     @staticmethod
@@ -48,140 +50,303 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi thêm văn bản",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
 
     @staticmethod
-    async def insert_van_ban_ai(db: Session, van_ban_data: Dict[str, Any], loaiVanBan) -> Dict[str, Any]:
+    async def insert_van_ban_ai(db: Session, van_ban_data: Dict[str, Any], loaiVanBan: str) -> Dict[str, Any]:
         try:
-            # Insert main document data
-            insert_van_ban_query = text("""
-                INSERT INTO VanBanAI (
-                    VanBanAIID,
-                    SoVanBan,
-                    NgayKy,
-                    TrichYeu,
-                    ChucDanhNguoiKy, 
-                    CoQuanBanHanh,
-                    NguoiKy,
-                    NgayThaotac,
-                    TenLoaiVanBan,
-                    LoaiVanBanID,
-                    GiaiDoanID,
-                    GiaiDoan,
-                    DieuChinh,
-                    DuAnID,
-                    JsonAI,
-                    DataOCR,
-                    TenFile
-                ) VALUES (
-                    :VanBanAIID,
-                    :SoVanBan,
-                    :NgayKy,
-                    :TrichYeu,
-                    :ChucDanhNguoiKy, 
-                    :CoQuanBanHanh,
-                    :NguoiKy,
-                    :NgayThaotac,
-                    :TenLoaiVanBan,
-                    :LoaiVanBanID,
-                    :GiaiDoanID,
-                    :GiaiDoan,
-                    :DieuChinh,
-                    :DuAnID,
-                    :JsonAI,
-                    :DataOCR,
-                    :TenFile
-                )
-            """)
-            
-            # Convert date format if NgayKy exists and is not empty
+            # Xử lý chuyển đổi định dạng ngày nếu cột NgayKy tồn tại và có giá trị
             if van_ban_data.get('NgayKy'):
+                if van_ban_data['NgayKy'] == "":
+                    van_ban_data['NgayKy'] = None
+                else:
+                    try:
+                        van_ban_data['NgayKy'] = datetime.strptime(van_ban_data['NgayKy'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError as e:
+                        print(f"Lỗi chuyển đổi ngày tháng cho NgayKy: {van_ban_data['NgayKy']}. Lỗi: {e}")
+                        van_ban_data['NgayKy'] = None
+
+            if van_ban_data.get('NgayKyCanCu'):
+                if van_ban_data['NgayKyCanCu'] == "":
+                    van_ban_data['NgayKyCanCu'] = None
+                else:
+                    try:
+                        van_ban_data['NgayKyCanCu'] = datetime.strptime(van_ban_data['NgayKyCanCu'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError as e:
+                        print(f"Lỗi chuyển đổi ngày tháng cho NgayKyCanCu: {van_ban_data['NgayKyCanCu']}. Lỗi: {e}")
+                        van_ban_data['NgayKyCanCu'] = None
+
+            if van_ban_data.get('GiaTri'):
                 try:
-                    van_ban_data['NgayKy'] = datetime.strptime(van_ban_data['NgayKy'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    van_ban_data['GiaTri'] = convert_currency_to_int(str(van_ban_data['GiaTri']))
                 except ValueError as e:
-                    return {
-                        "success": False,
-                        "message": "Lỗi khi chuyển đổi định dạng ngày tháng",
-                        "error": str(e)
-                    }
-            
-            # Set default values for new fields if not provided
-            if loaiVanBan == "BCDX_CT": # Báo cáo đề xuất chủ trương đầu tư
+                    print(f"Lỗi chuyển đổi số cho GiaTri: {van_ban_data['GiaTri']}. Lỗi: {e}")
+                    van_ban_data['GiaTri'] = 0
+
+            if van_ban_data.get('NgayHieuLuc'):
+                if van_ban_data['NgayHieuLuc'] == "":
+                    van_ban_data['NgayHieuLuc'] = None
+                else:
+                    try:
+                        van_ban_data['NgayHieuLuc'] = datetime.strptime(van_ban_data['NgayHieuLuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError:
+                        print(f"Lỗi định dạng NgayHieuLuc: {van_ban_data['NgayHieuLuc']}. Để giá trị gốc.")
+                        van_ban_data['NgayHieuLuc'] = None
+
+            if van_ban_data.get('NgayKetThuc'):
+                if van_ban_data['NgayKetThuc'] == "":
+                    van_ban_data['NgayKetThuc'] = None
+                else:
+                    try:
+                        van_ban_data['NgayKetThuc'] = datetime.strptime(van_ban_data['NgayKetThuc'], '%d/%m/%Y').strftime('%Y-%m-%d')
+                    except ValueError:
+                        print(f"Lỗi định dạng NgayKetThuc: {van_ban_data['NgayKetThuc']}. Để giá trị gốc.")
+                        van_ban_data['NgayKetThuc'] = None
+
+
+            # Đặt các giá trị mặc định hoặc tính toán cho các trường dựa trên loaiVanBan
+            # Phần này giữ nguyên logic cũ của bạn để đảm bảo van_ban_data có đủ các trường cần thiết
+            # trước khi xây dựng câu lệnh SQL.
+            # Ví dụ:
+            # van_ban_data.setdefault('NgayThaotac', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            # van_ban_data.setdefault('TenLoaiVanBan', loaiVanBan) # Giả sử loaiVanBan là tên
+            # ... (các setdefault khác từ logic cũ của bạn)
+
+            # Logic đặt giá trị mặc định dựa trên loaiVanBan (giữ nguyên từ code gốc của bạn)
+            if f"[{loaiVanBan}]" == "[BCDX_CT]": # Báo cáo đề xuất chủ trương đầu tư
                 van_ban_data.setdefault('LoaiVanBanID', "3d4566fb-cf78-42e0-bebb-b22018b53763")
                 van_ban_data.setdefault('GiaiDoanID', "6F6BB0B9-92BF-4831-8053-6246F42929B6")
                 van_ban_data.setdefault('GiaiDoan', "2")
-            elif loaiVanBan == "QDPD_CT": # Phê duyệt chủ trương đầu tư
+            elif f"[{loaiVanBan}]" == "[QDPD_CT]": # Phê duyệt chủ trương đầu tư
                 if van_ban_data.get("DieuChinh") == "1":
                     van_ban_data.setdefault('LoaiVanBanID', "d8821afb-76a4-4b24-9fd3-ba1aa84e156d")
                 else:
                     van_ban_data.setdefault('LoaiVanBanID', "550358d9-a68a-4122-89da-6fc7cb6df0df")
                 van_ban_data.setdefault('GiaiDoanID', "AD8D512D-AA6B-4243-B651-A80A1CB59FFC")
                 van_ban_data.setdefault('GiaiDoan', "2")
-            elif loaiVanBan == "QDPDDT_CBDT": # Phê quyệt dự toán chuẩn bị đầu tư
+            elif f"[{loaiVanBan}]" == "[QDPDDT_CBDT]": # Phê quyệt dự toán chuẩn bị đầu tư
                 if van_ban_data.get("DieuChinh") == "1":
                     van_ban_data.setdefault('LoaiVanBanID', "8f4faa5a-9725-4f5f-bf8e-0862569936b3")
                 else:
                     van_ban_data.setdefault('LoaiVanBanID', "ac6e7501-eea1-4546-9195-4e44ade01990")
                 van_ban_data.setdefault('GiaiDoanID', "2BB4A12A-A588-48FC-9BE2-5B99E31F1212")
                 van_ban_data.setdefault('GiaiDoan', "2")
-            elif loaiVanBan == "QDPD_DA": # Phê duyệt dự án
+            elif f"[{loaiVanBan}]" == "[QDPD_DT_THDT]": # Phê quyệt dự toán chuẩn bị đầu tư
+                if van_ban_data.get("DieuChinh") == "1":
+                    van_ban_data.setdefault('LoaiVanBanID', "b4bf9da4-bd66-47e8-97ee-b1669433f62f")
+                else:
+                    van_ban_data.setdefault('LoaiVanBanID', "07b523ba-7e50-405a-95d2-6591a4916289")
+                van_ban_data.setdefault('GiaiDoanID', "76504374-7603-4ED7-9FD4-0991FB9E0830")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[QDPD_DA]": # Phê duyệt dự án
                 if van_ban_data.get("DieuChinh") == "1":
                     van_ban_data.setdefault('LoaiVanBanID', "f20710a1-7ea6-4c4a-9dec-52bea3d37f3d")
                 else:
                     van_ban_data.setdefault('LoaiVanBanID', "4e31610d-31b7-4fbb-b530-c1f97b99e362")
                 van_ban_data.setdefault('GiaiDoanID', "F9C3D581-53B2-4EBE-A223-1E0B4839A45A")
                 van_ban_data.setdefault('GiaiDoan', "3")
-            elif loaiVanBan == "QDPD_KHLCNT_CBDT": # Phê duyệt KHLCNT giai đoạn chuẩn bị đầu tư
+            elif f"[{loaiVanBan}]" == "[QDPD_KHLCNT_CBDT]": # Phê duyệt KHLCNT giai đoạn chuẩn bị đầu tư
                 if van_ban_data.get("DieuChinh") == "1":
                     van_ban_data.setdefault('LoaiVanBanID', "f8f74942-566b-4ae9-b612-855f0fe63127")
                 else:
                     van_ban_data.setdefault('LoaiVanBanID', "7017f242-e957-4e64-8048-3cff04519176")
                 van_ban_data.setdefault('GiaiDoanID', "68B4F3FB-BBB1-45B3-92C1-7456E57CFB9E")
                 van_ban_data.setdefault('GiaiDoan', "2")
-            elif loaiVanBan == "QDPD_KHLCNT_THDT": # Phê duyệt KHLCNT giai đoạn thực hiện dự án
+            elif f"[{loaiVanBan}]" == "[QDPD_KHLCNT_THDT]": # Phê duyệt KHLCNT giai đoạn thực hiện dự án
                 if van_ban_data.get("DieuChinh") == "1":
                     van_ban_data.setdefault('LoaiVanBanID', "93559dce-aa92-4b2c-93b5-b36f566fb1a2")
                 else:
                     van_ban_data.setdefault('LoaiVanBanID', "b38eb6d6-ecb5-418d-9f2f-60469ed5fcf1")
                 van_ban_data.setdefault('GiaiDoanID', "7BAE2A20-4377-4DE5-87B6-C905C955A882")
                 van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[QDPD_KQLCNT_CBDT]": # Phê duyệt KQLCNT giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "DC93EA8C-78C5-43C4-BCFF-5BDD92F1A615")
+                van_ban_data.setdefault('GiaiDoanID', "7811B145-D396-4CE8-8D82-1A0C9C6215CE")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            elif f"[{loaiVanBan}]" == "[QDPD_KQLCNT_THDT]": # Phê duyệt KQLCNT giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "40A3C05A-EC69-4DF2-BD25-35040DBEB60A")
+                van_ban_data.setdefault('GiaiDoanID', "DB41D788-140E-42B0-8533-BC2B68D17C1E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[HOP_DONG]": # Hợp đồng giai đoạn thực hiện dự án
+                van_ban_data.setdefault('LoaiVanBanID', "3F278B7B-6E81-4480-BFC6-80885DAEAFF1")
+                van_ban_data.setdefault('GiaiDoanID', "B0F363A5-3421-4439-B7E7-52452178E21E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[PL_HOP_DONG]": # Phụ lục hợp đồng giai đoạn thực hiện đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "750CAD7D-BAED-4F61-988A-824B1AF8B0CA")
+                van_ban_data.setdefault('GiaiDoanID', "A6671AF3-F6C3-436B-85BE-71A0BEC3E2F5")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[KLCVHT_THD]": # Bảng xác nhận KLCV hoàn thành thông qua hợp đồng giai đoạn thực hiện đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "1BB503D3-79C0-48BE-818A-2D8D3F71EF20")
+                van_ban_data.setdefault('GiaiDoanID', "DF70801A-78BE-431D-86D7-4ACFD882B20E")
+                van_ban_data.setdefault('GiaiDoan', "3")
+            elif f"[{loaiVanBan}]" == "[KLCVHT_NHD]": # Bảng xác nhận KLCV hoàn thành thông qua hợp đồng giai đoạn chuẩn bị đầu tư
+                van_ban_data.setdefault('LoaiVanBanID', "D3956185-6DF4-4DEE-BF5C-F6B89416BD91")
+                van_ban_data.setdefault('GiaiDoanID', "748EFF1A-3FCE-4E67-BBB4-F5486E1980C1")
+                van_ban_data.setdefault('GiaiDoan', "2")
+            # [GIAI_NGAN_DNTT]	13. Giải ngân (Giấy đề nghị thanh toán vốn 04.a/TT)
+            # [GIAI_NGAN_GRV]	14. Giải ngân (Giấy rút vốn 05/TT)
+            # [GIAI_NGAN_THV]	15. Giải ngân (Giấy đề nghị thu hồi vốn 04.b/TT)
+            elif f"[{loaiVanBan}]" == "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
+                van_ban_data.setdefault('GiaiDoanID', "5E1E0E80-4712-4A9F-A591-CEB87062C04E") #Giải ngân thông qua hợp đồng GĐTHĐT
+                van_ban_data.setdefault('GiaiDoan', "3")
             else: # Ngược lại
                 van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
                 van_ban_data.setdefault('GiaiDoanID', "00000000-0000-0000-0000-000000000000")
                 van_ban_data.setdefault('GiaiDoan', "")
+            
+            # Đảm bảo các trường cơ bản luôn có giá trị mặc định nếu chưa được cung cấp
+            # (Những trường này có trong ví dụ `van_ban_data` ban đầu của bạn)
+            van_ban_data.setdefault('VanBanAIID', str(uuid.uuid4())) # Đảm bảo có ID nếu chưa có
+            van_ban_data.setdefault('SoVanBan', "")
+            # NgayKy đã được xử lý ở trên
+            # NgayHieuLuc, NgayKetThuc đã được xử lý ở trên
+            van_ban_data.setdefault('NguoiKy', "")
+            van_ban_data.setdefault('ChucDanhNguoiKy', "")
+            van_ban_data.setdefault('TrichYeu', "")
+            van_ban_data.setdefault('CoQuanBanHanh', "")
+            van_ban_data.setdefault('NgayThaotac', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            van_ban_data.setdefault('TenLoaiVanBan', loaiVanBan) # Giả sử loaiVanBan là tên
+            # LoaiVanBanID, GiaiDoanID, GiaiDoan đã được xử lý trong khối if/elif ở trên
             van_ban_data.setdefault('DuAnID', "00000000-0000-0000-0000-000000000000")
-            van_ban_data.setdefault('JsonAI', "")
+            van_ban_data.setdefault('DieuChinh', "0") # Giá trị mặc định từ ví dụ
+            van_ban_data.setdefault('JsonAI', json.dumps({}, ensure_ascii=False)) # Mặc định JSON rỗng
             van_ban_data.setdefault('DataOCR', "")
             van_ban_data.setdefault('TenFile', "")
-            van_ban_data.setdefault('CoQuanBanHanh', "")
-            
-            # Execute query
-            try:
-                db.execute(insert_van_ban_query, van_ban_data)
-                db.commit()
+            # UserID và DonViID nên được truyền vào và không nên có giá trị mặc định ở đây trừ khi có yêu cầu cụ thể
+            # van_ban_data.setdefault('UserID', None) 
+            # van_ban_data.setdefault('DonViID', None)
 
+
+            # Xây dựng câu lệnh INSERT động
+            # Lấy danh sách các cột từ keys của van_ban_data sau khi đã xử lý
+            # QUAN TRỌNG: Đảm bảo rằng tất cả các keys trong van_ban_data đều là tên cột hợp lệ trong bảng VanBanAI
+            # Nếu không, câu lệnh SQL sẽ bị lỗi.
+            # Một cách an toàn hơn là có một danh sách các cột được phép và chỉ lấy các keys có trong danh sách đó.
+            # Tuy nhiên, theo yêu cầu "chạy động cột theo van_ban_data", chúng ta sẽ dùng tất cả keys.
+            
+            columns = []
+            placeholders = []
+            
+            # Lọc ra các giá trị None để không đưa vào câu lệnh INSERT nếu không muốn
+            # Hoặc bạn có thể để chúng được chèn dưới dạng NULL vào DB nếu cột cho phép NULL
+            final_van_ban_data_for_sql = {}
+            for key, value in van_ban_data.items():
+                # Ở đây bạn có thể quyết định có muốn loại bỏ các trường có giá trị None hay không
+                # Ví dụ: if value is not None:
+                # Tuy nhiên, nếu cột trong DB cho phép NULL, việc gửi None là chấp nhận được.
+                # Hiện tại, chúng ta sẽ bao gồm tất cả các key có trong van_ban_data.
+                columns.append(key)
+                placeholders.append(f":{key}")
+                final_van_ban_data_for_sql[key] = value
+
+            if not columns: # Nếu không có cột nào (trường hợp hiếm)
+                 return {
+                    "success": False,
+                    "message": "Không có dữ liệu để thêm vào văn bản AI.",
+                }
+
+            insert_van_ban_ai_query_str = f"""
+                INSERT INTO VanBanAI (
+                    {', '.join(columns)}
+                ) VALUES (
+                    {', '.join(placeholders)}
+                )
+            """
+            insert_van_ban_ai_query = text(insert_van_ban_ai_query_str)
+            
+            # Thực thi câu lệnh query
+            try:
+                db.execute(insert_van_ban_ai_query, final_van_ban_data_for_sql)
+                # In ra dữ liệu trước khi insert vào VanBanAI
+                print("INSERT INTO VanBanAI (" + ", ".join(columns) + ") VALUES (" + ", ".join([f"'{str(value)}'" if isinstance(value, str) else str(value) for value in final_van_ban_data_for_sql.values()]) + ")")
+                db.commit()
             except Exception as e:
                 db.rollback()
                 return {
                     "success": False,
-                    "message": "Lỗi khi thực hiện insert vào database",
-                    "error": str(e)
+                    "message": "Lỗi khi thực hiện insert vào database VanBanAI",
+                    "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}",
+                    "query": insert_van_ban_ai_query_str, # Thêm câu query để debug
+                    "data_sent": final_van_ban_data_for_sql # Thêm data đã gửi để debug
                 }
             
             return {
                 "success": True,
-                "message": "Thêm văn bản thành công",
-                "van_ban_id": van_ban_data["VanBanAIID"]
+                "message": "Thêm văn bản AI thành công",
+                "van_ban_id": final_van_ban_data_for_sql.get("VanBanAIID") # Lấy ID từ dữ liệu đã được chèn
+            }
+            
+        except Exception as e:
+            # db.rollback() # Rollback ở đây có thể không cần thiết nếu đã rollback ở inner try-except
+            return {
+                "success": False,
+                "message": "Lỗi xử lý chung khi thêm văn bản AI",
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
+            }
+
+    @staticmethod
+    async def insert_bang_du_lieu_chi_tiet_ai(
+        db: Session, 
+        chi_tiet_data: List[Dict[str, Any]],
+        required_columns: List[str]
+    ) -> Dict[str, Any]:
+        try:
+            if not chi_tiet_data:
+                return {
+                    "success": True,
+                    "message": "Không có chi tiết để thêm"
+                }
+
+            # Build dynamic SQL query based on required columns
+            columns = ["BangDuLieuChiTietAIID", "VanBanAIID"] + required_columns
+            placeholders = [f":{col}" for col in columns]
+            
+            insert_chi_tiet_query_str = f"""
+                INSERT INTO BangDuLieuChiTietAI (
+                    {', '.join(columns)}
+                ) VALUES (
+                    {', '.join(placeholders)}
+                )
+            """
+            insert_chi_tiet_query = text(insert_chi_tiet_query_str)
+
+            for chi_tiet_item in chi_tiet_data: # Đổi tên biến để tránh trùng lặp
+                # Generate a new UUID for each record
+                current_item_data = chi_tiet_item.copy() # Làm việc trên bản sao để không thay đổi dữ liệu gốc
+                current_item_data['BangDuLieuChiTietAIID'] = str(uuid.uuid4())
+                
+                # Convert numeric values to float
+                for col in required_columns:
+                    if (col.startswith('GiaTri') or col.startswith('SoTien')) and current_item_data.get(col):
+                        try:
+                            current_item_data[col] = convert_currency_to_int(str(current_item_data[col]))
+                        except: # Bắt lỗi cụ thể hơn nếu có thể, ví dụ ValueError
+                            current_item_data[col] = 0 # Hoặc None, hoặc log lỗi
+                
+                # Execute the query
+                # print("insert_chi_tiet_query")
+                # print(insert_chi_tiet_query_str)
+                # print("chi_tiet_item_data")
+                # print(current_item_data)
+                db.execute(insert_chi_tiet_query, current_item_data)
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "Thêm chi tiết vào BangDuLieuChiTietAI thành công"
             }
             
         except Exception as e:
             db.rollback()
             return {
                 "success": False,
-                "message": "Lỗi khi thêm văn bản",
-                "error": str(e)
+                "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
+
 
     @staticmethod
     async def insert_bang_du_lieu_chi_tiet_ai(
@@ -214,13 +379,17 @@ class DatabaseService:
                 
                 # Convert numeric values to float
                 for col in required_columns:
-                    if col.startswith('GiaTri') and chi_tiet.get(col):
+                    if (col.startswith('GiaTri') or col.startswith('SoTien')) and chi_tiet.get(col):
                         try:
-                            chi_tiet[col] = convert_currency_to_float(str(chi_tiet[col]))
+                            chi_tiet[col] = convert_currency_to_int(str(chi_tiet[col]))
                         except:
                             chi_tiet[col] = 0
                 
                 # Execute the query
+                print("insert_chi_tiet_query")
+                print(insert_chi_tiet_query)
+                print("chi_tiet")
+                print(chi_tiet)
                 db.execute(insert_chi_tiet_query, chi_tiet)
             
             db.commit()
@@ -235,7 +404,7 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi thêm chi tiết vào BangDuLieuChiTietAI",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             }
 
     @staticmethod
@@ -280,5 +449,5 @@ class DatabaseService:
             return {
                 "success": False,
                 "message": "Lỗi khi lưu dữ liệu",
-                "error": str(e)
+                "error": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
             } 
