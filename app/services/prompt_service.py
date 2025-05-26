@@ -26,26 +26,43 @@ class PromptService:
                         
                     ky_hieu = ky_hieu_match.group(1)
                     prompt = section.strip()
-                    prompt = """Bạn là GPT-4 Vision, một AI có khả năng đọc hiểu bảng biểu từ hình ảnh scan. Hãy đọc nội dung trên hình ảnh văn bản hoặc file PDF được cung cấp và trích xuất thông tin theo 2 phần sau:
-------------------------------------------------------
-| Mã  |Tên khoản mục chi phí                         |
-|-----|----------------------------------------------|
-|`CP1`|Chi phí bồi thường, hỗ trợ, tái định cư       |
-|`CP2`|Chi phí xây dựng hoặc xây lắp                 |
-|`CP3`|Chi phí thiết bị                              |
-|`CP4`|Chi phí quản lý dự án                         |
-|`CP5`|Chi phí tư vấn đầu tư xây dựng                |
-|`CP6`|Chi phí khác                                  |
-|`CP7`|Chi phí dự phòng                              |
-------------------------------------------------------
-|  Mã |Loại công trình                               |
-|-----|----------------------------------------------|
-| `1` |Công trình dân dụng                           |
-| `2` |Công trình công nghiệp                        |
-| `3` |Công trình giao thông                         |
-| `4` |Công trình nông nghiệp và phát triển nông thôn|
-| `5` |Công trình hạ tầng kỹ thuật                   |
-""" + prompt
+                    prompt = """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới:
+
+""" + prompt + """
+🎯 Yêu cầu: 
+1. Trích **chính xác tên cơ quan trực tiếp ban hành văn bản** theo các quy tắc sau:
+* Nếu văn bản có:
+  * Dòng 1 là cơ quan chủ quản (VD: “UBND TỈNH...”)
+  * Dòng 2 là tên địa phương (VD: “HUYỆN...”)
+  * Dòng 3 là đơn vị trực thuộc (VD: “BAN QLDA...”)
+    → **Chỉ lấy dòng 3** làm cơ quan ban hành.
+* Nếu chỉ có 1 dòng hoặc 2 dòng mà không có đơn vị trực thuộc → có thể ghép lại (VD: “ỦY BAN NHÂN DÂN HUYỆN ...”).
+✅ Không bao giờ lấy cơ quan chủ quản nếu có đơn vị cấp dưới trực tiếp ký văn bản.
+
+2. Trích **SoVanBan**, **SoVanBanCanCu** hoặc **TrichYeu** đúng chính xác, giữ nguyên ký hiệu đầy đủ, bao gồm dấu tiếng Việt. Đặc biệt:
+🔒 Bắt buộc giữ nguyên các chữ viết tắt có dấu trong số hiệu văn bản, gồm:
+- **"QĐ"** - viết tắt của "Quyết định"
+- **"HĐND"** - viết tắt của "Hội đồng nhân dân"
+- **"HĐ"** - viết tắt của "Hợp đồng" hoặc "Hội đồng"
+- **"TĐ"** - viết tắt của "Thẩm định"
+- **"HĐTĐ"** - viết tắt của "Hội đồng thẩm định"
+- Các từ viết tắt khác có chữ **"Đ"**, **không được chuyển thành "D"**
+
+3. Kết quả xuất ra dạng JSON duy nhất có dạng
+```
+{
+    "ThongTinChung": {
+        "tên cột": "giá trị"
+    },
+    "BangDuLieu": [
+        {
+            "tên cột": "giá trị"
+        }
+        ...
+    ]
+}
+```
+"""
                     # Trích xuất các cột bắt buộc dựa trên ky_hieu
                     required_columns = self._get_required_columns(ky_hieu)
                     # print("=====required_columns=====")

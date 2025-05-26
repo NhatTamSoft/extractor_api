@@ -1,8 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, Form, Header
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel
 import os
-import google.generativeai as genai
 import base64
 from io import BytesIO
 from PIL import Image
@@ -26,19 +25,19 @@ import re
 from app.services.DungChung import encode_image_to_base64 
 from openai import OpenAI
 from unidecode import unidecode
+from azure.ai.formrecognizer import DocumentAnalysisClient
+from azure.core.credentials import AzureKeyCredential
+import tempfile
+import fitz  # PyMuPDF for PDF processing
+import traceback
+import PIL
 
 # Load biến môi trường từ file .env
 load_dotenv()
 
 router = APIRouter()
 
-# Cấu hình API keys từ biến môi trường
-genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-
 model_openai = os.getenv('MODEL_API_OPENAI')
-
-# Khởi tạo models
-model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
 # Khởi tạo PromptService
 prompt_service = PromptService()
@@ -56,8 +55,21 @@ ALLOWED_IMAGE_TYPES = {
     'image/webp'
 }
 
+ALLOWED_PDF_TYPE = 'application/pdf'
+
+# Azure Form Recognizer configuration
+AZURE_ENDPOINT = os.getenv('AZURE_FORM_RECOGNIZER_ENDPOINT')
+AZURE_KEY = os.getenv('AZURE_FORM_RECOGNIZER_KEY')
+
+# Initialize Azure client
+azure_client = DocumentAnalysisClient(AZURE_ENDPOINT, AzureKeyCredential(AZURE_KEY))
+
 class MultiImageExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
+
+class DocumentExtractRequest(BaseModel):
+    file_type: str  # 'image' or 'pdf'
+    pages: Optional[List[int]] = None  # For PDF, specify which pages to process
 
 @router.post("/image_extract_multi")
 async def extract_multiple_images(
@@ -114,6 +126,7 @@ async def extract_multiple_images(
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
         print("======================prompt==================")
         print(prompt)
+        print("======================end prompt==================")
         #return
         # Process each file
         temp_files = []
@@ -163,6 +176,10 @@ async def extract_multiple_images(
             # Thêm hình ảnh vào messages
             messages = [
                 {
+                    "role": "system",
+                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
+                },
+                {
                     "role": "user",
                     "content": content_parts
                 }
@@ -184,10 +201,30 @@ async def extract_multiple_images(
                 response_text = response_text.strip()[7:-3].strip()
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
-            print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
-            print(response_text)
-            #return
-            # Nếu AI trả về lỗi rõ ràng
+
+            # Gọi Gemini API
+            # try:
+            #     response = model.generate_content(content_parts)
+            #     response_text = response.text.strip()
+                
+            #     if response_text.strip().startswith("```json"):
+            #         response_text = response_text.strip()[7:-3].strip()
+            #     elif response_text.strip().startswith("```"):
+            #         response_text = response_text.strip()[3:-3].strip()
+                
+            #     print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
+            #     print(response_text)
+            # except Exception as e:
+            #     return JSONResponse(
+            #         status_code=500,
+            #         content={
+            #             "status": "error",
+            #             "code": 500,
+            #             "message": "Lỗi khi xử lý ảnh",
+            #             "detail": str(e)
+            #         }
+            #     )
+            # Xử lý response từ Gemini
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
                     status_code=400,
@@ -232,16 +269,18 @@ async def extract_multiple_images(
             # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
             missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
             if missing_fields:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "code": 400,
-                        "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
-                        "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
-                        "missing_fields": missing_fields
-                    }
-                )
+                # return JSONResponse(
+                #     status_code=400,
+                #     content={
+                #         "status": "error",
+                #         "code": 400,
+                #         "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
+                #         "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                #         "missing_fields": missing_fields
+                #     }
+                # )
+                print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
+                print(f"Thiếu các trường: {', '.join(missing_fields)}")
 
             # Set UUIDs in the response data
             data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
@@ -250,14 +289,20 @@ async def extract_multiple_images(
             # Convert currency values in the response
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
-                    item["VanBanID"] = van_ban_id
-                    # Convert all numeric values based on required columns
-                    for col in required_columns:
-                        if (col.startswith('GiaTri') or col.startswith('SoTien')) and item.get(col):
-                            try:
+                    try:
+                        print("Kiểm tra van_ban_id: ", van_ban_id)
+                        item["VanBanID"] = van_ban_id
+                        # Convert all numeric values based on required columns
+                        for col in required_columns:
+                            print("Cột kiểm tra:", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien')):
                                 item[col] = convert_currency_to_int(str(item[col]))
-                            except:
-                                item[col] = 0
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                        print(f"\033[31m- Item gây lỗi: {json.dumps(item, ensure_ascii=False, indent=2)}\033[0m")
+            
             # dữ liệu mặc định
             van_ban_data = {
                 "VanBanAIID": van_ban_id,
@@ -337,8 +382,6 @@ async def extract_multiple_images(
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
             elif  f"[{loaiVanBan}]" in "[HOP_DONG]":
-                _LoaiVanBanID = "3F278B7B-6E81-4480-BFC6-80885DAEAFF1"
-                _GiaiDoan = "3"
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -356,9 +399,7 @@ async def extract_multiple_images(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "LoaiVanBanID": _LoaiVanBanID,
                     "GiaiDoanID": "",
-                    "GiaiDoan": _GiaiDoan,
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
@@ -367,9 +408,106 @@ async def extract_multiple_images(
                     "UserID": user_id,
                     "DonViID": don_vi_id
                 }
-
+            elif  f"[{loaiVanBan}]" in "[PL_HOP_DONG]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""), # Tương đương Số phụ lục hợp đồng
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""), # Tương đương Số hợp đồng (gốc)
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[KLCVHT_THD]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "LanThanhToan": data_json["ThongTinChung"].get("LanThanhToan", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTriHopDong": data_json["ThongTinChung"].get("GiaTriHopDong", "0"),
+                    "TamUngChuaThuaHoi": data_json["ThongTinChung"].get("TamUngChuaThuaHoi", "0"),
+                    "ThanhToanDenCuoiKyTruoc": data_json["ThongTinChung"].get("ThanhToanDenCuoiKyTruoc", "0"),
+                    "LuyKeDenCuoiKy": data_json["ThongTinChung"].get("LuyKeDenCuoiKy", "0"),
+                    "ThanhToanThuHoiTamUng": data_json["ThongTinChung"].get("ThanhToanThuHoiTamUng", "0"),
+                    "GiaiNganKyNay": data_json["ThongTinChung"].get("GiaiNganKyNay", "0"),
+                    "TamUngGiaiNganKyNayKyTruoc": data_json["ThongTinChung"].get("TamUngGiaiNganKyNayKyTruoc", "0"),
+                    "ThanhToanKLHTKyTruoc": data_json["ThongTinChung"].get("ThanhToanKLHTKyTruoc", "0"),
+                    "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
+                    "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
+                    "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+            
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
             van_ban_data["UserID"] = user_id
             van_ban_data["DonViID"] = don_vi_id
+
+            
 
             db_service = DatabaseService()
             result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
@@ -386,50 +524,13 @@ async def extract_multiple_images(
                 )
 
             # Insert BangDuLieu data if it exists
-            if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
+            if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
                 bang_du_lieu_data = []
                 for item in data_json["BangDuLieu"]:
                     bang_du_lieu_data.append({
                         "VanBanAIID": van_ban_id,
                         **{col: item.get(col, 0) for col in required_columns}
                     })
-                #print("insert_bang_du_lieu_chi_tiet_ai=============")
-                #print(bang_du_lieu_data)
-                # Danh sách các khoản mục chi phí cần kiểm tra
-                # kmcp_list = [
-                #     "Chi phí bồi thường, hỗ trợ, tái định cư",
-                #     "Chi phí xây dựng hoặc xây lắp",
-                #     "Chi phí thiết bị", 
-                #     "Chi phí quản lý dự án",
-                #     "Chi phí tư vấn đầu tư xây dựng",
-                #     "Chi phí khác",
-                #     "Chi phí dự phòng"
-                # ]
-
-                # Lọc và xóa các dòng thỏa mãn điều kiện
-                # filtered_data = []
-                # for i in range(len(bang_du_lieu_data)):
-                #     current_row = bang_du_lieu_data[i]
-                #     current_kmcp = current_row.get("TenKMCP", "")
-                    
-                #     # Kiểm tra nếu TenKMCP chứa trong danh sách kmcp_list
-                #     if any(kmcp in current_kmcp for kmcp in kmcp_list):
-                #         # Kiểm tra dòng tiếp theo
-                #         if i < len(bang_du_lieu_data) - 1:
-                #             next_row = bang_du_lieu_data[i + 1]
-                #             next_kmcp = next_row.get("TenKMCP", "")
-                            
-                #             # Nếu TenKMCP của dòng tiếp theo khác với dòng hiện tại
-                #             if next_kmcp != current_kmcp:
-                #                 continue  # Bỏ qua dòng hiện tại
-                    
-                #     filtered_data.append(current_row)
-
-                # # Cập nhật lại bang_du_lieu_data với dữ liệu đã lọc
-                # bang_du_lieu_data = filtered_data
-                # print("insert_bang_du_lieu_chi_tiet_ai=============")
-                # print(bang_du_lieu_data)
-                # print(required_columns)
                 bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
                     db, 
                     bang_du_lieu_data,
@@ -445,7 +546,8 @@ async def extract_multiple_images(
                             "detail": bang_du_lieu_result.get("error", "Unknown error")
                         }
                     )
-
+            else:
+                print("Văn bản này không có chi tiết bảng dữ liệu")
             # After successful processing and database operations
             try:
                 # Get QLDA upload URL from environment
@@ -536,7 +638,7 @@ async def extract_multiple_images(
                     "status": "error",
                     "code": 400,
                     "message": "Lỗi khi xử lý ảnh",
-                    "detail": str(e)
+                    "detail": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
                 }
             )
     except Exception as e:
@@ -553,6 +655,245 @@ async def extract_multiple_images(
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+
+@router.post("/image_extract_multi_azure")
+async def extract_multiple_images_azure(
+    files: List[UploadFile] = File(...),
+    authorization: str = Header(...)
+):
+    # Load require_fields from Markdown file
+    try:
+        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Parse markdown content to extract field information
+        require_fields = []
+        current_field = None
+        
+        for line in content.split('\n'):
+            # Check for field headers (## number. fieldName)
+            if line.startswith('## '):
+                if current_field:
+                    require_fields.append(current_field)
+                field_name = line.split('. ')[1].strip()
+                current_field = {
+                    "tenTruong": field_name,
+                    "moTa": "",
+                    "extractionRules": {}
+                }
+            # Check for description
+            elif line.startswith('**Mô tả:**'):
+                if current_field:
+                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
+            # Check for extraction rules
+            elif line.startswith('**Quy tắc trích xuất:**'):
+                continue
+            # Check for rule items
+            elif line.startswith('- **'):
+                if current_field:
+                    key = line.split('**')[1].replace(':**', '').strip()
+                    value = line.split(':**')[1].strip()
+                    current_field["extractionRules"][key] = value
+            # Check for mapping tables
+            elif '| Mã | Giá trị |' in line:
+                if current_field:
+                    mapping = {}
+                    # Skip header and separator lines
+                    continue
+            elif line.startswith('  | '):
+                if current_field and 'mapping' not in current_field["extractionRules"]:
+                    current_field["extractionRules"]["mapping"] = {}
+                parts = line.strip().split('|')
+                if len(parts) >= 3:
+                    code = parts[1].strip()
+                    value = parts[2].strip()
+                    current_field["extractionRules"]["mapping"][code] = value
+                    
+        # Add the last field
+        if current_field:
+            require_fields.append(current_field)
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi đọc file require_fields.md",
+                "detail": str(e)
+            }
+        )
+
+    # Print raw file data
+    print("\n=== Raw File Data ===")
+    for file in files:
+        print(f"\nFile: {file.filename}")
+        print(f"Content Type: {file.content_type}")
+        content = await file.read()
+        print(f"Size: {len(content)} bytes")
+        await file.seek(0)  # Reset file pointer
+    print("\n=== End Raw File Data ===\n")
+
+    # Initialize combined data
+    combined_data = {}
+
+    # Process each file
+    for file in files:
+        try:
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_file.flush()
+
+                # Initialize the client
+                endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
+                key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+                document_analysis_client = DocumentAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
+
+                # Start the document analysis
+                with open(temp_file.name, "rb") as f:
+                    poller = document_analysis_client.begin_analyze_document(
+                        "prebuilt-layout", document=f
+                    )
+                result = poller.result()
+
+                # Print OCR text content
+                print("\n=== Azure Form Recognizer OCR Text ===")
+                print(f"\nDocument: {temp_file.name}")
+                
+                # Collect all text content
+                full_text = ""
+                for page in result.pages:
+                    full_text += f"\nPage {page.page_number}:\n"
+                    for line in page.lines:
+                        full_text += line.content + "\n"
+                
+                print(full_text)
+                print("\n=== End OCR Text ===\n")
+
+                # Use OpenAI to map text to required fields
+                try:
+                    # Prepare the prompt for OpenAI
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"""
+                                    Extract and map information from the following OCR text to the specified fields.
+                                    Return ONLY a JSON object with the following structure:
+                                    {{
+                                        "docId": "string or null",
+                                        "arcDocCode": "string or null",
+                                        "maintenance": "string or null",
+                                        "typeName": "string or null",
+                                        "codeNumber": "string or null",
+                                        "codeNotation": "string or null",
+                                        "issuedDate": "string or null",
+                                        "organName": "string or null",
+                                        "subject": "string or null",
+                                        "language": "string or null",
+                                        "numberOfPage": "string or null",
+                                        "inforSign": "string or null",
+                                        "keyword": "string or null",
+                                        "mode": "string or null",
+                                        "confidenceLevel": "string or null",
+                                        "autograph": "string or null",
+                                        "format": "string or null",
+                                        "process": "string or null",
+                                        "riskRecovery": "string or null",
+                                        "riskRecoveryStatus": "string or null",
+                                        "description": "string or null",
+                                        "SignerTitle": "string or null",
+                                        "SignerName": "string or null"
+                                    }}
+
+                                    Field definitions and extraction rules:
+                                    {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                                    General rules:
+                                    1. Look for information based on the extraction rules specified in the field definition
+                                    2. Pay attention to the location hints in the rules
+                                    3. Use the provided keywords to identify relevant information
+                                    4. Follow the specified format requirements
+                                    5. Use the mapping tables when provided
+                                    6. Use default values when specified
+                                    7. Set to null if information cannot be found
+                                    8. For dates, use DD/MM/YYYY format
+                                    9. For numbers, remove thousand separators
+
+                                    OCR Text:
+                                    {full_text}
+
+                                    Remember: Return ONLY the JSON object, no other text or explanation.
+                                    """
+                                }
+                            ]
+                        }
+                    ]
+
+                    # Call OpenAI API
+                    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=messages,
+                        max_tokens=4000,
+                        temperature=0,  # Set temperature to 0 for more consistent output
+                        response_format={"type": "json_object"}  # Force JSON response
+                    )
+
+                    # Process response from OpenAI
+                    response_text = response.choices[0].message.content.strip()
+                    
+                    # Clean up response text
+                    if response_text.strip().startswith("```json"):
+                        response_text = response_text.strip()[7:-3].strip()
+                    elif response_text.strip().startswith("```"):
+                        response_text = response_text.strip()[3:-3].strip()
+
+                    print("\n=== Mapped Fields ===")
+                    print(response_text)
+                    print("=== End Mapped Fields ===\n")
+
+                    try:
+                        # Parse the response
+                        mapped_data = json.loads(response_text)
+                        
+                        # Validate required fields
+                        required_fields_list = [field["tenTruong"] for field in require_fields]
+                        for field in required_fields_list:
+                            if field not in mapped_data:
+                                mapped_data[field] = None
+                        
+                        # Update combined data with mapped fields
+                        for field, value in mapped_data.items():
+                            if field not in combined_data or combined_data[field] is None:
+                                combined_data[field] = value
+                            elif value is not None:
+                                combined_data[field] = value
+
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing JSON response: {str(e)}")
+                        print(f"Raw response: {response_text}")
+                        raise Exception("Invalid JSON response from OpenAI")
+
+                except Exception as e:
+                    print(f"Error in OpenAI mapping: {str(e)}")
+
+        except Exception as e:
+            print(f"Error processing file {file.filename}: {str(e)}")
+
+    # Return combined data
+    return {
+        "status": "success",
+        "data": combined_data
+    }
 
 @router.get("/standardized_data")
 async def standardized_data(
@@ -1054,4 +1395,697 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 "detail": str(e)
             }
         )
+
+@router.post("/image_extract_multi_azure_gemini")
+async def extract_multiple_images_azure_gemini(
+    files: List[UploadFile] = File(...)
+):
+    # Load require_fields from JSON file
+    try:
+        with open('data/require_fields.json', 'r', encoding='utf-8') as f:
+            require_fields = json.load(f)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi đọc file require_fields.json",
+                "detail": str(e)
+            }
+        )
+
+    # Print raw file data
+    print("\n=== Raw File Data ===")
+    for file in files:
+        print(f"\nFile: {file.filename}")
+        print(f"Content Type: {file.content_type}")
+        content = await file.read()
+        print(f"Size: {len(content)} bytes")
+        await file.seek(0)  # Reset file pointer
+    print("\n=== End Raw File Data ===\n")
+
+    # Initialize combined data
+    combined_data = {}
+        
+    # Process each file
+    for file in files:
+        try:
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_file.flush()
+
+                # Initialize the client
+                endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
+                key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+                document_analysis_client = DocumentAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
+
+                # Start the document analysis
+                with open(temp_file.name, "rb") as f:
+                    poller = document_analysis_client.begin_analyze_document(
+                        "prebuilt-layout", document=f
+                    )
+                result = poller.result()
+
+                # Print OCR text content
+                print("\n=== Azure Form Recognizer OCR Text ===")
+                print(f"\nDocument: {temp_file.name}")
+                
+                # Collect all text content
+                full_text = ""
+                for page in result.pages:
+                    full_text += f"\nPage {page.page_number}:\n"
+                    for line in page.lines:
+                        full_text += line.content + "\n"
+                
+                print(full_text)
+                print("\n=== End OCR Text ===\n")
+
+                # Use Gemini to map text to required fields
+                try:
+                    # Prepare the prompt for Gemini
+                    prompt = f"""
+                    Extract and map information from the following OCR text to the specified fields.
+                    Return ONLY a JSON object with the following structure:
+                    {{
+                        "docId": "string or null",
+                        "arcDocCode": "string or null",
+                        "maintenance": "string or null",
+                        "typeName": "string or null",
+                        "codeNumber": "string or null",
+                        "codeNotation": "string or null",
+                        "issuedDate": "string or null",
+                        "organName": "string or null",
+                        "subject": "string or null",
+                        "language": "string or null",
+                        "numberOfPage": "string or null",
+                        "inforSign": "string or null",
+                        "keyword": "string or null",
+                        "mode": "string or null",
+                        "confidenceLevel": "string or null",
+                        "autograph": "string or null",
+                        "format": "string or null",
+                        "process": "string or null",
+                        "riskRecovery": "string or null",
+                        "riskRecoveryStatus": "string or null",
+                        "description": "string or null",
+                        "SignerTitle": "string or null",
+                        "SignerName": "string or null"
+                    }}
+
+                    Field definitions and extraction rules:
+                    {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                    General rules:
+                    1. Look for information based on the extraction rules specified in the field definition
+                    2. Pay attention to the location hints in the rules
+                    3. Use the provided keywords to identify relevant information
+                    4. Follow the specified format requirements
+                    5. Use the mapping tables when provided
+                    6. Use default values when specified
+                    7. Set to null if information cannot be found
+                    8. For dates, use DD/MM/YYYY format
+                    9. For numbers, remove thousand separators
+
+                    OCR Text:
+                    {full_text}
+
+                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    """
+
+                    # Call Gemini API
+                    response = model.generate_content(prompt)
+                    response_text = response.text.strip()
+
+                    print("\n=== Mapped Fields ===")
+                    print(response_text)
+                    print("=== End Mapped Fields ===\n")
+
+                    try:
+                        # Clean up response text
+                        if response_text.strip().startswith("```json"):
+                            response_text = response_text.strip()[7:-3].strip()
+                        elif response_text.strip().startswith("```"):
+                            response_text = response_text.strip()[3:-3].strip()
+
+                        # Parse the response
+                        mapped_data = json.loads(response_text)
+                        
+                        # Validate required fields
+                        required_fields_list = [field["tenTruong"] for field in require_fields]
+                        for field in required_fields_list:
+                            if field not in mapped_data:
+                                mapped_data[field] = None
+                        
+                        # Update combined data with mapped fields
+                        for field, value in mapped_data.items():
+                            if field not in combined_data or combined_data[field] is None:
+                                combined_data[field] = value
+                            elif value is not None:
+                                combined_data[field] = value
+
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing JSON response: {str(e)}")
+                        print(f"Raw response: {response_text}")
+                        raise Exception("Invalid JSON response from Gemini")
+
+                except Exception as e:
+                    print(f"Error in Gemini mapping: {str(e)}")
+
+        except Exception as e:
+            print(f"Error processing file {file.filename}: {str(e)}")
+
+    # Return combined data
+    return {
+        "status": "success",
+        "data": combined_data
+    }
+
+@router.post("/document_extract")
+async def extract_document(
+    files: List[UploadFile] = File(...),
+    file_type: str = Form(...),  # 'image' or 'pdf'
+    pages: Optional[str] = Form(None)  # Comma-separated list of page numbers for PDF
+):
+    """
+    Extract information from documents (images or PDFs) using OpenAI
+    
+    Parameters:
+    - files: List of uploaded files (images or a single PDF)
+    - file_type: Type of document ('image' or 'pdf')
+    - pages: For PDF files, specify which pages to process (comma-separated numbers)
+    """
+    # Validate file type
+    if file_type not in ['image', 'pdf']:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Invalid file type",
+                "detail": "file_type must be either 'image' or 'pdf'"
+            }
+        )
+
+    # Validate files based on type
+    if file_type == 'image':
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"Invalid file type for {file.filename}",
+                        "detail": f"Expected image file, got {file.content_type}"
+                    }
+                )
+    else:  # PDF
+        if len(files) > 1:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Only one PDF file can be uploaded at a time",
+                    "detail": "Multiple files are only allowed for images"
+                }
+            )
+        if files[0].content_type != ALLOWED_PDF_TYPE:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Invalid file type",
+                    "detail": "Expected PDF file"
+                }
+            )
+
+    # Parse pages parameter for PDF
+    selected_pages = None
+    if file_type == 'pdf' and pages:
+        try:
+            selected_pages = [int(p.strip()) for p in pages.split(',')]
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Invalid pages parameter",
+                    "detail": "Pages must be comma-separated numbers"
+                }
+            )
+
+    # Load require_fields from Markdown file
+    try:
+        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Parse markdown content to extract field information
+        require_fields = []
+        current_field = None
+        
+        for line in content.split('\n'):
+            if line.startswith('## '):
+                if current_field:
+                    require_fields.append(current_field)
+                field_name = line.split('. ')[1].strip()
+                current_field = {
+                    "tenTruong": field_name,
+                    "moTa": "",
+                    "extractionRules": {}
+                }
+            elif line.startswith('**Mô tả:**'):
+                if current_field:
+                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
+            elif line.startswith('**Quy tắc trích xuất:**'):
+                continue
+            elif line.startswith('- **'):
+                if current_field:
+                    key = line.split('**')[1].replace(':**', '').strip()
+                    value = line.split(':**')[1].strip()
+                    current_field["extractionRules"][key] = value
+            elif '| Mã | Giá trị |' in line:
+                if current_field:
+                    mapping = {}
+                    continue
+            elif line.startswith('  | '):
+                if current_field and 'mapping' not in current_field["extractionRules"]:
+                    current_field["extractionRules"]["mapping"] = {}
+                parts = line.strip().split('|')
+                if len(parts) >= 3:
+                    code = parts[1].strip()
+                    value = parts[2].strip()
+                    current_field["extractionRules"]["mapping"][code] = value
+                    
+        if current_field:
+            require_fields.append(current_field)
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi đọc file require_fields.md",
+                "detail": str(e)
+            }
+        )
+
+    # Initialize combined data
+    combined_data = {}
+
+    try:
+        if file_type == 'image':
+            # Process each image file
+            for file in files:
+                await process_image_file(file, require_fields, combined_data)
+        else:
+            # Process PDF file
+            await process_pdf_file(files[0], selected_pages, require_fields, combined_data)
+
+        return {
+            "status": "success",
+            "data": combined_data
+        }
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Error processing document",
+                "detail": str(e)
+            }
+        )
+
+async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict):
+    """Process a single image file"""
+    try:
+        # Read file content
+        content = await file.read()
+        
+        # Convert image to base64
+        image_base64 = base64.b64encode(content).decode('utf-8')
+        
+        # Process with OpenAI
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"""
+                            Extract and map information from the following image to the specified fields.
+                            Return ONLY a JSON object with the following structure:
+                            {{
+                                "docId": "string or null",
+                                "arcDocCode": "string or null",
+                                "maintenance": "string or null",
+                                "typeName": "string or null",
+                                "codeNumber": "string or null",
+                                "codeNotation": "string or null",
+                                "issuedDate": "string or null",
+                                "organName": "string or null",
+                                "subject": "string or null",
+                                "language": "string or null",
+                                "numberOfPage": "string or null",
+                                "inforSign": "string or null",
+                                "keyword": "string or null",
+                                "mode": "string or null",
+                                "confidenceLevel": "string or null",
+                                "autograph": "string or null",
+                                "format": "string or null",
+                                "process": "string or null",
+                                "riskRecovery": "string or null",
+                                "riskRecoveryStatus": "string or null",
+                                "description": "string or null",
+                                "SignerTitle": "string or null",
+                                "SignerName": "string or null"
+                            }}
+
+                            Field definitions and extraction rules:
+                            {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+                            """
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=4000,
+            temperature=0,  # Set temperature to 0 for more consistent output
+            response_format={"type": "json_object"}  # Force JSON response
+        )
+
+        # Parse response
+        response_text = response.choices[0].message.content
+        
+        # Clean up response text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
+
+        # Parse JSON response
+        data = json.loads(response_text)
+        
+        # Update combined data
+        for key, value in data.items():
+            if key not in combined_data or not combined_data[key]:
+                combined_data[key] = value
+
+    except Exception as e:
+        raise Exception(f"Error processing image file {file.filename}: {str(e)}")
+
+async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], require_fields: List[Dict], combined_data: Dict):
+    """Process a PDF file"""
+    temp_file_path = None
+    doc = None
+    try:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.flush()
+            temp_file_path = temp_file.name
+
+        # Read PDF pages
+        doc = fitz.open(temp_file_path)
+        total_pages = len(doc)
+
+        if selected_pages is None:
+            selected_pages = list(range(1, total_pages + 1))
+
+        # Process each selected page
+        for page_num in selected_pages:
+            if 1 <= page_num <= total_pages:
+                page = doc.load_page(page_num - 1)
+                
+                # Convert page to image
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
+                
+                # Convert image to base64
+                buffered = BytesIO()
+                img.save(buffered, format="PNG")
+                image_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+                # Process with OpenAI
+                client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"""
+                                    Extract and map information from the following PDF page to the specified fields.
+                                    Return ONLY a JSON object with the following structure:
+                                    {{
+                                        "docId": "string or null",
+                                        "arcDocCode": "string or null",
+                                        "maintenance": "string or null",
+                                        "typeName": "string or null",
+                                        "codeNumber": "string or null",
+                                        "codeNotation": "string or null",
+                                        "issuedDate": "string or null",
+                                        "organName": "string or null",
+                                        "subject": "string or null",
+                                        "language": "string or null",
+                                        "numberOfPage": "string or null",
+                                        "inforSign": "string or null",
+                                        "keyword": "string or null",
+                                        "mode": "string or null",
+                                        "confidenceLevel": "string or null",
+                                        "autograph": "string or null",
+                                        "format": "string or null",
+                                        "process": "string or null",
+                                        "riskRecovery": "string or null",
+                                        "riskRecoveryStatus": "string or null",
+                                        "description": "string or null",
+                                        "SignerTitle": "string or null",
+                                        "SignerName": "string or null"
+                                    }}
+
+                                    Field definitions and extraction rules:
+                                    {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+                                    """
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{image_base64}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens=4000,
+                    temperature=0,  # Set temperature to 0 for more consistent output
+                    response_format={"type": "json_object"}  # Force JSON response
+                )
+
+                # Parse response
+                response_text = response.choices[0].message.content
+                
+                # Clean up response text
+                if response_text.strip().startswith("```json"):
+                    response_text = response_text.strip()[7:-3].strip()
+                elif response_text.strip().startswith("```"):
+                    response_text = response_text.strip()[3:-3].strip()
+
+                # Parse JSON response
+                data = json.loads(response_text)
+                
+                # Update combined data
+                for key, value in data.items():
+                    if key not in combined_data or not combined_data[key]:
+                        combined_data[key] = value
+
+    except Exception as e:
+        raise Exception(f"Error processing PDF file {file.filename}: {str(e)}")
+    finally:
+        # Close the PDF document if it's open
+        if doc:
+            doc.close()
+        
+        # Delete the temporary file if it exists
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
+
+@router.post("/image_extract_azure_mapping")
+async def extract_multiple_images_azure_mapping(
+    files: List[UploadFile] = File(...),
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    temp_files = []
+    try:
+        # Get prompt from prompt service
+        prompt = prompt_service.get_prompt(loaiVanBan)
+        if not prompt:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không tìm thấy prompt cho loại văn bản",
+                    "detail": f"Loại văn bản '{loaiVanBan}' không tồn tại trong hệ thống"
+                }
+            )
+
+        # Process each file
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
+
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_file.flush()
+                temp_files.append(temp_file.name)
+
+        # Process each file with Azure Form Recognizer
+        combined_text = ""
+        for temp_file in temp_files:
+            try:
+                # Extract data with Azure Form Recognizer
+                with open(temp_file, "rb") as f:
+                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
+                    result = poller.result()
+
+                # Collect text and tables
+                for page in result.pages:
+                    for line in page.lines:
+                        combined_text += line.content + "\n"
+
+                # Process tables if any
+                for table in result.tables:
+                    combined_text += "\nBảng:\n"
+                    for row_index in range(table.row_count):
+                        row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
+                        combined_text += " | ".join(row_cells) + "\n"
+
+            except Exception as e:
+                print(f"Error processing file {temp_file}: {str(e)}")
+                continue
+
+        # Process extracted text with OpenAI
+        try:
+            # Prepare messages for OpenAI
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    {prompt}
+
+                    Data extracted from images:
+                    {combined_text}
+
+                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    """
+                }
+            ]
+
+            # Call OpenAI API
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=4096,
+                temperature=0,
+                response_format={"type": "json_object"}
+            )
+
+            # Process response
+            response_text = response.choices[0].message.content.strip()
+            
+            # Clean up response text
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
+
+            # Parse JSON response
+            data = json.loads(response_text)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "code": 200,
+                    "message": "Xử lý văn bản thành công",
+                    "data": data
+                }
+            )
+
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi xử lý văn bản",
+                    "detail": str(e)
+                }
+            )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
+        )
+    finally:
+        # Clean up temporary files
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
 
