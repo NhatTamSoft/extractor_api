@@ -1812,39 +1812,8 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
 
 @router.post("/image_extract_azure_mapping")
 async def extract_multiple_images_azure_mapping(
-    files: List[UploadFile] = File(...),
-    loaiVanBan: Optional[str] = None,
-    authorization: str = Header(...)
+    files: List[UploadFile] = File(...)
 ):
-    # Xác thực token
-    try:
-        if not authorization.startswith("Bearer "):
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "status": "error",
-                    "code": 401,
-                    "message": "Token không hợp lệ",
-                    "detail": "Token phải bắt đầu bằng 'Bearer '"
-                }
-            )
-            
-        token = authorization.split(" ")[1]
-        token_data = decode_jwt_token(token)
-        user_id = token_data["userID"]
-        don_vi_id = token_data["donViID"]
-        
-    except Exception as e:
-        return JSONResponse(
-            status_code=401,
-            content={
-                "status": "error",
-                "code": 401,
-                "message": "Lỗi xác thực",
-                "detail": str(e)
-            }
-        )
-
     temp_files = []
     try:
         # Process each file
@@ -1866,9 +1835,6 @@ async def extract_multiple_images_azure_mapping(
                 temp_file.write(content)
                 temp_file.flush()
                 temp_files.append(temp_file.name)
-
-        # Get prompt from prompt service
-        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
 
         # Process each file with Azure Form Recognizer
         combined_text = ""
@@ -1897,6 +1863,21 @@ async def extract_multiple_images_azure_mapping(
 
         # Process extracted text with OpenAI
         try:
+            # Read prompt_mapping.md content
+            try:
+                with open('data/prompt_mapping.md', 'r', encoding='utf-8') as f:
+                    prompt_mapping = f.read()
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi đọc file prompt_mapping.md",
+                        "detail": str(e)
+                    }
+                )
+
             # Prepare messages for OpenAI
             messages = [
                 {
@@ -1906,32 +1887,9 @@ async def extract_multiple_images_azure_mapping(
                 {
                     "role": "user",
                     "content": f"""
-                    Extract and map information from the following text to the specified fields.
-                    Return ONLY a JSON object with the following structure:
-                    {{
-                        "ThongTinChung": {{
-                            "SoVanBan": "string or null",
-                            "NgayKy": "string or null",
-                            "NguoiKy": "string or null",
-                            "ChucDanhNguoiKy": "string or null",
-                            "CoQuanBanHanh": "string or null",
-                            "TrichYeu": "string or null",
-                            "DieuChinh": "string or null"
-                        }},
-                        "BangDuLieu": [
-                            {{
-                                "TenKMCP": "string",
-                                "GiaTriTMDTKMCP": "number",
-                                "GiaTriTMDTKMCPTang": "number",
-                                "GiaTriTMDTKMCPGiam": "number"
-                            }}
-                        ]
-                    }}
+                    {prompt_mapping}
 
-                    Field definitions and extraction rules:
-                    {prompt}
-
-                    Extracted text:
+                    Data extracted from images:
                     {combined_text}
 
                     Remember: Return ONLY the JSON object, no other text or explanation.
@@ -1944,7 +1902,7 @@ async def extract_multiple_images_azure_mapping(
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
-                max_tokens=4000,
+                max_tokens=4096,
                 temperature=0,
                 response_format={"type": "json_object"}
             )
