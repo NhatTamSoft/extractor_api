@@ -151,6 +151,7 @@ async def extract_multiple_images(
                 }
                 content_parts.append(image_url_object)
                 valid_image_paths.append(image_path)
+
         # print("valid_image_paths")
         # print(valid_image_paths)
         # Get the appropriate prompt based on loaiVanBan
@@ -160,7 +161,7 @@ async def extract_multiple_images(
             messages = [
                 {
                     "role": "system",
-                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
+                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt) tuyệt đối không bịa, không suy diễn, không được đoán, không được làm tròn, không điền bất kỳ nội dung nào khác ngoài văn bản. Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
                 },
                 {
                     "role": "user",
@@ -172,8 +173,18 @@ async def extract_multiple_images(
             response = client.chat.completions.create(
                 model="gpt-4o",  # Hoặc mô hình hỗ trợ xử lý nhiều ảnh khác
                 messages=messages,
+                temperature=0,
                 max_tokens=4000  # Tăng max_tokens nếu cần cho kết quả dài hơn
             )
+            print("\n=== Thông tin client ===")
+            print(f"Model: {response.model}")
+            print(f"ID: {response.id}")
+            print(f"Created: {response.created}")
+            print(f"Finish reason: {response.choices[0].finish_reason}")
+            print(f"Usage - Prompt tokens: {response.usage.prompt_tokens}")
+            print(f"Usage - Completion tokens: {response.usage.completion_tokens}")
+            print(f"Usage - Total tokens: {response.usage.total_tokens}")
+            print("=======================\n")
             #print(response)
             # Xử lý response từ OpenAI
             response_text = response.choices[0].message.content.strip()
