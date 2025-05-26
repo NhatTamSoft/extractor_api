@@ -1941,10 +1941,26 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
 
 @router.post("/image_extract_azure_mapping")
 async def extract_multiple_images_azure_mapping(
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
+    db: Session = Depends(get_db)
 ):
     temp_files = []
     try:
+        # Get prompt from prompt service
+        prompt = prompt_service.get_prompt(loaiVanBan)
+        if not prompt:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không tìm thấy prompt cho loại văn bản",
+                    "detail": f"Loại văn bản '{loaiVanBan}' không tồn tại trong hệ thống"
+                }
+            )
+
         # Process each file
         for file in files:
             if file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -1992,21 +2008,6 @@ async def extract_multiple_images_azure_mapping(
 
         # Process extracted text with OpenAI
         try:
-            # Read prompt_mapping.md content
-            try:
-                with open('data/prompt_mapping.md', 'r', encoding='utf-8') as f:
-                    prompt_mapping = f.read()
-            except Exception as e:
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "status": "error",
-                        "code": 500,
-                        "message": "Lỗi đọc file prompt_mapping.md",
-                        "detail": str(e)
-                    }
-                )
-
             # Prepare messages for OpenAI
             messages = [
                 {
@@ -2016,7 +2017,7 @@ async def extract_multiple_images_azure_mapping(
                 {
                     "role": "user",
                     "content": f"""
-                    {prompt_mapping}
+                    {prompt}
 
                     Data extracted from images:
                     {combined_text}
