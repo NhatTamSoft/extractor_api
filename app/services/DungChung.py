@@ -674,3 +674,4 @@ def LayMaDoiTuong(don_vi_id: str, user_id: str, ten_toi_tuong: str, la_ca_nhan: 
     """
     thuc_thi_truy_van(query_insert)    
     return doi_tuong_id
+

@@ -344,7 +344,7 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.a/TT"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "KLCVHT_THD"
-`SoVanBan`: Số biên bản nghiệm thu (trích sau dòng "Biên bản nghiệm thu số..." hoặc dòng tương đương)
+`SoVanBan`: Số biên bản nghiệm thu (trích sau dòng "Biên bản nghiệm thu số..." hoặc dòng tương đương), nếu có nhiều dòng tương tự nối chuỗi Số biên bản nghiệm thu lại 
 `NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ...") định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)

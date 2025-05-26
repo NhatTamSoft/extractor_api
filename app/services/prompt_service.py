@@ -45,6 +45,7 @@ class PromptService:
 - **"TĐ"** - viết tắt của "Thẩm định"
 - **"HĐTĐ"** - viết tắt của "Hội đồng thẩm định"
 - Các từ viết tắt khác có chữ **"Đ"**, **không được chuyển thành "D"**
+
 3. Trong quá trình nhận dạng, nếu có sự mờ, nhiễu hoặc khó đọc, hãy ưu tiên dự đoán các ký tự theo nguyên tắc sau:
 - 1 dễ nhầm với 7, 4, I, l → ưu tiên chọn 1 nếu toàn bộ chuỗi khớp mẫu.
 - 0 dễ nhầm với O, D, Q → nếu đi kèm văn bản hành chính thì chọn 0.
@@ -54,6 +55,7 @@ class PromptService:
 - 9 dễ nhầm với g, q, 4 → nếu trong cụm số hiệu thì chọn 9.
 - Chỉ chấp nhận kết quả nếu thỏa mãn regex định dạng chuẩn: ^\d{1,6}(/\d{1,4})?(/)?(QĐ|TTr|BC|TB|CV|KH|PA)-UBND$
 - Trả về duy nhất chuỗi số hiệu văn bản hợp lệ. Nếu không nhận diện được đúng mẫu, trả về chuỗi rỗng ""
+
 4. Kết quả xuất ra dạng JSON duy nhất có dạng
 ```
 {
