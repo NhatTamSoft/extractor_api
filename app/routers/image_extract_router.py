@@ -2,7 +2,6 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends, 
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel
 import os
-import google.generativeai as genai
 import base64
 from io import BytesIO
 from PIL import Image
@@ -30,20 +29,15 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 import tempfile
 import fitz  # PyMuPDF for PDF processing
-
+import traceback
+import PIL
 
 # Load biến môi trường từ file .env
 load_dotenv()
 
 router = APIRouter()
 
-# Cấu hình API keys từ biến môi trường
-genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-
 model_openai = os.getenv('MODEL_API_OPENAI')
-
-# Khởi tạo models
-model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
 # Khởi tạo PromptService
 prompt_service = PromptService()
@@ -132,6 +126,7 @@ async def extract_multiple_images(
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
         print("======================prompt==================")
         print(prompt)
+        print("======================end prompt==================")
         #return
         # Process each file
         temp_files = []
@@ -181,6 +176,10 @@ async def extract_multiple_images(
             # Thêm hình ảnh vào messages
             messages = [
                 {
+                    "role": "system",
+                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
+                },
+                {
                     "role": "user",
                     "content": content_parts
                 }
@@ -202,10 +201,30 @@ async def extract_multiple_images(
                 response_text = response_text.strip()[7:-3].strip()
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
-            print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
-            print(response_text)
-            #return
-            # Nếu AI trả về lỗi rõ ràng
+
+            # Gọi Gemini API
+            # try:
+            #     response = model.generate_content(content_parts)
+            #     response_text = response.text.strip()
+                
+            #     if response_text.strip().startswith("```json"):
+            #         response_text = response_text.strip()[7:-3].strip()
+            #     elif response_text.strip().startswith("```"):
+            #         response_text = response_text.strip()[3:-3].strip()
+                
+            #     print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
+            #     print(response_text)
+            # except Exception as e:
+            #     return JSONResponse(
+            #         status_code=500,
+            #         content={
+            #             "status": "error",
+            #             "code": 500,
+            #             "message": "Lỗi khi xử lý ảnh",
+            #             "detail": str(e)
+            #         }
+            #     )
+            # Xử lý response từ Gemini
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
                     status_code=400,
@@ -250,16 +269,18 @@ async def extract_multiple_images(
             # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
             missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
             if missing_fields:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "code": 400,
-                        "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
-                        "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
-                        "missing_fields": missing_fields
-                    }
-                )
+                # return JSONResponse(
+                #     status_code=400,
+                #     content={
+                #         "status": "error",
+                #         "code": 400,
+                #         "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
+                #         "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
+                #         "missing_fields": missing_fields
+                #     }
+                # )
+                print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
+                print(f"Thiếu các trường: {', '.join(missing_fields)}")
 
             # Set UUIDs in the response data
             data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
@@ -268,14 +289,20 @@ async def extract_multiple_images(
             # Convert currency values in the response
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
-                    item["VanBanID"] = van_ban_id
-                    # Convert all numeric values based on required columns
-                    for col in required_columns:
-                        if (col.startswith('GiaTri') or col.startswith('SoTien')) and item.get(col):
-                            try:
+                    try:
+                        print("Kiểm tra van_ban_id: ", van_ban_id)
+                        item["VanBanID"] = van_ban_id
+                        # Convert all numeric values based on required columns
+                        for col in required_columns:
+                            print("Cột kiểm tra:", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien')):
                                 item[col] = convert_currency_to_int(str(item[col]))
-                            except:
-                                item[col] = 0
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                        print(f"\033[31m- Item gây lỗi: {json.dumps(item, ensure_ascii=False, indent=2)}\033[0m")
+            
             # dữ liệu mặc định
             van_ban_data = {
                 "VanBanAIID": van_ban_id,
@@ -293,7 +320,7 @@ async def extract_multiple_images(
                 "DataOCR": response_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
             }
-            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPD_DA];[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPDDT_CBDT];[QDPD_DT_THDT];[QDPD_DA]":
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -314,9 +341,47 @@ async def extract_multiple_images(
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
-            if  f"[{loaiVanBan}]" in "[HOP_DONG]":
-                _LoaiVanBanID = "3F278B7B-6E81-4480-BFC6-80885DAEAFF1"
-                _GiaiDoan = "3"
+            elif  f"[{loaiVanBan}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[HOP_DONG]":
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -324,14 +389,17 @@ async def extract_multiple_images(
                     "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
                     "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "LoaiVanBanID": _LoaiVanBanID,
                     "GiaiDoanID": "",
-                    "GiaiDoan": _GiaiDoan,
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
@@ -340,9 +408,106 @@ async def extract_multiple_images(
                     "UserID": user_id,
                     "DonViID": don_vi_id
                 }
-
+            elif  f"[{loaiVanBan}]" in "[PL_HOP_DONG]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""), # Tương đương Số phụ lục hợp đồng
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""), # Tương đương Số hợp đồng (gốc)
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[KLCVHT_THD]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "LanThanhToan": data_json["ThongTinChung"].get("LanThanhToan", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTriHopDong": data_json["ThongTinChung"].get("GiaTriHopDong", "0"),
+                    "TamUngChuaThuaHoi": data_json["ThongTinChung"].get("TamUngChuaThuaHoi", "0"),
+                    "ThanhToanDenCuoiKyTruoc": data_json["ThongTinChung"].get("ThanhToanDenCuoiKyTruoc", "0"),
+                    "LuyKeDenCuoiKy": data_json["ThongTinChung"].get("LuyKeDenCuoiKy", "0"),
+                    "ThanhToanThuHoiTamUng": data_json["ThongTinChung"].get("ThanhToanThuHoiTamUng", "0"),
+                    "GiaiNganKyNay": data_json["ThongTinChung"].get("GiaiNganKyNay", "0"),
+                    "TamUngGiaiNganKyNayKyTruoc": data_json["ThongTinChung"].get("TamUngGiaiNganKyNayKyTruoc", "0"),
+                    "ThanhToanKLHTKyTruoc": data_json["ThongTinChung"].get("ThanhToanKLHTKyTruoc", "0"),
+                    "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
+                    "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
+                    "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+            
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "DataOCR": response_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
             van_ban_data["UserID"] = user_id
             van_ban_data["DonViID"] = don_vi_id
+
+            
 
             db_service = DatabaseService()
             result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
@@ -359,50 +524,13 @@ async def extract_multiple_images(
                 )
 
             # Insert BangDuLieu data if it exists
-            if "BangDuLieu" in data_json and data_json["BangDuLieu"]:
+            if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
                 bang_du_lieu_data = []
                 for item in data_json["BangDuLieu"]:
                     bang_du_lieu_data.append({
                         "VanBanAIID": van_ban_id,
                         **{col: item.get(col, 0) for col in required_columns}
                     })
-                #print("insert_bang_du_lieu_chi_tiet_ai=============")
-                #print(bang_du_lieu_data)
-                # Danh sách các khoản mục chi phí cần kiểm tra
-                # kmcp_list = [
-                #     "Chi phí bồi thường, hỗ trợ, tái định cư",
-                #     "Chi phí xây dựng hoặc xây lắp",
-                #     "Chi phí thiết bị", 
-                #     "Chi phí quản lý dự án",
-                #     "Chi phí tư vấn đầu tư xây dựng",
-                #     "Chi phí khác",
-                #     "Chi phí dự phòng"
-                # ]
-
-                # Lọc và xóa các dòng thỏa mãn điều kiện
-                # filtered_data = []
-                # for i in range(len(bang_du_lieu_data)):
-                #     current_row = bang_du_lieu_data[i]
-                #     current_kmcp = current_row.get("TenKMCP", "")
-                    
-                #     # Kiểm tra nếu TenKMCP chứa trong danh sách kmcp_list
-                #     if any(kmcp in current_kmcp for kmcp in kmcp_list):
-                #         # Kiểm tra dòng tiếp theo
-                #         if i < len(bang_du_lieu_data) - 1:
-                #             next_row = bang_du_lieu_data[i + 1]
-                #             next_kmcp = next_row.get("TenKMCP", "")
-                            
-                #             # Nếu TenKMCP của dòng tiếp theo khác với dòng hiện tại
-                #             if next_kmcp != current_kmcp:
-                #                 continue  # Bỏ qua dòng hiện tại
-                    
-                #     filtered_data.append(current_row)
-
-                # # Cập nhật lại bang_du_lieu_data với dữ liệu đã lọc
-                # bang_du_lieu_data = filtered_data
-                # print("insert_bang_du_lieu_chi_tiet_ai=============")
-                # print(bang_du_lieu_data)
-                # print(required_columns)
                 bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
                     db, 
                     bang_du_lieu_data,
@@ -418,7 +546,8 @@ async def extract_multiple_images(
                             "detail": bang_du_lieu_result.get("error", "Unknown error")
                         }
                     )
-
+            else:
+                print("Văn bản này không có chi tiết bảng dữ liệu")
             # After successful processing and database operations
             try:
                 # Get QLDA upload URL from environment
@@ -509,7 +638,7 @@ async def extract_multiple_images(
                     "status": "error",
                     "code": 400,
                     "message": "Lỗi khi xử lý ảnh",
-                    "detail": str(e)
+                    "detail": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
                 }
             )
     except Exception as e:
