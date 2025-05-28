@@ -17,6 +17,8 @@ from dotenv import load_dotenv # Thư viện để đọc file .env
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import jwt
+from sentence_transformers import SentenceTransformer, util
+import unidecode
 # %%
 # --- 2. Tải và cấu hình API Keys từ file .env ---
 # Tải các biến môi trường từ file .env trong cùng thư mục
@@ -675,3 +677,202 @@ def LayMaDoiTuong(don_vi_id: str, user_id: str, ten_toi_tuong: str, la_ca_nhan: 
     thuc_thi_truy_van(query_insert)    
     return doi_tuong_id
 
+# Khởi tạo mô hình (nên thực hiện một lần và truyền vào các hàm)
+# Model này sẽ được truyền vào hàm tim_khoan_muc_tuong_ung
+# model = SentenceTransformer('distiluse-base-multilingual-cased') # Bỏ comment và chạy nếu bạn chưa khởi tạo model ở đâu đó
+
+import unidecode
+from sentence_transformers import SentenceTransformer, util
+import re # Import regex module
+
+# Khởi tạo mô hình một lần (đảm bảo mô hình được tải)
+# model_st = SentenceTransformer('distiluse-base-multilingual-cased') # Đảm bảo dòng này không bị comment nếu chưa có ở đâu khác
+
+def lam_sach(text):
+    """
+    Làm sạch văn bản: chuyển về chữ thường, bỏ dấu tiếng Việt, loại bỏ ký tự đặc biệt (trừ chữ, số, khoảng trắng),
+    và chuẩn hóa khoảng trắng.
+    Args:
+        text (str): Văn bản đầu vào.
+    Returns:
+        str: Văn bản đã được làm sạch.
+    """
+    if not isinstance(text, str):
+        # Log lỗi hoặc xử lý ngoại lệ nếu cần thiết, nhưng trả về chuỗi rỗng hoặc None có thể an toàn hơn
+        # tùy thuộc vào cách hàm này được sử dụng. Hiện tại giữ nguyên raise TypeError.
+        raise TypeError(f"Đầu vào cho lam_sach phải là chuỗi. Nhận được: {type(text)}, Giá trị: {text}")
+        
+    # Chuyển về chữ thường và bỏ dấu tiếng Việt
+    text = unidecode.unidecode(text.lower())
+    
+    # Loại bỏ các ký tự không phải chữ cái, số, hoặc khoảng trắng
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+    
+    # Chuẩn hóa khoảng trắng (thay thế nhiều khoảng trắng bằng một khoảng trắng duy nhất và loại bỏ khoảng trắng ở đầu/cuối)
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
+
+def thay_the_viet_tat(text, current_viet_tat_dict):
+    """
+    Thay thế các từ viết tắt trong văn bản bằng cụm từ đầy đủ.
+    Sử dụng regex để thay thế các từ viết tắt đứng độc lập hoặc được phân cách bởi khoảng trắng/ký tự đặc biệt.
+    Args:
+        text (str): Văn bản đầu vào.
+        current_viet_tat_dict (dict): Từ điển viết tắt hiện tại để sử dụng (key là viết tắt, value là cụm đầy đủ).
+    Returns:
+        str: Văn bản đã được thay thế từ viết tắt.
+    """
+    if not isinstance(text, str):
+        raise TypeError(f"Đầu vào cho thay_the_viet_tat phải là chuỗi. Nhận được: {type(text)}, Giá trị: {text}")
+        
+    # Sắp xếp các từ viết tắt theo độ dài giảm dần để thay thế các cụm dài trước
+    sorted_viet_tat = sorted(current_viet_tat_dict.items(), key=lambda item: len(item[0]), reverse=True)
+    
+    processed_text = text
+    for viet_tat, full_term in sorted_viet_tat:
+        # Tạo regex pattern để tìm từ viết tắt đứng độc lập (word boundary)
+        # \b đảm bảo chỉ khớp toàn bộ từ
+        pattern = r'\b' + re.escape(viet_tat) + r'\b'
+        processed_text = re.sub(pattern, full_term, processed_text)
+        
+    return processed_text
+
+def tien_xu_ly(text, current_viet_tat_dict):
+    """
+    Tiền xử lý văn bản bằng cách thay thế từ viết tắt và sau đó làm sạch.
+    Thứ tự này giúp các từ viết tắt được thay thế đúng trước khi làm sạch loại bỏ ký tự đặc biệt.
+    Args:
+        text (str): Văn bản đầu vào.
+        current_viet_tat_dict (dict): Từ điển viết tắt để sử dụng.
+    Returns:
+        str: Văn bản đã được tiền xử lý.
+    """
+    if not isinstance(text, str):
+        raise TypeError(f"Đầu vào cho tien_xu_ly phải là chuỗi. Nhận được: {type(text)}, Giá trị: {text}")
+        
+    # Thay thế từ viết tắt trước
+    text_after_viet_tat = thay_the_viet_tat(text, current_viet_tat_dict)
+    
+    # Sau đó làm sạch văn bản
+    text_sach = lam_sach(text_after_viet_tat)
+    
+    return text_sach
+
+# Khởi tạo mô hình một lần (đảm bảo dòng này tồn tại và không bị comment)
+# model_st = SentenceTransformer('distiluse-base-multilingual-cased')
+
+# def tim_tuong_dong(ten_khoan_muc_thuc_te, current_dm_chuan, current_viet_tat, danh_sach_loai_tru=None, nguong=0.65):
+#     """
+#     Tìm khoản mục chuẩn tương ứng với tên khoản mục thực tế, sử dụng danh mục chuẩn và từ điển viết tắt được cung cấp.
+#     Áp dụng tiền xử lý (thay thế viết tắt, làm sạch) cho cả đầu vào và danh mục chuẩn.
+#     Args:
+#         ten_khoan_muc_thuc_te (str): Tên khoản mục chi phí thực tế.
+#         current_dm_chuan (dict): Dictionary chứa 2 cột, cột 1 là ID, cột 2 là tên để tìm kiếm ({ID: Tên}).
+#         current_viet_tat (dict): Từ điển viết tắt ({Viết tắt: Cụm đầy đủ}).
+#         danh_sach_loai_tru (list): Danh sách các tên khoản mục chuẩn cần loại trừ khỏi kết quả tìm kiếm.
+#         nguong (float): Ngưỡng điểm tương đồng (cosine similarity) để chấp nhận kết quả.
+#     Returns:
+#         tuple: (Dictionary chứa ID và tên của phần tử tương ứng từ current_dm_chuan, điểm tương đồng)
+#         current_dm_chuan (dict): Dictionary chứa 2 cột, cột 1 là ID, cột 2 là tên để tìm kiếm.
+#         current_viet_tat (dict): Từ điển viết tắt.
+#         danh_sach_loai_tru (list): Danh sách các khoản mục cần loại trừ khỏi kết quả tìm kiếm.
+#         nguong (float): Ngưỡng điểm tương đồng để chấp nhận kết quả.
+#     Returns:
+#         tuple: (Phần tử tương ứng từ current_dm_chuan, điểm tương đồng) hoặc (None, điểm tương đồng) nếu không đạt ngưỡng.
+#     """
+#     model = model_st
+#     if not isinstance(ten_khoan_muc_thuc_te, str):
+#         raise TypeError(f"Input item '{ten_khoan_muc_thuc_te}' to tim_khoan_muc_tuong_ung must be a string.")
+#     if not model:
+#         raise ValueError("SentenceTransformer model must be provided.")
+
+#     # Lấy danh sách tên để tìm kiếm (cột 2)
+#     ten_dm_chuan = list(current_dm_chuan.values())
+#     id_dm_chuan = list(current_dm_chuan.keys())
+
+#     # Lọc danh mục chuẩn để loại bỏ các khoản mục trong danh_sach_loai_tru
+#     if danh_sach_loai_tru:
+#         filtered_items = [(id, ten) for id, ten in current_dm_chuan.items() if ten not in danh_sach_loai_tru]
+#         id_dm_chuan = [item[0] for item in filtered_items]
+#         ten_dm_chuan = [item[1] for item in filtered_items]
+
+#     # Tiền xử lý danh mục chuẩn với từ điển viết tắt hiện tại
+#     dm_chuan_clean = [tien_xu_ly(t, current_viet_tat) for t in ten_dm_chuan]
+#     if not dm_chuan_clean or all(not item for item in dm_chuan_clean):
+#         return (None, 0.0)
+        
+#     emb_chuan = model.encode(dm_chuan_clean, convert_to_tensor=True)
+
+#     # Tiền xử lý tên khoản mục thực tế với từ điển viết tắt hiện tại
+#     ten_clean = tien_xu_ly(ten_khoan_muc_thuc_te, current_viet_tat)
+
+#     if not ten_clean.strip():
+#         return (None, 0.0)
+
+#     emb_input = model.encode(ten_clean, convert_to_tensor=True)
+
+#     if emb_chuan.nelement() == 0:
+#         return (None, 0.0)
+
+#     cos_sim_result = util.cos_sim(emb_input, emb_chuan)
+
+#     if cos_sim_result is None or cos_sim_result.nelement() == 0:
+#         return (None, 0.0)
+
+#     cos_scores = cos_sim_result[0]
+#     best_match_idx = int(cos_scores.argmax())
+#     best_score = float(cos_scores[best_match_idx])
+
+#     if best_score >= nguong:
+#         # Trả về phần tử tương ứng từ current_dm_chuan
+#         matched_item = {
+#             "id": id_dm_chuan[best_match_idx],
+#             "name": ten_dm_chuan[best_match_idx]
+#         }
+#         return (matched_item, best_score)
+#     else:
+#         return (None, best_score)
+    
+
+def parse_page_string(page_string):
+    """
+    Chuyển đổi một chuỗi số trang (ví dụ: '1,2,5-8') thành một danh sách các số nguyên.
+
+    Args:
+        page_string (str): Chuỗi chứa các số trang, có thể bao gồm số đơn lẻ,
+                           hoặc dải số được phân tách bằng dấu gạch ngang.
+
+    Returns:
+        list: Một danh sách các số nguyên biểu thị các trang.
+    """
+    result = []
+    # Loại bỏ khoảng trắng và đảm bảo chuỗi không rỗng
+    page_string = page_string.replace(" ", "").strip()
+    if not page_string:
+        return []
+
+    # Xử lý trường hợp chuỗi kết thúc bằng dấu phẩy
+    if page_string.endswith(','):
+        page_string = page_string[:-1]
+
+    parts = page_string.split(',')
+    for part in parts:
+        if '-' in part:
+            try:
+                start, end = map(int, part.split('-'))
+                if start <= end:
+                    result.extend(range(start, end + 1))
+                else:
+                    # Xử lý trường hợp dải số không hợp lệ (ví dụ: 8-5)
+                    print(f"Cảnh báo: Dải số không hợp lệ '{part}' đã bị bỏ qua.")
+            except ValueError:
+                print(f"Cảnh báo: Định dạng dải số không đúng '{part}' đã bị bỏ qua.")
+        else:
+            try:
+                result.append(int(part))
+            except ValueError:
+                print(f"Cảnh báo: Định dạng số không đúng '{part}' đã bị bỏ qua.")
+    
+    # Loại bỏ các số trùng lặp và sắp xếp lại
+    return sorted(list(set(result)))

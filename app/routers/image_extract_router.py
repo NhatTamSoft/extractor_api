@@ -17,6 +17,7 @@ from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
 from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token, LayMaDoiTuong
+from app.services.anh_xa_tuong_dong import tim_kiem_tuong_dong
 from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
@@ -353,7 +354,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -372,7 +373,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -393,7 +394,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -418,7 +419,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -446,7 +447,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -485,7 +486,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -516,7 +517,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -741,199 +742,242 @@ async def standardized_data(
         order by NgayKy, (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)"""
         #print(query_van_ban)
         dfVanBanAI = lay_du_lieu_tu_sql_server(query_van_ban)
-        # print(query_van_ban)
+        #print(query_van_ban)
         # B3: Lấy dữ liệu từ BangDuLieuChiTietAI
+        query_kmcp = f"select distinct TenKMCP from dbo.BangDuLieuChiTietAI where isnull(TenKMCP, '')<>'' and VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), DuAnID)='{duAnID}' and vb.TenLoaiVanBan in ('QDPD_CT', 'QDPDDT_CBDT', 'QDPD_DA', 'QDPD_DT_THDT'))"
+        df_temp = lay_du_lieu_tu_sql_server(query_kmcp)
         chuoi_markdown_tenkmcp = ""
-        chuoi_markdown_tenkmcp += "| STT | TenKMCP |\n"
-        chuoi_markdown_tenkmcp += "|-----|----------|\n"
-        if not dfVanBanAI.empty:
-            for index, row in dfVanBanAI.iterrows():
-                van_ban_id = row['VanBanAIID']
-                query = f"select STT=convert(int, STT), TenKMCP from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
-                df_temp = lay_du_lieu_tu_sql_server(query)
-                if not df_temp.empty:
-                    for _, row in df_temp.iterrows():
-                        chuoi_markdown_tenkmcp += f"| {row['STT']} | {row['TenKMCP']} |\n"
-        else:
-            dfBangDuLieuChiTietAI = pd.DataFrame()
+        chuoi_markdown_tenkmcp += "| TenKMCP |\n"
+        chuoi_markdown_tenkmcp += "|----------|\n"
+        if not df_temp.empty:
+            if not df_temp.empty:
+                for _, row in df_temp.iterrows():
+                    chuoi_markdown_tenkmcp += f"| {row['TenKMCP']} |\n"
+        # print("="*20)
+        # print(chuoi_markdown_tenkmcp)
+        # print("="*20)
 
         # Xử lý ghép TenKMCP trong chuoi_markdown_tenkmcp với TenKMCP trong bảng KMCP
         promt_anh_xa_noi_dung_tuong_dong = """
-### Bạn là một hệ thống phân tích và ánh xạ từ ngữ thông minh. Hãy thực hiện so sánh và ánh xạ ý nghĩa giữa các khoản mục chi phí bảng `DuLieuChiTiet` được liệt kê theo bảng sau với danh mục chi phí chuẩn trong hệ thống bảng `KMCP`
-#### Bảng DuLieuChiTiet 
+### Bạn là một chuyên gia về lĩnh vực Đầu tư xây dựng cơ bản. Hãy thực hiện ánh xạ nội dung công việc giữa các bảng `DuLieuCanGhep` với danh mục chi phí bảng `TableKMCP`
+#### Bảng DuLieuCanGhep 
 """+chuoi_markdown_tenkmcp+"""
-#### Bảng KMCP 
-MaKMCP  TenKMCP
-CP1 Chi phí bồi thường, hỗ trợ, tái định cư
-CP101   Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác
-CP102   Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất
-CP103   Chi phí tái định cư
-CP104   Chi phí tổ chức bồi thường, hỗ trợ và tái định cư
-CP105   Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng
-CP106   Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng
-CP107   Chi phí đầu tư vào đất
-CP199   Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư
-CP2 Chi phí xây dựng hoặc xây lắp
-CP202   Chi phí xây dựng hoặc xây lắp công trình chính
-CP203   Chi phí xây dựng hoặc xây lắp công trình chính và phụ
-CP204   Chi phí xây dựng hoặc xây lắp điều chỉnh
-CP205   Chi phí xây dựng hoặc xây lắp trước thuế
-CP206   Chi phí xây dựng hoặc xây lắp sau thuế
-CP207   Chi phí xây dựng hoặc xây lắp công trình phụ
-CP250   Chi phí xây dựng hoặc xây lắp khác
-CP3 Chi phí thiết bị
-CP4 Chi phí quản lý dự án
-CP5 Chi phí tư vấn đầu tư xây dựng
-CP501   Chi phí lập báo cáo nghiên cứu tiền khả thi
-CP502   Chi phí lập báo cáo nghiên cứu khả thi
-CP503   Chi phí lập báo cáo kinh tế - kỹ thuật
-CP50301 Chi phí lập dự án đầu tư
-CP504   Chi phí thiết kế xây dựng
-CP5041  Chi phí thiết kế kỹ thuật
-CP505   Chi phí thiết kế bản vẽ thi công
-CP50530 Chi phí lập thiết kế bản vẽ thi công - dự toán
-CP506   Chi phí lập nhiệm vụ khảo sát xây dựng
-CP507   Chi phí thẩm tra báo cáo kinh tế - kỹ thuật
-CP508   Chi phí thẩm tra báo cáo nghiên cứu khả thi
-CP509   Chi phí thẩm tra thiết kế xây dựng
-CP510   Chi phí thẩm tra dự toán xây dựng
-CP511   Chi phí lập hồ sơ mời thầu, đánh giá hồ sơ dự thầu tư vấn
-CP512   Chi phí lập hồ sơ mời thầu tư vấn
-CP513   Chi phí đánh giá hồ sơ dự thầu tư vấn
-CP514   Chi phí lập hồ sơ mời thầu, đánh giá hồ sơ dự thầu thi công xây dựng
-CP515   Chi phí lập hồ sơ mời thầu thi công xây dựng
-CP516   Chi phí đánh giá hồ sơ dự thầu thi công xây dựng
-CP517   Chi phí lập hồ sơ mời thầu, đánh giá hồ sơ dự thầu mua sắm vật tư, thiết bị
-CP518   Chi phí lập hồ sơ mời thầu mua sắm vật tư, thiết bị
-CP519   Chi phí đánh giá hồ sơ dự thầu mua sắm vật tư, thiết bị
-CP520   Chi phí giám sát thi công xây dựng
-CP521   Chi phí giám sát lắp đặt thiết bị
-CP522   Chi phí giám sát công tác khảo sát xây dựng
-CP523   Chi phí quy đổi vốn đầu tư xây dựng
-CP526   Phí thẩm định hồ sơ mời thầu
-CP527   Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi
-CP528   Chi phí khảo sát xây dựng
-CP532   Phí thẩm định hồ sơ mời thầu gói thầu thi công xây dựng
-CP533   Phí thẩm định hồ sơ mời thầu gói thầu lắp đặt thiết bị
-CP534   Phí thẩm định hồ sơ mời thầu gói thầu tư vấn đầu tư xây dựng
-CP535   Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng
-CP536   Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị
-CP537   Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng
-CP538   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu xây lắp
-CP539   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu lắp đặt thiết bị
-CP540   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng
-CP541   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu
-CP551   Chi phí khảo sát, thiết kế BVTC - DT
-CP552   Chi phí nhiệm vụ thử tỉnh cọc
-CP553   Công tác điều tra, đo đạt và thu thập số liệu
-CP554   Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng
-CP556   Chi phí thẩm tra an toàn giao thông
-CP557   Chi phí thử tĩnh
-CP558   Chi phí công bố quy hoạch
-CP559   Chi phí thử tải cừ tràm
-CP560   Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu
-CP561   Chi phí cắm mốc ranh giải phóng mặt bằng
-CP562   Chi phí lập đồ án quy hoạch
-CP56201 Chi phí khảo sát địa chất
-CP563   Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án
-CP56301 Chi phí khảo sát địa hình
-CP564   Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án
-CP56401 Chi phí khảo sát địa, địa hình
-CP565   Chi phí lập kế hoạch bảo vệ môi trường
-CP566   Chi phí lập báo cáo đánh giá tác động môi trường
-CP567   Chi phí thí nghiệm chuyên ngành xây dựng
-CP568   Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1
-CP569   Chi phí chỉ đạo thể hiện phần mỹ thuật
-CP570   Chi phí nội đồng nghệ thuật
-CP571   Chi phí sáng tác mẫu phác thảo tượng đài
-CP572   Chi phí hoạt động của Hội đồng nghệ thuật
-CP57301 Chi phí kiểm định theo yêu cầu chủ đầu tư
-CP574   Chi phí tư vấn thẩm tra dự toán
-CP575   Chi phí thẩm định dự toán giá gói thầu
-CP577   Chi phí lập hồ sơ điều chỉnh dự toán
-CP578   Chi phí chuyển giao công nghệ
-CP579   Chi phí thẩm định giá
-CP580   Chi phí tư vấn giám sát
-CP58001 Chi phí tư vấn giám sát di dời điện
-CP58002 Chi phí tư vấn giám sát di dời cáp quang
-CP58003 Chi phí tư vấn giám sát di dời đường ống nước
-CP58004 Chi phí tư vấn giám sát khảo sát địa chất
-CP58005 Chi phí tư vấn giám sát khảo sát địa hình
-CP58006 Chi phí tư vấn giám sát khảo sát và cắm mốc
-CP58007 Chi phí tư vấn giám sát khoan địa chất
-CP58008 Chi phí tư vấn giám sát rà phá bom mìn, vật nổ
-CP58009 Chi phí tư vấn giám sát, đánh giá đầu tư
-CP581   Chi phí báo cáo giám sát đánh giá đầu tư
-CP582   Chi phí thẩm tra thiết kế BVTC-DT
-CP58220 Chi phí thẩm tra thiết kế BVTC
-CP583   Tư vấn đầu tư xây dựng
-CP584   Chi phí đăng báo đấu thầu
-CP599   Chi phí đo đạc thu hồi đất
-CP6 Chi phí khác
-CP601   Phí thẩm định dự án đầu tư xây dựng
-CP602   Phí thẩm định dự toán xây dựng
-CP603   Chi phí rà phá bom mìn, vật nổ
-CP604   Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy
-CP605   Chi phí thẩm định giá thiết bị
-CP606   Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở
-CP607   Chi phí thẩm tra, phê duyệt quyết toán
-CP608   Chi phí kiểm tra công tác nghiệm thu
-CP609   Chi phí kiểm toán độc lập
-CP60902 Chi phí kiểm toán công trình
-CP610   Chi phí bảo hiểm
-CP611   Chi phí thẩm định báo cáo đánh giá tác động môi trường
-CP612   Chi phí bảo hành, bảo trì
-CP613   Phí bảo vệ môi trường
-CP614   Chi phí di dời điện
-CP61401 Chi phí di dời hệ thống điện chiếu sáng
-CP61402 Chi phí di dời đường dây hạ thế
-CP61403 Chi phí di dời nhà
-CP61404 Chi phí di dời nước
-CP61405 Chi phí di dời trụ điện trong trường
-CP615   Phí thẩm tra di dời điện
-CP617   Chi phí đo đạc địa chính
-CP61701 Chi phí đo đạc bản đồ địa chính
-CP61702 Chi phí đo đạc lập bản đồ địa chính GPMB
-CP61703 Chi phí đo đạc, đền bù GPMB
-CP61704 Chi phí đo đạc thu hồi đất
-CP61820 Chi phí tổ chức kiểm tra công tác nghiệm thu
-CP619   Chi phí lán trại
-CP620   Chi phí đảm bảo giao thông
-CP621   Chi phí điều tiết giao thông
-CP62101 Chi phí điều tiết giao thông khác
-CP622   Chi phí một số công tác không xác định số lượng từ thiết kế
-CP623   Chi phí thẩm định thiết kế bản vẽ thi công
-CP624   Chi phí nhà tạm
-CP62501 Chi phí giám sát đánh giá đầu tư
-CP626   Chi phí thẩm định kết quả lựa chọn nhà thầu
-CP62701 Chi phí khoan địa chất
-CP628   Chi phí thẩm định đồ án quy hoạch
-CP629   Chi phí thẩm định HSMT, HSYC
-CP630   Lệ phí thẩm tra thiết kế
-CP631   Phí thẩm định lựa chọn nhà thầu
-CP632   Chi phí thẩm tra quyết toán
-CP633   Chi phí thẩm định phê duyệt quyết toán
-CP634   Chi phí thẩm định báo cáo nghiên cứu khả thi
-CP699   Chi phí khác
-CP7 Chi phí dự phòng
-CP702   Chi phí dự phòng cho yếu tố trược giá
+#### Bảng TableKMCP
+| MaKMCP  | TenKMCP                                                                                                                     |
+| ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| CP1     | Chi phí bồi thường, hỗ trợ, tái định cư                                                                                     |
+| CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác |
+| CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           |
+| CP103   | Chi phí tái định cư                                                                                                         |
+| CP104   | Chi phí tổ chức bồi thường, hỗ trợ và tái định cư                                                                           |
+| CP105   | Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng                                                                 |
+| CP106   | Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng                      |
+| CP107   | Chi phí đầu tư vào đất                                                                                                      |
+| CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư                                                    |
+| CP2     | Chi phí xây dựng                                                                                                            |
+| CP201   | Chi phí xây dựng phát sinh                                                                                                  |
+| CP202   | Chi phí xây dựng công trình chính                                                                                           |
+| CP203   | Chi phí xây dựng công trình chính và phụ                                                                                    |
+| CP204   | Chi phí xây dựng điều chỉnh                                                                                                 |
+| CP205   | Chi phí xây dựng trước thuế                                                                                                 |
+| CP206   | Chi phí xây dựng sau thuế                                                                                                   |
+| CP207   | Chi phí xây dựng công trình phụ                                                                                             |
+| CP250   | Chi phí xây dựng khác                                                                                                       |
+| CP3     | Chi phí thiết bị                                                                                                            |
+| CP301   | Chi phí thiết bị phát sinh                                                                                                  |
+| CP4     | Chi phí quản lý dự án                                                                                                       |
+| CP401   | Chi phí quản lý dự án phát sinh                                                                                             |
+| CP5     | Chi phí tư vấn đầu tư xây dựng                                                                                              |
+| CP501   | Chi phí lập báo cáo nghiên cứu tiền khả thi                                                                                 |
+| CP502   | Chi phí lập báo cáo nghiên cứu khả thi                                                                                      |
+| CP503   | Chi phí lập báo cáo kinh tế - kỹ thuật                                                                                      |
+| CP50301 | Chi phí lập dự án đầu tư                                                                                                    |
+| CP504   | Chi phí thiết kế xây dựng                                                                                                   |
+| CP5041  | Chi phí thiết kế kỹ thuật                                                                                                   |
+| CP50411 | Chi phí thiết kế xây dựng (Phát sinh)                                                                                       |
+| CP50431 | Chi phí thiết kế kỹ thuật (Phát sinh)                                                                                       |
+| CP505   | Chi phí thiết kế bản vẽ thi công                                                                                            |
+| CP50511 | Chi phí thiết kế bản vẽ thi công (Phát sinh)                                                                                |
+| CP50530 | Chi phí lập thiết kế bản vẽ thi công - dự toán                                                                              |
+| CP50541 | Chi phí lập thiết kế bản vẽ thi công - dự toán (Phát sinh)                                                                  |
+| CP506   | Chi phí lập nhiệm vụ khảo sát xây dựng                                                                                      |
+| CP50602 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                            |
+| CP50603 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                  |
+| CP50604 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                  |
+| CP50605 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                     |
+| CP507   | Chi phí thẩm tra báo cáo kinh tế - kỹ thuật                                                                                 |
+| CP508   | Chi phí thẩm tra báo cáo nghiên cứu khả thi                                                                                 |
+| CP509   | Chi phí thẩm tra thiết kế xây dựng                                                                                          |
+| CP50911 | Chi phí thẩm tra thiết kế xây dựng (Phát sinh)                                                                              |
+| CP510   | Chi phí thẩm tra dự toán xây dựng                                                                                           |
+| CP51011 | Chi phí thẩm tra dự toán xây dựng (Phát sinh)                                                                               |
+| CP511   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuât) tư vấn                                   |
+| CP512   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) tư vấn                                                                           |
+| CP513   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn                                                                       |
+| CP51311 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn (Phát sinh)                                                           |
+| CP514   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                        |
+| CP51411 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng (Phát sinh)                                                 |
+| CP515   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng                                                                |
+| CP51511 | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng (Phát sinh)                                                    |
+| CP516   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                                                            |
+| CP51611 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng (Phát sinh)                                                |
+| CP517   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) , đánh giá hồ sơ dự thầu (hồ sơ đề xuất) mua sắm vật tư, thiết bị                |
+| CP51711 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                          |
+| CP518   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) mua sắm vật tư, thiết bị                                                         |
+| CP51811 | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị (Phát sinh)                                                                |
+| CP519   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) mua sắm vật tư, thiết bị                                                     |
+| CP51911 | Chi phí đánh giá HSDT mua sắm vật tư, thiết bị (Phát sinh)                                                                  |
+| CP520   | Chi phí giám sát thi công xây dựng                                                                                          |
+| CP52099 | Chi phí giám sát thi công xây dựng (Phát sinh)                                                                              |
+| CP521   | Chi phí giám sát lắp đặt thiết bị                                                                                           |
+| CP52111 | Chi phí giám sát lắp đặt thiết bị (Phát sinh)                                                                               |
+| CP522   | Chi phí giám sát công tác khảo sát xây dựng                                                                                 |
+| CP52211 | Chi phí giám sát công tác khảo sát xây dựng (Phát sinh)                                                                     |
+| CP523   | Chi phí quy đổi vốn đầu tư xây dựng                                                                                         |
+| CP526   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu)                                                                                |
+| CP527   | Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi                                                                            |
+| CP528   | Chi phí khảo sát xây dựng                                                                                                   |
+| CP52802 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                         |
+| CP52803 | Chi phí khảo sát (Bước lập báo cáo NCKT)                                                                                    |
+| CP52804 | Chi phí khảo sát (Bước lập báo cáo KTKT)                                                                                    |
+| CP52805 | Chi phí khảo sát (Bước lập TKBVTC)                                                                                          |
+| CP52806 | Chi phí khảo sát (Bước lập TKBVTC-DT)                                                                                       |
+| CP532   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu thi công xây dựng                                                     |
+| CP533   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu lắp đặt thiết bị                                                      |
+| CP534   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu tư vấn đầu tư xây dựng                                                |
+| CP535   | Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng                                                                   |
+| CP536   | Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị                                                                    |
+| CP537   | Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng                                                              |
+| CP538   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) xây lắp                    |
+| CP539   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) lắp đặt thiết bị           |
+| CP540   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) tư vấn đầu tư xây dựng     |
+| CP541   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất)                            |
+| CP551   | Chi phí khảo sát, thiết kế BVTC - DT                                                                                        |
+| CP552   | Chi phí nhiệm vụ thử tỉnh cọc                                                                                               |
+| CP553   | Công tác điều tra, đo đạt và thu thập số liệu                                                                               |
+| CP554   | Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng                                                 |
+| CP556   | Chi phí thẩm tra an toàn giao thông                                                                                         |
+| CP557   | Chi phí thử tĩnh                                                                                                            |
+| CP558   | Chi phí công bố quy hoạch                                                                                                   |
+| CP559   | Chi phí thử tải cừ tràm                                                                                                     |
+| CP560   | Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu                                                                    |
+| CP561   | Chi phí cắm mốc ranh giải phóng mặt bằng                                                                                    |
+| CP562   | Chi phí lập đồ án quy hoạch                                                                                                 |
+| CP56201 | Chi phí khảo sát địa chất                                                                                                   |
+| CP56202 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
+| CP56203 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
+| CP56204 | Chi phí khảo sát địa chất (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        |
+| CP56205 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        |
+| CP56206 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           |
+| CP563   | Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án                                                                      |
+| CP56301 | Chi phí khảo sát địa hình                                                                                                   |
+| CP56302 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
+| CP56303 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
+| CP56304 | Chi phí khảo sát địa hình  (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                       |
+| CP56305 | Chi phí khảo sát địa hình  (Bước lập thiết kế bản vẽ thi công (BVTC))                                                       |
+| CP56306 | Chi phí khảo sát địa hình  (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                          |
+| CP564   | Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án                                                               |
+| CP56401 | Chi phí khảo sát địa, địa hình                                                                                              |
+| CP565   | Chi phí lập kế hoạch bảo vệ môi trường                                                                                      |
+| CP566   | Chi phí lập báo cáo đánh giá tác động môi trường                                                                            |
+| CP567   | Chi phí thí nghiệm đối chứng, kiểm định xây dựng, thử nghiệm khả năng chịu lực của công trình                               |
+| CP568   | Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1                                                     |
+| CP569   | Chi phí chỉ đạo thể hiện phần mỹ thuật                                                                                      |
+| CP570   | Chi phí nội đồng nghệ thuật                                                                                                 |
+| CP571   | Chi phí sáng tác mẫu phác thảo tượng đài                                                                                    |
+| CP572   | Chi phí hoạt động của Hội đồng nghệ thuật                                                                                   |
+| CP573   | Chi phí giám sát thi công xây dựng phát sinh                                                                                |
+| CP57301 | Chi phí kiểm định theo yêu cầu chủ đầu tư                                                                                   |
+| CP574   | Chi phí tư vấn thẩm tra dự toán                                                                                             |
+| CP57401 | Chi phí thẩm tra dự toán phát sinh                                                                                          |
+| CP575   | Chi phí thẩm định dự toán giá gói thầu                                                                                      |
+| CP577   | Chi phí lập hồ sơ điều chỉnh dự toán                                                                                        |
+| CP578   | Chi phí chuyển giao công nghệ                                                                                               |
+| CP579   | Chi phí thẩm định giá                                                                                                       |
+| CP580   | Chi phí tư vấn giám sát                                                                                                     |
+| CP58001 | Chi phí tư vấn giám sát di dời điện                                                                                         |
+| CP58002 | Chi phí tư vấn giám sát di dời cáp quang                                                                                    |
+| CP58003 | Chi phí tư vấn giám sát di dời đường ống nước                                                                               |
+| CP58004 | Chi phí tư vấn giám sát khảo sát địa chất                                                                                   |
+| CP58005 | Chi phí tư vấn giám sát khảo sát địa hình                                                                                   |
+| CP58006 | Chi phí tư vấn giám sát khảo sát và cắm mốc                                                                                 |
+| CP58007 | Chi phí tư vấn giám sát khoan địa chất                                                                                      |
+| CP58008 | Chi phí tư vấn giám sát rà phá bom mìn, vật nổ                                                                              |
+| CP58009 | Chi phí tư vấn giám sát, đánh giá đầu tư                                                                                    |
+| CP581   | Chi phí báo cáo giám sát đánh giá đầu tư                                                                                    |
+| CP582   | Chi phí thẩm tra thiết kế BVTC-DT                                                                                           |
+| CP58211 | Chi phí thẩm tra thiết kế BVTC-DT (Phát sinh)                                                                               |
+| CP58220 | Chi phí thẩm tra thiết kế BVTC                                                                                              |
+| CP58231 | Chi phí thẩm tra thiết kế BVTC (Phát sinh)                                                                                  |
+| CP583   | Tư vấn đầu tư xây dựng                                                                                                      |
+| CP584   | Chi phí đăng báo đấu thầu                                                                                                   |
+| CP599   | Chi phí đo đạc thu hồi đất                                                                                                  |
+| CP6     | Chi phí khác                                                                                                                |
+| CP601   | Phí thẩm định dự án đầu tư xây dựng                                                                                         |
+| CP602   | Phí thẩm định dự toán xây dựng                                                                                              |
+| CP603   | Chi phí rà phá bom mìn, vật nổ                                                                                              |
+| CP604   | Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy                                                                 |
+| CP605   | Chi phí thẩm định giá thiết bị                                                                                              |
+| CP606   | Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở                                                               |
+| CP607   | Chi phí thẩm tra, phê duyệt quyết toán                                                                                      |
+| CP608   | Chi phí kiểm tra công tác nghiệm thu                                                                                        |
+| CP609   | Chi phí kiểm toán độc lập                                                                                                   |
+| CP60902 | Chi phí kiểm toán công trình                                                                                                |
+| CP60999 | Chi phí kiểm toán độc lập (Phát sinh)                                                                                       |
+| CP610   | Chi phí bảo hiểm                                                                                                            |
+| CP61099 | Chi phí bảo hiểm (Phát sinh)                                                                                                |
+| CP611   | Chi phí thẩm định báo cáo đánh giá tác động môi trường                                                                      |
+| CP612   | Chi phí bảo hành, bảo trì                                                                                                   |
+| CP613   | Phí bảo vệ môi trường                                                                                                       |
+| CP614   | Chi phí di dời điện                                                                                                         |
+| CP61401 | Chi phí di dời hệ thống điện chiếu sáng                                                                                     |
+| CP61402 | Chi phí di dời đường dây hạ thế                                                                                             |
+| CP61403 | Chi phí di dời nhà                                                                                                          |
+| CP61404 | Chi phí di dời nước                                                                                                         |
+| CP61405 | Chi phí di dời trụ điện trong trường                                                                                        |
+| CP615   | Phí thẩm tra di dời điện                                                                                                    |
+| CP617   | Chi phí đo đạc địa chính                                                                                                    |
+| CP61701 | Chi phí đo đạc bản đồ địa chính                                                                                        |
+| CP61702 | Chi phí đo đạc lập bản đồ địa chính GPMB                                                                                    |
+| CP61703 | Chi phí đo đạc, đền bù GPMB                                                                                                 |
+| CP61704 | Chi phí đo đạc thu hồi đất                                                                                                  |
+| CP61820 | Chi phí tổ chức kiểm tra công tác nghiệm thu                                                                                |
+| CP619   | Chi phí lán trại                                                                                                            |
+| CP620   | Chi phí đảm bảo giao thông                                                                                                  |
+| CP621   | Chi phí điều tiết giao thông                                                                                                |
+| CP62101 | Chi phí điều tiết giao thông khác                                                                                           |
+| CP622   | Chi phí một số công tác không xác định số lượng từ thiết kế                                                                 |
+| CP623   | Chi phí thẩm định thiết kế bản vẽ thi công, lệ phí thẩm định báo cáo kinh tế kỹ thuật (KTKT)                                |
+| CP624   | Chi phí nhà tạm                                                                                                             |
+| CP62501 | Chi phí giám sát đánh giá đầu tư                                                                                            |
+| CP626   | Chi phí thẩm định kết quả lựa chọn nhà thầu                                                                                 |
+| CP62701 | Chi phí khoan địa chất                                                                                                      |
+| CP628   | Chi phí thẩm định đồ án quy hoạch                                                                                           |
+| CP629   | Chi phí thẩm định HSMT (HSYC)                                                                                               |
+| CP630   | Lệ phí thẩm tra thiết kế                                                                                                    |
+| CP631   | Phí thẩm định lựa chọn nhà thầu                                                                                             |
+| CP632   | Chi phí thẩm tra quyết toán                                                                                                 |
+| CP633   | Chi phí thẩm định phê duyệt quyết toán                                                                                      |
+| CP634   | Chi phí thẩm định báo cáo nghiên cứu khả thi                                                                                |
+| CP699   | Chi phí khác                                                                                                                |
+| CP7     | Chi phí dự phòng                                                                                                            |
+| CP701   | Chi phí dự phòng cho khối lượng, công việc phát sinh                                                                        |
+| CP702   | Chi phí dự phòng cho yếu tố trược giá                                                                                       |
+| CP703   | Chi phí dự phòng phát sinh khối lượng (cho yếu tố khối lượng phát sinh (KLPS))                                              |
 
 ### Yêu cầu nhiệm vụ:
-1. Tìm kiếm trong danh sách chi phí chuẩn (gồm cả tên nhóm và tên con chi tiết) mục có ý nghĩa tương đồng cao nhất với từng dòng chi phí trên.
+1. Suy luận thật kỹ và ghép TenKMCP trong bảng TableKMCP sang cột TenKMCP trong bảng DuLieuCanGhep, độ tương đồng khoảng 65% trở lên.
 2. Kết quả đầu ra chuỗi json duy nhất với các trường thông tin
-- STT: STT của bảng DuLieuChiTiet
 - TenKMCP: Tên khoản mục gốc trước khi ánh xạ
-- TenKMCP_Moi: Tên khoản mục sau khi ánh xạ
-- MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng
-- GhiChu: Giải thích vì sao lại ánh xạ như vậy (trong ghi chú không chứa ký tự đặc biệt)
-**ĐIỀU KIỆN BẮT BUỘC:**
-- Chỉ chọn một MaKMCP có ý nghĩa gần nhất và phù hợp nhất cho mỗi khoản mục
-- Không được chọn nhiều hơn một mã KMCP cho một dòng
-- Không được suy diễn vượt quá ý nghĩa của cụm từ gốc
-- Ưu tiên nhóm chính trước, nếu không khớp thì tìm trong nhóm con
-- Các trường thông tin trong json KHÔNG gán ký tự đặc biệt
+- TenKMCP_Moi: Tên khoản mục sau khi ánh xạ (Nếu "Không có thông tin để ánh xạ" thì gán rỗng "")
+- MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng (Nếu "Không có thông tin để ánh xạ" thì gán rỗng "")
+- GhiChu: Giải thích vì sao lại ánh xạ như vậy (ghi chú không chứa ký tự đặc biệt, chỉ chữ cái). Nếu "Không có thông tin để ánh xạ" thì gán "Không có thông tin"
+
+**Lưu ý:**
+- Nếu dữ liệu cột TenKMCP trong DuLieuCanGhep không đúng chính tả hãy sửa lại trước khi ánh xạ nội dung với bảng TableKMCP
+- Dữ liệu 2 bảng phải có độ tương đồng về ngữ nghĩa hoặc ý nghĩa . Nếu không chắc chắc thì trả  "Không có thông tin"
+- Các trường thông tin trong json (TenKMCP, TenKMCP_Moi, MaKMCP, GhiChu)  KHÔNG gán ký tự đặc biệt như `'`, `"`
 """
-        
         # Gọi OpenAI API để xử lý
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         response = client.chat.completions.create(
@@ -941,8 +985,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
             messages=[
                 {
                     "role": "system",
-                    "content": """Bạn là một trợ lý AI chuyên nghiệp trong việc ánh xạ và phân loại thông tin.
-                    Kết quả trả về PHẢI là một JSON"""
+                    "content": """Bạn là một chuyên gia về lĩnh vực Đầu tư xây dựng cơ bản. Bạn chuyên ánh xạ tương đồng nội dung (từ ngữ tương đồng, ý nghĩa tương đồng)"""
                 },
                 {
                     "role": "user",
@@ -950,9 +993,9 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 }
             ],
             temperature=0,
-            #response_format={"type": "json_object"},
-            seed=42  # Thêm seed để đảm bảo tính nhất quán
+            max_completion_tokens=5000
         )
+
         #print(promt_anh_xa_noi_dung_tuong_dong)
         try:
             # Xử lý response từ OpenAI
@@ -967,32 +1010,136 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
 
             # Lấy ra list từ key "results"
             result_list = dataJson
-            # print("result_list>>>>>>>>")
-            # print(result_list)
             # Chuyển đổi list trở lại thành chuỗi JSON
             new_response_text = json.dumps(result_list, indent=4, ensure_ascii=False)
-            #print(new_response_text)
             # Chuyển đổi response thành DataFrame
-            dfBangDuLieuChiTietAI = pd.read_json(new_response_text)
-            # print("\nDữ liệu BangDuLieuChiTietAI:")
-            # print("=" * 80)
-            # for index, row in dfBangDuLieuChiTietAI.iterrows():
-            #     print(f"\nDòng {index + 1}:")
-            #     for column in dfBangDuLieuChiTietAI.columns:
-            #         print(f"{column}: {row[column]}")
-            #     print("-" * 40)
-            # print("=" * 80)
+            dfBangGhepKMCP = pd.read_json(new_response_text)
             # Thực hiện cập nhật dữ liệu vào database
-            for index, row in dfBangDuLieuChiTietAI.iterrows():
-                query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), GhiChuAI=N'{}' where STT=N'{}'".format(
-                    row['TenKMCP_Moi'],
-                    row['MaKMCP'].replace("'", ""),
-                    row['GhiChu'].replace("'", ""),
-                    row['STT']
-                )
+            # Sắp xếp DataFrame theo cột TenKMCP_Moi tăng dần
+            dfBangGhepKMCP = dfBangGhepKMCP.sort_values(by='TenKMCP_Moi', ascending=True)
+            
+            #print(dfBangGhepKMCP)
 
-                print(f"Executing SQL query: {query_insert}")
-                thuc_thi_truy_van(query_insert)
+            # Duyệt qua từng dòng trong DataFrame để xử lý trường hợp GhiChu='Không có thông tin'
+            for index, row in dfBangGhepKMCP.iterrows():
+                if row['GhiChu'] == 'Không có thông tin':
+                    dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
+                    dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
+            
+            #print(dfBangGhepKMCP)
+
+            query_van_ban = f"""
+            select 
+            BangDuLieuChiTietAIID = convert(nvarchar(36), BangDuLieuChiTietAIID)
+            , VanBanAIID = convert(nvarchar(36), VanBanAIID)
+            , TenKMCP, TenKMCP_AI, MaKMCP='', GhiChuAI=''
+            from dbo.BangDuLieuChiTietAI ct 
+            where VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), DuAnID)='{duAnID}' and vb.TenLoaiVanBan in ('QDPD_CT', 'QDPDDT_CBDT', 'QDPD_DA', 'QDPD_DT_THDT')
+                and isnull(TrangThai, 0) = 0)  -- các văn bản chưa insert vào csdl
+            """
+            #print(query_van_ban)
+            dfBangDuLieuChiTietAI = lay_du_lieu_tu_sql_server(query_van_ban)
+
+            # Duyệt qua từng dòng trong dfBangDuLieuChiTietAI
+            for index, row in dfBangDuLieuChiTietAI.iterrows():
+                # Tìm dòng tương ứng trong dfBangGhepKMCP có TenKMCP trùng khớp
+                matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'] == row['TenKMCP']]
+                # Nếu tìm thấy dòng tương ứng
+                if not matching_row.empty:
+                    # Cập nhật TenKMCP_AI trong dfBangDuLieuChiTietAI
+                    dfBangDuLieuChiTietAI.at[index, 'TenKMCP_AI'] = matching_row.iloc[0]['TenKMCP_Moi']
+
+            # print("-0"*20)
+            # print(dfBangDuLieuChiTietAI)
+            # print("-0"*20)
+
+            # Lọc ra danh sách distinct theo VanBanAIID
+            dfDistinctVanBanAIID = dfBangDuLieuChiTietAI.drop_duplicates(subset=['VanBanAIID'])
+            chuoi_kmcp_khong_ghep_duoc = []
+            kmcp_ghep_duoc = []
+            # Duyệt qua từng phần tử trong dfDistinctVanBanAIID
+            for _, row in dfDistinctVanBanAIID.iterrows():
+                van_ban_id = row['VanBanAIID']
+                # Lọc dữ liệu từ dfBangDuLieuChiTietAI theo VanBanAIID
+                df_filtered = dfBangDuLieuChiTietAI[dfBangDuLieuChiTietAI['VanBanAIID'] == van_ban_id]
+                # print(f"\nDữ liệu cho VanBanAIID: {van_ban_id}")
+                # print(df_filtered)
+                # Duyệt qua từng dòng trong df_filtered
+                for idx, filtered_row in df_filtered.iterrows():
+                    # Tìm dòng tương ứng trong dfBangGhepKMCP có TenKMCP trùng khớp
+                    matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'] == filtered_row['TenKMCP']]
+                    
+                    # Nếu tìm thấy dòng tương ứng
+                    if not matching_row.empty:
+                        # Cập nhật TenKMCP_AI trong df_filtered
+                        df_filtered.at[idx, 'TenKMCP_AI'] = matching_row.iloc[0]['TenKMCP_Moi']
+                        df_filtered.at[idx, 'MaKMCP'] = matching_row.iloc[0]['MaKMCP']
+                        df_filtered.at[idx, 'GhiChuAI'] = matching_row.iloc[0]['GhiChu']
+                
+                # Cập nhật lại dfBangDuLieuChiTietAI với dữ liệu đã được xử lý
+                dfBangDuLieuChiTietAI.update(df_filtered)
+                # Duyệt qua từng dòng trong df_filtered
+                for idx, row in df_filtered.iterrows():
+                    # Kiểm tra xem có nhiều hơn 1 dòng có cùng TenKMCP_Moi không
+                    if df_filtered[df_filtered['TenKMCP_AI'] == row['TenKMCP_AI']].shape[0] > 1:
+                        # Lưu lại BangDuLieuChiTietAIID của dòng hiện tại
+                        bang_du_lieu_id = row['BangDuLieuChiTietAIID']
+                        if str(row['MaKMCP']).strip() == "":
+                            continue
+                        # Truy vấn CSDL để tìm các KMCP khác có tên bắt đầu bằng TenKMCP_AI hiện tại
+                        query_kmcp = f"""
+                        SELECT MaKMCP, TenKMCP 
+                        FROM dbo.KMCP 
+                        WHERE TenKMCP LIKE N'{row['TenKMCP_AI']}%' 
+                        AND TenKMCP <> N'{row['TenKMCP_AI']}'
+                        ORDER BY LEN(TenKMCP), TenKMCP
+                        """
+                        df_kmcp = lay_du_lieu_tu_sql_server(query_kmcp)
+                        
+                        if not df_kmcp.empty:
+                            # Lấy tất cả các dòng có cùng TenKMCP_AI
+                            duplicate_rows = df_filtered[df_filtered['TenKMCP_AI'] == row['TenKMCP_AI']]
+                            
+                            # Duyệt qua từng dòng trùng lặp và gán KMCP khác nhau
+                            for i, (_, duplicate_row) in enumerate(duplicate_rows.iterrows()):
+                                if i < len(df_kmcp):
+                                    # Cập nhật dòng trùng lặp với tên KMCP mới từ CSDL
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'TenKMCP_AI'] = df_kmcp.iloc[i]['TenKMCP']
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'MaKMCP'] = df_kmcp.iloc[i]['MaKMCP']
+                                else:
+                                    # Nếu hết KMCP để gán, thêm số thứ tự vào tên
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'TenKMCP_AI'] = f"{row['TenKMCP_AI']} ({i+1})"
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'MaKMCP'] = f"{row['MaKMCP']}_{i+1}"
+
+                #print(f"\nDữ liệu cho VanBanAIID: {van_ban_id}")
+                #print(df_filtered)
+                
+                for index, row in df_filtered.iterrows():
+                    #print(row)
+                    if str(row['MaKMCP']).strip() == "":
+                        chuoi_kmcp_khong_ghep_duoc.append({'TenKMCP': str(row['TenKMCP']).strip()})
+                    else:
+                        kmcp_ghep_duoc.append(row)
+                    query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), CoCauVonID=(select top 1 CoCauVonID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), GhiChuAI=N'{}' where BangDuLieuChiTietAIID=N'{}'".format(
+                        row['TenKMCP_AI'],
+                        row['MaKMCP'].replace("'", ""),
+                        row['MaKMCP'].replace("'", ""),
+                        row['GhiChuAI'].replace("'", ""),
+                        row['BangDuLieuChiTietAIID']
+                    )
+
+                    print(f"Executing SQL query: {query_insert}")
+                    thuc_thi_truy_van(query_insert)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success", 
+                    "code": 200,
+                    "message": "Xử lý kết quả ánh xạ từ AI thành công",
+                    "data": [row.to_dict() for row in kmcp_ghep_duoc],
+                    "not_standardized": chuoi_kmcp_khong_ghep_duoc
+                }
+            )
                 
         except Exception as e:
             return JSONResponse(
@@ -1001,7 +1148,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                     "status": "error",
                     "code": 500,
                     "message": "Lỗi khi xử lý kết quả ánh xạ từ AI",
-                    "detail": str(e)
+                    "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
                 }
             )
         # print("\nDữ liệu VanBanAI:")
@@ -1012,156 +1159,156 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
         #         print(f"{column}: {row[column]}")
         #     print("-" * 40)
         # print("=" * 80)
-        if not dfVanBanAI.empty:
-            for index, row in dfVanBanAI.iterrows():
-                van_ban_id = row['VanBanAIID']
-                ten_loai_van_ban = row['TenLoaiVanBan']
-                query_bangct = f"select BangDuLieuChiTietAIID=convert(nvarchar(36), BangDuLieuChiTietAIID), KMCPID=convert(nvarchar(36), KMCPID), TenKMCP_AI from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
-                df_bang_ct = lay_du_lieu_tu_sql_server(query_bangct)
-                # Xử lý thêm dữ liệu vào NTsoftDocumentAI
-                # print("=================ten_loai_van_ban===============")
-                # print(ten_loai_van_ban)
+        # if not dfVanBanAI.empty:
+        #     for index, row in dfVanBanAI.iterrows():
+        #         van_ban_id = row['VanBanAIID']
+        #         ten_loai_van_ban = row['TenLoaiVanBan']
+        #         query_bangct = f"select BangDuLieuChiTietAIID=convert(nvarchar(36), BangDuLieuChiTietAIID), KMCPID=convert(nvarchar(36), KMCPID), TenKMCP_AI from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
+        #         df_bang_ct = lay_du_lieu_tu_sql_server(query_bangct)
+        #         # Xử lý thêm dữ liệu vào NTsoftDocumentAI
+        #         # print("=================ten_loai_van_ban===============")
+        #         # print(ten_loai_van_ban)
 
-                # Xử lý LayMaDoiTuong -> Cho Cơ quan ban hành
-                ten_toi_tuong = row['CoQuanBanHanh']
-                la_ca_nhan = "0"
-                doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
-                try:
-                    query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_ToChuc=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
-                    thuc_thi_truy_van(query_update_doi_tuong)
-                except Exception as e:
-                    print(f"Lỗi khi cập nhật DoiTuongID_ToChuc: {str(e)}")
-                # Xử lý LayMaDoiTuong -> Cho Người ký
-                ten_toi_tuong = row['NguoiKy']
-                la_ca_nhan = "1"
-                doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
-                try:
-                    query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_CaNhan=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
-                    thuc_thi_truy_van(query_update_doi_tuong)
-                except Exception as e:
-                    print(f"Lỗi khi cập nhật DoiTuongID_CaNhan: {str(e)}")
+        #         # Xử lý LayMaDoiTuong -> Cho Cơ quan ban hành
+        #         ten_toi_tuong = row['CoQuanBanHanh']
+        #         la_ca_nhan = "0"
+        #         doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
+        #         try:
+        #             query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_ToChuc=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
+        #             thuc_thi_truy_van(query_update_doi_tuong)
+        #         except Exception as e:
+        #             print(f"Lỗi khi cập nhật DoiTuongID_ToChuc: {str(e)}")
+        #         # Xử lý LayMaDoiTuong -> Cho Người ký
+        #         ten_toi_tuong = row['NguoiKy']
+        #         la_ca_nhan = "1"
+        #         doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
+        #         try:
+        #             query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_CaNhan=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
+        #             thuc_thi_truy_van(query_update_doi_tuong)
+        #         except Exception as e:
+        #             print(f"Lỗi khi cập nhật DoiTuongID_CaNhan: {str(e)}")
 
-                if f"[{ten_loai_van_ban}]" in "[QDPD_CT];[QDPD_DA]":    
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, TongMucDauTuKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriTMDTKMCP,GiaTriTMDTKMCP_DC,GiaTriTMDTKMCPTang,GiaTriTMDTKMCPGiam,TongMucDauTuKMCPID_goc)
-                            select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', TongMucDauTuKMCPID=newid()
-                            , KMCPID=N'{row2['KMCPID']}'
-                            , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            , N'{van_ban_id}'
-                            , TenKMCP=N'{row2['TenKMCP_AI']}'
-                            , GiaTriTMDTKMCP=(select GiaTriTMDTKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriTMDTKMCP_DC=(select GiaTriTMDTKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriTMDTKMCPTang=(select GiaTriTMDTKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriTMDTKMCPGiam=(select GiaTriTMDTKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
-                            ---------- Cập nhật giá trị văn bản
-                            update dbo.VanBanAI 
-                            set 
-                            GiaTri = (select GiaTriTMDTKMCP=isnull(sum(GiaTriTMDTKMCP), 0) from dbo.BangDuLieuChiTietAI ai where ai.VanBanAIID='{van_ban_id}') 
-                            where VanBanAIID='{van_ban_id}'
-                            """
-                            #print(f"Executing SQL query: {query_insert}")
-                            if thuc_thi_truy_van(query_insert) == False:
-                                print(f"Executing SQL query: {query_insert}")
-                if f"[{ten_loai_van_ban}]" in "[QDPDDT_CBDT];[QDPD_DT_THDT]":    
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, DuToanKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
-                            select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', DuToanKMCPID=newid()
-                            , KMCPID=N'{row2['KMCPID']}'
-                            , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            , N'{van_ban_id}'
-                            , TenKMCP=N'{row2['TenKMCP_AI']}'
-                            , GiaTriDuToanKMCP=(select GiaTriDuToanKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCP_DC=(select GiaTriDuToanKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCPTang=(select GiaTriDuToanKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCPGiam=(select GiaTriDuToanKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
+        #         if f"[{ten_loai_van_ban}]" in "[QDPD_CT];[QDPD_DA]":    
+        #             if not df_bang_ct.empty:
+        #                 for _, row2 in df_bang_ct.iterrows():
+        #                     query_insert = f"""
+        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+        #                     ----------
+        #                     insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, TongMucDauTuKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriTMDTKMCP,GiaTriTMDTKMCP_DC,GiaTriTMDTKMCPTang,GiaTriTMDTKMCPGiam,TongMucDauTuKMCPID_goc)
+        #                     select 
+        #                       BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', TongMucDauTuKMCPID=newid()
+        #                     , KMCPID=N'{row2['KMCPID']}'
+        #                     , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
+        #                     , N'{van_ban_id}'
+        #                     , TenKMCP=N'{row2['TenKMCP_AI']}'
+        #                     , GiaTriTMDTKMCP=(select GiaTriTMDTKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , GiaTriTMDTKMCP_DC=(select GiaTriTMDTKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , GiaTriTMDTKMCPTang=(select GiaTriTMDTKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , GiaTriTMDTKMCPGiam=(select GiaTriTMDTKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
+        #                     ---------- Cập nhật giá trị văn bản
+        #                     update dbo.VanBanAI 
+        #                     set 
+        #                     GiaTri = (select GiaTriTMDTKMCP=isnull(sum(GiaTriTMDTKMCP), 0) from dbo.BangDuLieuChiTietAI ai where ai.VanBanAIID='{van_ban_id}') 
+        #                     where VanBanAIID='{van_ban_id}'
+        #                     """
+        #                     #print(f"Executing SQL query: {query_insert}")
+        #                     if thuc_thi_truy_van(query_insert) == False:
+        #                         print(f"Executing SQL query: {query_insert}")
+        #         if f"[{ten_loai_van_ban}]" in "[QDPDDT_CBDT];[QDPD_DT_THDT]":    
+        #             if not df_bang_ct.empty:
+        #                 for _, row2 in df_bang_ct.iterrows():
+        #                     query_insert = f"""
+        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+        #                     ----------
+        #                     insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, DuToanKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
+        #                     select 
+        #                       BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', DuToanKMCPID=newid()
+        #                     , KMCPID=N'{row2['KMCPID']}'
+        #                     , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
+        #                     , N'{van_ban_id}'
+        #                     , TenKMCP=N'{row2['TenKMCP_AI']}'
+        #                     , GiaTriDuToanKMCP=(select GiaTriDuToanKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , GiaTriDuToanKMCP_DC=(select GiaTriDuToanKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , GiaTriDuToanKMCPTang=(select GiaTriDuToanKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , GiaTriDuToanKMCPGiam=(select GiaTriDuToanKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
+        #                     , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
+        #                     """
+        #                     print(f"Executing SQL query: {query_insert}")
+        #                     thuc_thi_truy_van(query_insert)
 
-                if f"[{ten_loai_van_ban}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID, TenKMCP, DauThauID, DauThauCTID,TenDauThau, GiaTriGoiThau, TenNguonVon, CoCauVonID
-                                ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
-                            SELECT
-                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}', DauThauID=newid(),
-                            DauThauCTID=newid(),
-                            TenDauThau,
-                            GiaTriGoiThau,
-                            TenNguonVon,
-                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
-                            LoaiGoiThauID=NULL, -- chưa xử lý
-                            HinhThucDThID=NULL, -- chưa xử lý
-                            PhuongThucDThID=NULL, -- chưa xử lý
-                            LoaiHopDongID=NULL, -- chưa xử lý
-                            ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
-                            KeHoachThoiGianHopDong=ThoiGianTHHopDong
-                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-                if f"[{ten_loai_van_ban}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID,TenKMCP,TenDauThau,KeHoachThoiGianHopDong,LoaiHopDongID,GiaTrungThau, CoCauVonID)
-                            SELECT
-                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',TenDauThau,
-                            KeHoachThoiGianHopDong=ThoiGianTHHopDong,
-                            LoaiHopDongID=NULL, -- chưa xử lý
-                            GiaTrungThau, 
-                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-                if f"[{ten_loai_van_ban}]" in "[HOP_DONG]": # Hợp đồng mặc định là giai đoạn thực hiện
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID, VanBanAIID, TenKMCP, HopDongCTID, DauThauCTID,GiaTriHopDong,CoCauVonID
-                                ,GiaTriHopDongTang,GiaTriHopDongGiam,DuToanKMCPID,KMCPID)
-                            SELECT
-                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',HopDongCTID=newid(),
-                            DauThauCTID=NULL, -- khoá ngoại chưa xử lý
-                            GiaTriHopDong,
-                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
-                            GiaTriHopDongTang, -- khoá ngoại chưa xử lý
-                            GiaTriHopDongGiam, -- khoá ngoại chưa xử lý
-                            DuToanKMCPID=NULL, -- khoá ngoại chưa xử lý
-                            KMCPID -- chưa xử lý
-                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "success",
-                "code": 200,
-                "message": "Đã làm đẹp dữ liệu văn bản",
-                "detail": ""
-            }
-        )
+        #         if f"[{ten_loai_van_ban}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
+        #             if not df_bang_ct.empty:
+        #                 for _, row2 in df_bang_ct.iterrows():
+        #                     query_insert = f"""
+        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+        #                     ----------
+        #                     insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID, TenKMCP, DauThauID, DauThauCTID,TenDauThau, GiaTriGoiThau, TenNguonVon, CoCauVonID
+        #                         ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
+        #                     SELECT
+        #                     BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}', DauThauID=newid(),
+        #                     DauThauCTID=newid(),
+        #                     TenDauThau,
+        #                     GiaTriGoiThau,
+        #                     TenNguonVon,
+        #                     CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
+        #                     LoaiGoiThauID=NULL, -- chưa xử lý
+        #                     HinhThucDThID=NULL, -- chưa xử lý
+        #                     PhuongThucDThID=NULL, -- chưa xử lý
+        #                     LoaiHopDongID=NULL, -- chưa xử lý
+        #                     ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
+        #                     KeHoachThoiGianHopDong=ThoiGianTHHopDong
+        #                     FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
+        #                     """
+        #                     print(f"Executing SQL query: {query_insert}")
+        #                     thuc_thi_truy_van(query_insert)
+        #         if f"[{ten_loai_van_ban}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
+        #             if not df_bang_ct.empty:
+        #                 for _, row2 in df_bang_ct.iterrows():
+        #                     query_insert = f"""
+        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+        #                     ----------
+        #                     insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID,TenKMCP,TenDauThau,KeHoachThoiGianHopDong,LoaiHopDongID,GiaTrungThau, CoCauVonID)
+        #                     SELECT
+        #                     BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',TenDauThau,
+        #                     KeHoachThoiGianHopDong=ThoiGianTHHopDong,
+        #                     LoaiHopDongID=NULL, -- chưa xử lý
+        #                     GiaTrungThau, 
+        #                     CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
+        #                     FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
+        #                     """
+        #                     print(f"Executing SQL query: {query_insert}")
+        #                     thuc_thi_truy_van(query_insert)
+        #         if f"[{ten_loai_van_ban}]" in "[HOP_DONG]": # Hợp đồng mặc định là giai đoạn thực hiện
+        #             if not df_bang_ct.empty:
+        #                 for _, row2 in df_bang_ct.iterrows():
+        #                     query_insert = f"""
+        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
+        #                     ----------
+        #                     insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID, VanBanAIID, TenKMCP, HopDongCTID, DauThauCTID,GiaTriHopDong,CoCauVonID
+        #                         ,GiaTriHopDongTang,GiaTriHopDongGiam,DuToanKMCPID,KMCPID)
+        #                     SELECT
+        #                     BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',HopDongCTID=newid(),
+        #                     DauThauCTID=NULL, -- khoá ngoại chưa xử lý
+        #                     GiaTriHopDong,
+        #                     CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
+        #                     GiaTriHopDongTang, -- khoá ngoại chưa xử lý
+        #                     GiaTriHopDongGiam, -- khoá ngoại chưa xử lý
+        #                     DuToanKMCPID=NULL, -- khoá ngoại chưa xử lý
+        #                     KMCPID -- chưa xử lý
+        #                     FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
+        #                     """
+        #                     print(f"Executing SQL query: {query_insert}")
+        #                     thuc_thi_truy_van(query_insert)
+        # return JSONResponse(
+        #     status_code=200,
+        #     content={
+        #         "status": "success",
+        #         "code": 200,
+        #         "message": "Đã làm đẹp dữ liệu văn bản",
+        #         "detail": ""
+        #     }
+        # )
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -1169,7 +1316,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 "status": "error",
                 "code": 500,
                 "message": "Lỗi hệ thống",
-                "detail": str(e)
+                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
             }
         )
 
@@ -1795,3 +1942,162 @@ async def extract_multiple_images(
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
+
+@router.get("/find_content_similarity")
+async def extract_multiple_images(
+    loaiDuLieu: Optional[str] = None, # KMCP; NguonVon; HinhThucDTh; LoaiHopDong
+    duLieuCanTim: Optional[str] = None,
+    authorization: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    # Xác thực token
+    try:
+        #Kiểm tra header Authorization
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+            
+        #Lấy token từ header
+        token = authorization.split(" ")[1]
+        # Giải mã token để lấy userID và donViID
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        
+        #Thêm thông tin user vào request
+        request_data = {
+            "userID": user_id,
+            "donViID": don_vi_id
+        }
+        print(request_data)
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+    if loaiDuLieu.lower() == "kmcp":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select KMCPID, TenKMCP 
+            from dbo.KMCP 
+            order by TenKMCP
+            """
+            
+            # Thực thi truy vấn
+            result = db.execute(text(query))
+            kmcp_list = result.fetchall()
+            
+            # Chuyển đổi kết quả thành list dict
+            kmcp_data = {row.KMCPID: row.TenKMCP for row in kmcp_list}
+            # VIET_TAT_KMCP = {
+            #     "cpxd": "chi phí xây dựng",
+            #     "cpxl": "chi phí xây dựng",
+            #     "tdc": "tái định cư",
+            #     "cpql": "chi phí quản lý dự án",
+            #     "qlda": "chi phí quản lý dự án",
+            #     "tvtk": "tư vấn đầu tư xây dựng",
+            #     "tvgs": "tư vấn đầu tư xây dựng",
+            #     "cpdp": "chi phí dự phòng",
+            #     "khac": "chi phí khác",
+            #     "ktkt": "kinh tế kỹ thuật",
+            #     "bc": "báo cáo",
+            #     "bvtc": "bản vẽ thi công",
+            #     "dt": "dự toán"
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, kmcp_data, 0.50)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Lấy danh sách KMCP thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm KMCP",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi lấy danh sách KMCP",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "nguonvon":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select NguonVonID, TenNguonVon 
+            from dbo.NguonVon 
+            order by TenNguonVon
+            """
+            
+            # Thực thi truy vấn
+            result = db.execute(text(query))
+            nguonvon_list = result.fetchall()
+            
+            # Chuyển đổi kết quả thành list dict
+            nguonvon_data = {row.NguonVonID: row.TenNguonVon for row in nguonvon_list}
+            # VIET_TAT = {
+            #     "xskt": "Xổ số kiến thiết",
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, nguonvon_data, 0.50)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Lấy danh sách Nguồn vốn thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm KMCP",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi lấy danh sách KMCP",
+                    "detail": str(e)
+                }
+            )
