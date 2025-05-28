@@ -102,8 +102,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 ### Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenDauThau`: Trích tên đầy đủ của gói thầu
-`TenKMCP`: Trích khoản mục chi phí tại `TenDauThau` gán vào cột `TenKMCP`
+`TenDauThau`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu)
+`TenKMCP`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu), loại bỏ các cụm từ ("Gói thầu số xx:", "Gói số xx:", "Gói xx:", "Tên gói thầu số xx:")
 `GiaTriGoiThau`: Trích cột giá gói thầu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNguonVon`: Trích cột nguồn vốn, nếu không có để ""
 `HinhThucLCNT`: Trích cột hình thức lựa chọn nhà thầu
@@ -249,8 +249,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
 `DieuChinh`: Gán `1` nếu trích yếu văn bản có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 **Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): `BangDuLieu`:
-`TenDauThau`: Trích tên đầy đủ của gói thầu
-`TenKMCP`: Trích khoản mục chi phí tại thông tin "tên gói thầu" gán vào cột `TenKMCP`
+`TenDauThau`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu)
+`TenKMCP`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu), loại bỏ các cụm từ ("Gói thầu số xx:", "Gói số xx:", "Gói xx:", "Tên gói thầu số xx:")
 `GiaTriGoiThau`: Trích cột giá gói thầu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNguonVon`: Trích cột nguồn vốn
 `HinhThucLCNT`: Trích cột hình thức lựa chọn nhà thầu

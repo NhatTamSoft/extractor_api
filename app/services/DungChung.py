@@ -73,13 +73,14 @@ def chat_with_openai_json(prompt) -> str:
 
 # %%
 # --- Hàm chuyển đổi PDF thành ảnh ---
-def pdf_to_images(pdf_path, zoom=2.0):
+def pdf_to_images(pdf_path, zoom=2.0, pageRange=""):
     """
     Chuyển đổi các trang của tệp PDF thành danh sách các đối tượng ảnh PIL.
 
     Args:
         pdf_path (str): Đường dẫn đến tệp PDF.
         zoom (float): Hệ số phóng đại ảnh (tăng giá trị để có độ phân giải cao hơn).
+        pageRange (str): Chuỗi chỉ định các trang cần xử lý (ví dụ: "1,2,5-8").
 
     Returns:
         list: Danh sách các đối tượng ảnh PIL, mỗi ảnh là một trang PDF.
@@ -87,9 +88,34 @@ def pdf_to_images(pdf_path, zoom=2.0):
     """
     images = []
     doc = None # Khởi tạo doc là None
+    
+    # Kiểm tra và xử lý giá trị zoom
+    try:
+        zoom = float(zoom) if zoom else 2.0
+        if zoom <= 0:
+            print("Cảnh báo: Giá trị zoom không hợp lệ, sử dụng giá trị mặc định 2.0")
+            zoom = 2.0
+    except (ValueError, TypeError):
+        print("Cảnh báo: Không thể chuyển đổi giá trị zoom, sử dụng giá trị mặc định 2.0")
+        zoom = 2.0
+
     try:
         doc = fitz.open(pdf_path)
-        for page_num in range(len(doc)):
+        # Xác định danh sách các trang cần xử lý
+        if pageRange == "":
+            # Nếu pageRange rỗng, xử lý tất cả các trang
+            pages_to_process = range(len(doc))
+        else:
+            # Nếu có pageRange, sử dụng hàm parse_page_string để lấy danh sách trang
+            pages_to_process = parse_page_string(pageRange)
+            # Điều chỉnh index (trừ 1 vì parse_page_string trả về số trang bắt đầu từ 1)
+            pages_to_process = [p-1 for p in pages_to_process if p-1 < len(doc)]
+
+        # Xử lý từng trang được chỉ định
+        for page_num in pages_to_process:
+            if page_num >= len(doc) or page_num < 0:
+                print(f"\033[91mCảnh báo: Trang {page_num} không tồn tại trong file PDF\033[0m")
+                continue
             page = doc.load_page(page_num)
             # Phóng to độ phân giải để cải thiện chất lượng OCR
             mat = fitz.Matrix(zoom, zoom)
@@ -99,7 +125,6 @@ def pdf_to_images(pdf_path, zoom=2.0):
             images.append(image)
     except FileNotFoundError:
         print(f"Lỗi: Không tìm thấy tệp PDF tại '{pdf_path}'")
-    # SỬA LỖI: Thay fitz.FitzError bằng RuntimeError
     except RuntimeError as e_fitz:
          print(f"Lỗi PyMuPDF (RuntimeError) khi xử lý file {os.path.basename(pdf_path)} trong pdf_to_images: {e_fitz}")
     except Exception as e:
