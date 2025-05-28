@@ -32,6 +32,7 @@ import tempfile
 import fitz  # PyMuPDF for PDF processing
 import traceback
 import PIL
+import openpyxl
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -69,11 +70,148 @@ class MultiImageExtractRequest(BaseModel):
 class DocumentExtractRequest(BaseModel):
     file_type: str  # 'image' or 'pdf'
     pages: Optional[List[int]] = None  # For PDF, specify which pages to process
+@router.post("/document_extract")
+async def document_extract(
+    files: List[UploadFile] = File(...),
+    authorization: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Xác thực token (giữ nguyên logic cũ)
+    try:
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+        token = authorization.split(" ")[1]
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        print(f"Token validated for userID: {user_id}, donViID: {don_vi_id}")
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+
+    # 2. Kiểm tra xem có file nào được tải lên không
+    if not files:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "code": 400, "message": "Chưa có file nào được tải lên."}
+        )
+
+    # 3. Xử lý file Excel đầu tiên được tải lên
+    file = files[0]
+    if not file.filename.endswith('.xlsx'):
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "code": 400, "message": "Định dạng file không hợp lệ.", "detail": "Yêu cầu file có định dạng .xlsx"}
+        )
+
+    # 4. Đọc file Excel và tạo các DataFrame
+    try:
+        # Kiểm tra xem đã cài đặt openpyxl chưa
+
+        # Đọc toàn bộ sheet 'Data' mà không dùng hàng đầu tiên làm header để dễ dàng truy cập bằng chỉ số
+        df_raw = pd.read_excel(file.file, sheet_name='Data', header=None, engine='openpyxl')
+
+        # --- Tạo DataFrame Thông tin dự án ---
+        # Trích xuất dữ liệu từ các ô cụ thể dựa trên hình ảnh
+        # MaDuAn từ ô B2 (hàng 1, cột 1), TenDuAn từ B3 (hàng 2, cột 1), Path từ B4 (hàng 3, cột 1)
+        project_info_data = {
+            'MaDuAn': [str(df_raw.iloc[1, 1]) if pd.notna(df_raw.iloc[1, 1]) else ""],
+            'TenDuAn': [str(df_raw.iloc[2, 1]) if pd.notna(df_raw.iloc[2, 1]) else ""],
+            'Path': [str(df_raw.iloc[3, 1]) if pd.notna(df_raw.iloc[3, 1]) else ""]
+        }
+        df_thong_tin_du_an = pd.DataFrame(project_info_data)
+
+        # --- Tạo DataFrame Danh sách đường dẫn ---
+        # Đọc lại file excel, bỏ qua 4 hàng đầu để lấy header từ hàng thứ 5
+        df_danh_sach_duong_dan = pd.read_excel(file.file, sheet_name='Data', skiprows=4, engine='openpyxl')
+        # Chuyển đổi giá trị NaN trong cột RangePage thành chuỗi rỗng
+        df_danh_sach_duong_dan['RangePage'] = df_danh_sach_duong_dan['RangePage'].fillna('')
+
+        print("===df_danh_sach_duong_dan===")
+        print(df_danh_sach_duong_dan)
+
+        # Loại bỏ các hàng trống (nếu có) dựa trên cột 'STT'
+        df_danh_sach_duong_dan.dropna(subset=['STT'], inplace=True)
+        
+        # Chuyển đổi kiểu dữ liệu của cột STT sang số nguyên và xử lý các giá trị không hợp lệ
+        df_danh_sach_duong_dan['STT'] = pd.to_numeric(df_danh_sach_duong_dan['STT'], errors='coerce').fillna(0).astype(int)
+
+        # Khởi tạo danh sách đường dẫn
+        list_duong_dan = []
+        list_duong_dan_khong_ton_tai = []
+
+        # Duyệt từng dòng trong DataFrame
+        for index, row in df_danh_sach_duong_dan.iterrows():
+            path = row['Path']
+            
+            # Kiểm tra nếu path là thư mục
+            if os.path.isdir(path):
+                # Tìm tất cả file PDF trong thư mục và thư mục con
+                for root, dirs, files in os.walk(path):
+                    for file in files:
+                        if file.lower().endswith('.pdf'):
+                            full_path = os.path.join(root, file)
+                            list_duong_dan.append(full_path)
+            
+            # Kiểm tra nếu path là file PDF
+            elif path.lower().endswith('.pdf'):
+                if os.path.exists(path):
+                    list_duong_dan.append(path)
+                else:
+                    list_duong_dan_khong_ton_tai.append(path)
+        
+        
+
+        print("===Danh sách đường dẫn file PDF===")
+        print(list_duong_dan)
+        print("===Danh sách đường dẫn file PDF không tồn tại===")
+        print(list_duong_dan_khong_ton_tai)
+        
+        # Trả về kết quả là 2 DataFrame dưới dạng JSON
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "message": "Trích xuất dữ liệu từ file Excel thành công.",
+                "data": {
+                    "thong_tin_du_an": df_thong_tin_du_an.to_dict(orient='records'),
+                    "danh_sach_duong_dan": df_danh_sach_duong_dan.to_dict(orient='records')
+                }
+            }
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error", 
+                "code": 500, 
+                "message": "Lỗi khi xử lý file Excel", 
+                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                }
+        )
+
 
 #MÔ HÌNH OPENAI
 @router.post("/image_extract_multi")
 async def extract_multiple_images(
     files: List[UploadFile] = File(...),
+    file_type: Optional[str] = "img", # mặc định là hình ảnh, nếu đưa vào pdf thì chạy pdf
     loaiVanBan: Optional[str] = None,
     duAnID: Optional[str] = None,
     authorization: str = Header(...),
@@ -124,9 +262,9 @@ async def extract_multiple_images(
         van_ban_id = str(uuid.uuid4())
         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
-        print("======================prompt==================")
-        print(prompt)
-        print("======================end prompt==================")
+        # print("======================prompt==================")
+        # print(prompt)
+        # print("======================end prompt==================")
         #return
         # Process each file
         temp_files = []
@@ -758,14 +896,235 @@ async def standardized_data(
         # print("="*20)
 
         # Xử lý ghép TenKMCP trong chuoi_markdown_tenkmcp với TenKMCP trong bảng KMCP
-        promt_anh_xa_noi_dung_tuong_dong = """
-### Bạn là một chuyên gia về lĩnh vực Đầu tư xây dựng cơ bản. Hãy thực hiện ánh xạ nội dung công việc giữa các bảng `DuLieuCanGhep` với danh mục chi phí bảng `TableKMCP`
-#### Bảng DuLieuCanGhep 
+#         promt_anh_xa_noi_dung_tuong_dong = """
+# ### Bạn là một chuyên gia về lĩnh vực Đầu tư xây dựng cơ bản. Hãy thực hiện ánh xạ nội dung công việc giữa các bảng `DuLieuCanGhep` với danh mục chi phí bảng `TableKMCP`
+# #### Bảng DuLieuCanGhep 
+# """+chuoi_markdown_tenkmcp+"""
+# #### Bảng TableKMCP
+# | MaKMCP  | TenKMCP                                                                                                                     |
+# | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+# | CP01    | Chi phí bồi thường, hỗ trợ, tái định cư                                                                                     |
+# | CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác |
+# | CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           |
+# | CP103   | Chi phí tái định cư                                                                                                         |
+# | CP104   | Chi phí tổ chức bồi thường, hỗ trợ và tái định cư                                                                           |
+# | CP105   | Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng                                                                 |
+# | CP106   | Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng                      |
+# | CP107   | Chi phí đầu tư vào đất                                                                                                      |
+# | CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư                                                    |
+# | CP2     | Chi phí xây dựng                                                                                                            |
+# | CP221   | Chi phí xây dựng phát sinh                                                                                                  |
+# | CP222   | Chi phí xây dựng trước thuế                                                                                                 |
+# | CP223   | Chi phí xây dựng sau thuế                                                                                                   |
+# | CP224   | Chi phí xây dựng công trình phụ                                                                                             |
+# | CP225   | Chi phí xây dựng công trình chính                                                                                           |
+# | CP226   | Chi phí xây dựng điều chỉnh                                                                                                 |
+# | CP227   | Chi phí xây dựng công trình chính và phụ                                                                                    |
+# | CP228   | Chi phí xây dựng khác                                                                                                       |
+# | CP3     | Chi phí thiết bị                                                                                                            |
+# | CP321   | Chi phí thiết bị phát sinh                                                                                                  |
+# | CP4     | Chi phí quản lý dự án                                                                                                       |
+# | CP421   | Chi phí quản lý dự án phát sinh                                                                                             |
+# | CP5     | Chi phí tư vấn đầu tư xây dựng                                                                                              |
+# | CP501   | Chi phí lập báo cáo nghiên cứu tiền khả thi                                                                                 |
+# | CP502   | Chi phí lập báo cáo nghiên cứu khả thi                                                                                      |
+# | CP503   | Chi phí lập báo cáo kinh tế - kỹ thuật                                                                                      |
+# | CP50301 | Chi phí lập dự án đầu tư                                                                                                    |
+# | CP504   | Chi phí thiết kế xây dựng                                                                                                   |
+# | CP50411 | Chi phí thiết kế xây dựng (Phát sinh)                                                                                       |
+# | CP50420 | Chi phí thiết kế kỹ thuật                                                                                                   |
+# | CP50431 | Chi phí thiết kế kỹ thuật (Phát sinh)                                                                                       |
+# | CP505   | Chi phí thiết kế bản vẽ thi công                                                                                            |
+# | CP50511 | Chi phí thiết kế bản vẽ thi công (Phát sinh)                                                                                |
+# | CP50530 | Chi phí lập thiết kế bản vẽ thi công - dự toán                                                                              |
+# | CP50541 | Chi phí lập thiết kế bản vẽ thi công - dự toán (Phát sinh)                                                                  |
+# | CP506   | Chi phí lập nhiệm vụ khảo sát xây dựng                                                                                      |
+# | CP50602 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                            |
+# | CP50603 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                  |
+# | CP50604 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                  |
+# | CP50605 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                     |
+# | CP507   | Chi phí thẩm tra báo cáo kinh tế - kỹ thuật                                                                                 |
+# | CP508   | Chi phí thẩm tra báo cáo nghiên cứu khả thi                                                                                 |
+# | CP509   | Chi phí thẩm tra thiết kế xây dựng                                                                                          |
+# | CP50911 | Chi phí thẩm tra thiết kế xây dựng (Phát sinh)                                                                              |
+# | CP510   | Chi phí thẩm tra dự toán xây dựng                                                                                           |
+# | CP51011 | Chi phí thẩm tra dự toán xây dựng (Phát sinh)                                                                               |
+# | CP511   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuât) tư vấn                                   |
+# | CP512   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) tư vấn                                                                           |
+# | CP513   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn                                                                       |
+# | CP51311 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn (Phát sinh)                                                           |
+# | CP514   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng                                                             |
+# | CP51411 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng (Phát sinh)                                                 |
+# | CP515   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng                                                                |
+# | CP51511 | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng (Phát sinh)                                                    |
+# | CP516   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                                                            |
+# | CP51611 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng (Phát sinh)                                                |
+# | CP517   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                      |
+# | CP51711 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                          |
+# | CP518   | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị                                                                            |
+# | CP51811 | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị (Phát sinh)                                                                |
+# | CP519   | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                                       |
+# | CP51911 | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                                           |
+# | CP520   | Chi phí giám sát thi công xây dựng                                                                                          |
+# | CP52099 | Chi phí giám sát thi công xây dựng (Phát sinh)                                                                              |
+# | CP521   | Chi phí giám sát lắp đặt thiết bị                                                                                           |
+# | CP52111 | Chi phí giám sát lắp đặt thiết bị (Phát sinh)                                                                               |
+# | CP522   | Chi phí giám sát công tác khảo sát xây dựng                                                                                 |
+# | CP523   | Chi phí quy đổi vốn đầu tư xây dựng                                                                                         |
+# | CP526   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu)                                                                                |
+# | CP527   | Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi                                                                            |
+# | CP528   | Chi phí khảo sát xây dựng                                                                                                   |
+# | CP52802 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                         |
+# | CP52803 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                               |
+# | CP52804 | Chi phí khảo sát (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                                 |
+# | CP52805 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                               |
+# | CP52806 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                                  |
+# | CP532   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu thi công xây dựng                                                     |
+# | CP533   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu lắp đặt thiết bị                                                      |
+# | CP534   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu tư vấn đầu tư xây dựng                                                |
+# | CP535   | Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng                                                                   |
+# | CP536   | Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị                                                                    |
+# | CP537   | Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng                                                              |
+# | CP538   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) xây lắp                    |
+# | CP539   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) lắp đặt thiết bị           |
+# | CP540   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) tư vấn đầu tư xây dựng     |
+# | CP541   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất)                            |
+# | CP551   | Chi phí khảo sát, thiết kế                                                                                                  |
+# | CP552   | Chi phí nhiệm vụ thử tỉnh cọc                                                                                               |
+# | CP553   | Công tác điều tra, đo đạt và thu thập số liệu                                                                               |
+# | CP554   | Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng                                                 |
+# | CP556   | Chi phí thẩm tra an toàn giao thông                                                                                         |
+# | CP557   | Chi phí thử tĩnh                                                                                                            |
+# | CP558   | Chi phí công bố quy hoạch                                                                                                   |
+# | CP559   | Chi phí thử tải cừ tràm                                                                                                     |
+# | CP560   | Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu                                                                    |
+# | CP561   | Chi phí cắm mốc ranh giải phóng mặt bằng                                                                                    |
+# | CP56111 | Chi phí lập đồ án quy hoạch                                                                                                 |
+# | CP56201 | Chi phí khảo sát địa chất                                                                                                   |
+# | CP56202 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
+# | CP56203 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
+# | CP56204 | Chi phí khảo sát địa chất (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        |
+# | CP56205 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        |
+# | CP56206 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           |
+# | CP563   | Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án                                                                      |
+# | CP56301 | Chi phí khảo sát địa hình                                                                                                   |
+# | CP56302 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
+# | CP56303 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
+# | CP56304 | Chi phí khảo sát địa hình  (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                       |
+# | CP56305 | Chi phí khảo sát địa hình  (Bước lập thiết kế bản vẽ thi công (BVTC))                                                       |
+# | CP56306 | Chi phí khảo sát địa hình  (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                          |
+# | CP564   | Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án                                                               |
+# | CP56401 | Chi phí khảo sát địa, địa hình                                                                                              |
+# | CP565   | Chi phí lập kế hoạch bảo vệ môi trường                                                                                      |
+# | CP566   | Chi phí lập báo cáo đánh giá tác động môi trường                                                                            |
+# | CP567   | Chi phí thí nghiệm đối chứng, kiểm định xây dựng, thử nghiệm khả năng chịu lực của công trình                               |
+# | CP568   | Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1                                                     |
+# | CP569   | Chi phí chỉ đạo thể hiện phần mỹ thuật                                                                                      |
+# | CP570   | Chi phí nội đồng nghệ thuật                                                                                                 |
+# | CP571   | Chi phí sáng tác mẫu phác thảo tượng đài                                                                                    |
+# | CP572   | Chi phí hoạt động của Hội đồng nghệ thuật                                                                                   |
+# | CP573   | Chi phí giám sát thi công xây dựng phát sinh                                                                                |
+# | CP57301 | Chi phí kiểm định theo yêu cầu chủ đầu tư                                                                                   |
+# | CP574   | Chi phí tư vấn thẩm tra dự toán                                                                                             |
+# | CP57401 | Chi phí thẩm tra dự toán phát sinh                                                                                          |
+# | CP575   | Chi phí thẩm định dự toán giá gói thầu                                                                                      |
+# | CP577   | Chi phí lập hồ sơ điều chỉnh dự toán                                                                                        |
+# | CP578   | Chi phí chuyển giao công nghệ                                                                                               |
+# | CP579   | Chi phí thẩm định giá                                                                                                       |
+# | CP580   | Chi phí tư vấn giám sát                                                                                                     |
+# | CP581   | Chi phí báo cáo giám sát đánh giá đầu tư                                                                                    |
+# | CP582   | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT)                                                               |
+# | CP58211 | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT) (Phát sinh)                                                   |
+# | CP58220 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC)                                                                            |
+# | CP58231 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC) (Phát sinh)                                                                |
+# | CP583   | Tư vấn đầu tư xây dựng                                                                                                      |
+# | CP584   | Chi phí đăng báo đấu thầu                                                                                                   |
+# | CP599   | Chi phí đo đạc thu hồi đất                                                                                                  |
+# | CP6     | Chi phí khác                                                                                                                |
+# | CP601   | Phí thẩm định dự án đầu tư xây dựng                                                                                         |
+# | CP602   | Phí thẩm định dự toán xây dựng                                                                                              |
+# | CP603   | Chi phí rà phá bom mìn, vật nổ                                                                                              |
+# | CP604   | Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy                                                                 |
+# | CP605   | Chi phí thẩm định giá thiết bị                                                                                              |
+# | CP606   | Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở                                                               |
+# | CP607   | Chi phí thẩm tra, phê duyệt quyết toán                                                                                      |
+# | CP608   | Chi phí kiểm tra công tác nghiệm thu                                                                                        |
+# | CP609   | Chi phí kiểm toán độc lập                                                                                                   |
+# | CP60902 | Chi phí kiểm toán công trình                                                                                                |
+# | CP60999 | Chi phí kiểm toán độc lập (Phát sinh)                                                                                       |
+# | CP610   | Chi phí bảo hiểm                                                                                                            |
+# | CP61099 | Chi phí bảo hiểm (Phát sinh)                                                                                                |
+# | CP611   | Chi phí thẩm định báo cáo đánh giá tác động môi trường                                                                      |
+# | CP612   | Chi phí bảo hành, bảo trì                                                                                                   |
+# | CP613   | Phí bảo vệ môi trường                                                                                                       |
+# | CP614   | Chi phí di dời điện                                                                                                         |
+# | CP61401 | Chi phí di dời hệ thống điện chiếu sáng                                                                                     |
+# | CP61402 | Chi phí di dời đường dây hạ thế                                                                                             |
+# | CP61403 | Chi phí di dời nhà                                                                                                          |
+# | CP61404 | Chi phí di dời nước                                                                                                         |
+# | CP61405 | Chi phí di dời trụ điện trong trường                                                                                        |
+# | CP615   | Phí thẩm tra di dời điện                                                                                                    |
+# | CP616   | Chi phí hạng mục chung                                                                                                      |
+# | CP617   | Chi phí đo đạc địa chính                                                                                                    |
+# | CP61701 | Chi phí đo đạc bản đồ địa chính                                                                                        |
+# | CP61702 | Chi phí đo đạc lập bản đồ địa chính giải phóng mặt bằng (GPMB)                                                              |
+# | CP61703 | Chi phí đo đạc, đền bù giải phóng mặt bằng (GPMB)                                                                           |
+# | CP61704 | Chi phí đo đạc thu hồi đất                                                                                                  |
+# | CP61820 | Chi phí tổ chức kiểm tra công tác nghiệm thu                                                                                |
+# | CP619   | Chi phí lán trại                                                                                                            |
+# | CP620   | Chi phí đảm bảo giao thông                                                                                                  |
+# | CP621   | Chi phí điều tiết giao thông                                                                                                |
+# | CP62101 | Chi phí điều tiết giao thông khác                                                                                           |
+# | CP622   | Chi phí một số công tác không xác định số lượng từ thiết kế                                                                 |
+# | CP623   | Chi phí thẩm định thiết kế bản vẽ thi công, lệ phí thẩm định báo cáo kinh tế kỹ thuật (KTKT)                                |
+# | CP624   | Chi phí nhà tạm                                                                                                             |
+# | CP62501 | Chi phí giám sát đánh giá đầu tư                                                                                            |
+# | CP626   | Chi phí thẩm định kết quả lựa chọn nhà thầu                                                                                 |
+# | CP62701 | Chi phí khoan địa chất                                                                                                      |
+# | CP628   | Chi phí thẩm định đồ án quy hoạch                                                                                           |
+# | CP629   | Chi phí thẩm định HSMT (HSYC)                                                                                               |
+# | CP630   | Lệ phí thẩm tra thiết kế                                                                                                    |
+# | CP631   | Phí thẩm định lựa chọn nhà thầu                                                                                             |
+# | CP632   | Chi phí thẩm tra quyết toán                                                                                                 |
+# | CP633   | Chi phí thẩm định phê duyệt quyết toán                                                                                      |
+# | CP634   | Chi phí thẩm định báo cáo nghiên cứu khả thi                                                                                |
+# | CP699   | Chi phí khác                                                                                                                |
+# | CP7     | Chi phí dự phòng                                                                                                            |
+# | CP701   | Chi phí dự phòng cho khối lượng, công việc phát sinh                                                                        |
+# | CP702   | Chi phí dự phòng cho yếu tố trược giá                                                                                       |
+# | CP703   | Chi phí dự phòng phát sinh khối lượng (cho yếu tố khối lượng phát sinh (KLPS))                                              |
+# ### Yêu cầu nhiệm vụ:
+# 1. Suy luận thật kỹ và ghép TenKMCP trong bảng TableKMCP sang cột TenKMCP trong bảng DuLieuCanGhep, độ tương đồng khoảng 65% trở lên.
+# 2. Kết quả đầu ra chuỗi json duy nhất với các trường thông tin
+# - TenKMCP: Tên khoản mục gốc trước khi ánh xạ
+# - TenKMCP_Moi: Tên khoản mục sau khi ánh xạ (Nếu "Không có thông tin để ánh xạ" thì gán rỗng "")
+# - MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng (Nếu "Không có thông tin để ánh xạ" thì gán rỗng "")
+# - GhiChu: Giải thích vì sao lại ánh xạ như vậy (ghi chú không chứa ký tự đặc biệt, chỉ chữ cái). Nếu "Không có thông tin để ánh xạ" thì gán "Không có thông tin"
+
+# **Lưu ý:**
+# - Nếu dữ liệu cột TenKMCP trong DuLieuCanGhep không đúng chính tả hãy sửa lại trước khi ánh xạ nội dung với bảng TableKMCP
+# - Dữ liệu 2 bảng phải có độ tương đồng về ngữ nghĩa hoặc ý nghĩa . Nếu không chắc chắc thì trả  "Không có thông tin"
+# - Các trường thông tin trong json (TenKMCP, TenKMCP_Moi, MaKMCP, GhiChu)  KHÔNG gán ký tự đặc biệt như `'`, `"`
+# """
+
+            promt_anh_xa_noi_dung_tuong_dong = """
+Bạn là chuyên gia trong lĩnh vực Đầu tư xây dựng cơ bản.
+
+Tôi cung cấp 2 bảng dữ liệu:
+
+#### Bảng 1 – Danh sách khoản mục chi phí cần ánh xạ (`KMCP_AnhXa`)
+- Gồm cột: `TenKMCP` (tên khoản mục thực tế từ hồ sơ dự toán hoặc quyết toán)
+
 """+chuoi_markdown_tenkmcp+"""
-#### Bảng TableKMCP
+
+#### Bảng 2 – Danh mục chuẩn chi phí (`KMCP`)
+- Gồm các cột:
+  - `MaKMCP`: mã khoản mục chuẩn
+  - `TenKMCP`: tên khoản mục chi phí chuẩn
+
 | MaKMCP  | TenKMCP                                                                                                                     |
 | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| CP1     | Chi phí bồi thường, hỗ trợ, tái định cư                                                                                     |
+| CP01    | Chi phí bồi thường, hỗ trợ, tái định cư                                                                                     |
 | CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác |
 | CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           |
 | CP103   | Chi phí tái định cư                                                                                                         |
@@ -775,26 +1134,26 @@ async def standardized_data(
 | CP107   | Chi phí đầu tư vào đất                                                                                                      |
 | CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư                                                    |
 | CP2     | Chi phí xây dựng                                                                                                            |
-| CP201   | Chi phí xây dựng phát sinh                                                                                                  |
-| CP202   | Chi phí xây dựng công trình chính                                                                                           |
-| CP203   | Chi phí xây dựng công trình chính và phụ                                                                                    |
-| CP204   | Chi phí xây dựng điều chỉnh                                                                                                 |
-| CP205   | Chi phí xây dựng trước thuế                                                                                                 |
-| CP206   | Chi phí xây dựng sau thuế                                                                                                   |
-| CP207   | Chi phí xây dựng công trình phụ                                                                                             |
-| CP250   | Chi phí xây dựng khác                                                                                                       |
+| CP221   | Chi phí xây dựng phát sinh                                                                                                  |
+| CP222   | Chi phí xây dựng trước thuế                                                                                                 |
+| CP223   | Chi phí xây dựng sau thuế                                                                                                   |
+| CP224   | Chi phí xây dựng công trình phụ                                                                                             |
+| CP225   | Chi phí xây dựng công trình chính                                                                                           |
+| CP226   | Chi phí xây dựng điều chỉnh                                                                                                 |
+| CP227   | Chi phí xây dựng công trình chính và phụ                                                                                    |
+| CP228   | Chi phí xây dựng khác                                                                                                       |
 | CP3     | Chi phí thiết bị                                                                                                            |
-| CP301   | Chi phí thiết bị phát sinh                                                                                                  |
+| CP321   | Chi phí thiết bị phát sinh                                                                                                  |
 | CP4     | Chi phí quản lý dự án                                                                                                       |
-| CP401   | Chi phí quản lý dự án phát sinh                                                                                             |
+| CP421   | Chi phí quản lý dự án phát sinh                                                                                             |
 | CP5     | Chi phí tư vấn đầu tư xây dựng                                                                                              |
 | CP501   | Chi phí lập báo cáo nghiên cứu tiền khả thi                                                                                 |
 | CP502   | Chi phí lập báo cáo nghiên cứu khả thi                                                                                      |
 | CP503   | Chi phí lập báo cáo kinh tế - kỹ thuật                                                                                      |
 | CP50301 | Chi phí lập dự án đầu tư                                                                                                    |
 | CP504   | Chi phí thiết kế xây dựng                                                                                                   |
-| CP5041  | Chi phí thiết kế kỹ thuật                                                                                                   |
 | CP50411 | Chi phí thiết kế xây dựng (Phát sinh)                                                                                       |
+| CP50420 | Chi phí thiết kế kỹ thuật                                                                                                   |
 | CP50431 | Chi phí thiết kế kỹ thuật (Phát sinh)                                                                                       |
 | CP505   | Chi phí thiết kế bản vẽ thi công                                                                                            |
 | CP50511 | Chi phí thiết kế bản vẽ thi công (Phát sinh)                                                                                |
@@ -815,33 +1174,32 @@ async def standardized_data(
 | CP512   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) tư vấn                                                                           |
 | CP513   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn                                                                       |
 | CP51311 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn (Phát sinh)                                                           |
-| CP514   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                        |
+| CP514   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng                                                             |
 | CP51411 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng (Phát sinh)                                                 |
 | CP515   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng                                                                |
 | CP51511 | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng (Phát sinh)                                                    |
 | CP516   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                                                            |
 | CP51611 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng (Phát sinh)                                                |
-| CP517   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) , đánh giá hồ sơ dự thầu (hồ sơ đề xuất) mua sắm vật tư, thiết bị                |
+| CP517   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                      |
 | CP51711 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                          |
-| CP518   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) mua sắm vật tư, thiết bị                                                         |
+| CP518   | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị                                                                            |
 | CP51811 | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị (Phát sinh)                                                                |
-| CP519   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) mua sắm vật tư, thiết bị                                                     |
-| CP51911 | Chi phí đánh giá HSDT mua sắm vật tư, thiết bị (Phát sinh)                                                                  |
+| CP519   | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                                       |
+| CP51911 | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                                           |
 | CP520   | Chi phí giám sát thi công xây dựng                                                                                          |
 | CP52099 | Chi phí giám sát thi công xây dựng (Phát sinh)                                                                              |
 | CP521   | Chi phí giám sát lắp đặt thiết bị                                                                                           |
 | CP52111 | Chi phí giám sát lắp đặt thiết bị (Phát sinh)                                                                               |
 | CP522   | Chi phí giám sát công tác khảo sát xây dựng                                                                                 |
-| CP52211 | Chi phí giám sát công tác khảo sát xây dựng (Phát sinh)                                                                     |
 | CP523   | Chi phí quy đổi vốn đầu tư xây dựng                                                                                         |
 | CP526   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu)                                                                                |
 | CP527   | Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi                                                                            |
 | CP528   | Chi phí khảo sát xây dựng                                                                                                   |
 | CP52802 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                         |
-| CP52803 | Chi phí khảo sát (Bước lập báo cáo NCKT)                                                                                    |
-| CP52804 | Chi phí khảo sát (Bước lập báo cáo KTKT)                                                                                    |
-| CP52805 | Chi phí khảo sát (Bước lập TKBVTC)                                                                                          |
-| CP52806 | Chi phí khảo sát (Bước lập TKBVTC-DT)                                                                                       |
+| CP52803 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                               |
+| CP52804 | Chi phí khảo sát (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                                 |
+| CP52805 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                               |
+| CP52806 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                                  |
 | CP532   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu thi công xây dựng                                                     |
 | CP533   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu lắp đặt thiết bị                                                      |
 | CP534   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu tư vấn đầu tư xây dựng                                                |
@@ -852,7 +1210,7 @@ async def standardized_data(
 | CP539   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) lắp đặt thiết bị           |
 | CP540   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) tư vấn đầu tư xây dựng     |
 | CP541   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất)                            |
-| CP551   | Chi phí khảo sát, thiết kế BVTC - DT                                                                                        |
+| CP551   | Chi phí khảo sát, thiết kế                                                                                                  |
 | CP552   | Chi phí nhiệm vụ thử tỉnh cọc                                                                                               |
 | CP553   | Công tác điều tra, đo đạt và thu thập số liệu                                                                               |
 | CP554   | Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng                                                 |
@@ -862,7 +1220,7 @@ async def standardized_data(
 | CP559   | Chi phí thử tải cừ tràm                                                                                                     |
 | CP560   | Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu                                                                    |
 | CP561   | Chi phí cắm mốc ranh giải phóng mặt bằng                                                                                    |
-| CP562   | Chi phí lập đồ án quy hoạch                                                                                                 |
+| CP56111 | Chi phí lập đồ án quy hoạch                                                                                                 |
 | CP56201 | Chi phí khảo sát địa chất                                                                                                   |
 | CP56202 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
 | CP56203 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
@@ -873,11 +1231,11 @@ async def standardized_data(
 | CP56301 | Chi phí khảo sát địa hình                                                                                                   |
 | CP56302 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
 | CP56303 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
-| CP56304 | Chi phí khảo sát địa hình  (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                       |
-| CP56305 | Chi phí khảo sát địa hình  (Bước lập thiết kế bản vẽ thi công (BVTC))                                                       |
-| CP56306 | Chi phí khảo sát địa hình  (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                          |
+| CP56304 | Chi phí khảo sát địa hình (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                       |
+| CP56305 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công (BVTC))                                                       |
+| CP56306 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                          |
 | CP564   | Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án                                                               |
-| CP56401 | Chi phí khảo sát địa, địa hình                                                                                              |
+| CP56401 | Chi phí khảo sát địa hình, địa hình                                                                                              |
 | CP565   | Chi phí lập kế hoạch bảo vệ môi trường                                                                                      |
 | CP566   | Chi phí lập báo cáo đánh giá tác động môi trường                                                                            |
 | CP567   | Chi phí thí nghiệm đối chứng, kiểm định xây dựng, thử nghiệm khả năng chịu lực của công trình                               |
@@ -895,20 +1253,11 @@ async def standardized_data(
 | CP578   | Chi phí chuyển giao công nghệ                                                                                               |
 | CP579   | Chi phí thẩm định giá                                                                                                       |
 | CP580   | Chi phí tư vấn giám sát                                                                                                     |
-| CP58001 | Chi phí tư vấn giám sát di dời điện                                                                                         |
-| CP58002 | Chi phí tư vấn giám sát di dời cáp quang                                                                                    |
-| CP58003 | Chi phí tư vấn giám sát di dời đường ống nước                                                                               |
-| CP58004 | Chi phí tư vấn giám sát khảo sát địa chất                                                                                   |
-| CP58005 | Chi phí tư vấn giám sát khảo sát địa hình                                                                                   |
-| CP58006 | Chi phí tư vấn giám sát khảo sát và cắm mốc                                                                                 |
-| CP58007 | Chi phí tư vấn giám sát khoan địa chất                                                                                      |
-| CP58008 | Chi phí tư vấn giám sát rà phá bom mìn, vật nổ                                                                              |
-| CP58009 | Chi phí tư vấn giám sát, đánh giá đầu tư                                                                                    |
 | CP581   | Chi phí báo cáo giám sát đánh giá đầu tư                                                                                    |
-| CP582   | Chi phí thẩm tra thiết kế BVTC-DT                                                                                           |
-| CP58211 | Chi phí thẩm tra thiết kế BVTC-DT (Phát sinh)                                                                               |
-| CP58220 | Chi phí thẩm tra thiết kế BVTC                                                                                              |
-| CP58231 | Chi phí thẩm tra thiết kế BVTC (Phát sinh)                                                                                  |
+| CP582   | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT)                                                               |
+| CP58211 | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT) (Phát sinh)                                                   |
+| CP58220 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC)                                                                            |
+| CP58231 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC) (Phát sinh)                                                                |
 | CP583   | Tư vấn đầu tư xây dựng                                                                                                      |
 | CP584   | Chi phí đăng báo đấu thầu                                                                                                   |
 | CP599   | Chi phí đo đạc thu hồi đất                                                                                                  |
@@ -936,10 +1285,11 @@ async def standardized_data(
 | CP61404 | Chi phí di dời nước                                                                                                         |
 | CP61405 | Chi phí di dời trụ điện trong trường                                                                                        |
 | CP615   | Phí thẩm tra di dời điện                                                                                                    |
+| CP616   | Chi phí hạng mục chung                                                                                                      |
 | CP617   | Chi phí đo đạc địa chính                                                                                                    |
 | CP61701 | Chi phí đo đạc bản đồ địa chính                                                                                        |
-| CP61702 | Chi phí đo đạc lập bản đồ địa chính GPMB                                                                                    |
-| CP61703 | Chi phí đo đạc, đền bù GPMB                                                                                                 |
+| CP61702 | Chi phí đo đạc lập bản đồ địa chính giải phóng mặt bằng (GPMB)                                                              |
+| CP61703 | Chi phí đo đạc, đền bù giải phóng mặt bằng (GPMB)                                                                           |
 | CP61704 | Chi phí đo đạc thu hồi đất                                                                                                  |
 | CP61820 | Chi phí tổ chức kiểm tra công tác nghiệm thu                                                                                |
 | CP619   | Chi phí lán trại                                                                                                            |
@@ -965,18 +1315,32 @@ async def standardized_data(
 | CP702   | Chi phí dự phòng cho yếu tố trược giá                                                                                       |
 | CP703   | Chi phí dự phòng phát sinh khối lượng (cho yếu tố khối lượng phát sinh (KLPS))                                              |
 
-### Yêu cầu nhiệm vụ:
-1. Suy luận thật kỹ và ghép TenKMCP trong bảng TableKMCP sang cột TenKMCP trong bảng DuLieuCanGhep, độ tương đồng khoảng 65% trở lên.
-2. Kết quả đầu ra chuỗi json duy nhất với các trường thông tin
-- TenKMCP: Tên khoản mục gốc trước khi ánh xạ
-- TenKMCP_Moi: Tên khoản mục sau khi ánh xạ (Nếu "Không có thông tin để ánh xạ" thì gán rỗng "")
-- MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng (Nếu "Không có thông tin để ánh xạ" thì gán rỗng "")
-- GhiChu: Giải thích vì sao lại ánh xạ như vậy (ghi chú không chứa ký tự đặc biệt, chỉ chữ cái). Nếu "Không có thông tin để ánh xạ" thì gán "Không có thông tin"
+### Yêu cầu xử lý:
 
-**Lưu ý:**
-- Nếu dữ liệu cột TenKMCP trong DuLieuCanGhep không đúng chính tả hãy sửa lại trước khi ánh xạ nội dung với bảng TableKMCP
-- Dữ liệu 2 bảng phải có độ tương đồng về ngữ nghĩa hoặc ý nghĩa . Nếu không chắc chắc thì trả  "Không có thông tin"
-- Các trường thông tin trong json (TenKMCP, TenKMCP_Moi, MaKMCP, GhiChu)  KHÔNG gán ký tự đặc biệt như `'`, `"`
+Thực hiện ánh xạ từng dòng `TenKMCP` trong bảng `KMCP_AnhXa` với mục tương ứng trong bảng chuẩn `KMCP` theo **thứ tự ưu tiên sau**:
+
+#### 1. Ưu tiên so khớp theo **nghĩa chuyên môn nghiệp vụ**:
+- Sử dụng hiểu biết chuyên ngành để ánh xạ đúng các từ viết tắt, quy ước phổ biến (VD: KLPS = khối lượng phát sinh).
+- So sánh các cụm từ chính như: “thẩm định báo cáo KTKT”, “giám sát thi công”, “lập hồ sơ yêu cầu”, “bảo hiểm công trình”, v.v.
+- Không phụ thuộc hoàn toàn vào độ giống chuỗi ký tự.
+
+#### 2. Nếu không tìm được theo nghĩa chuyên môn, mới **so khớp theo độ tương đồng chuỗi ký tự** (sử dụng thuật toán so sánh như `difflib` hoặc `fuzz`).
+- Chỉ chọn ánh xạ nếu độ tương đồng ≥ 65% (hoặc ≥ 50% nếu muốn mở rộng).
+- Trường hợp độ tương đồng < ngưỡng, để giá trị ánh xạ rỗng và ghi chú rõ lý do.
+---
+### Kết quả trả về:
+Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các trường sau:
+```json
+{
+  "TenKMCP": "<tên khoản mục thực tế>",
+  "TenKMCP_Moi": "<tên khoản mục chuẩn>",
+  "MaKMCP": "<mã khoản mục chuẩn>",
+  "GhiChu": "<tỷ lệ tương đồng hoặc ghi chú ánh xạ thủ công theo nghiệp vụ>"
+}
+```
+⚠️ Nếu ánh xạ theo nghiệp vụ (không qua so chuỗi), ghi rõ "Ánh xạ theo nghiệp vụ" trong trường GhiChu.
+⚠️ Chỉ ánh xạ 1:1, không ánh xạ nhiều khoản mục về một mã chuẩn.
+⚠️ Không tự tạo khoản mục mới ngoài danh mục chuẩn.
 """
         # Gọi OpenAI API để xử lý
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -995,11 +1359,15 @@ async def standardized_data(
             temperature=0,
             max_completion_tokens=5000
         )
-
-        #print(promt_anh_xa_noi_dung_tuong_dong)
+        # print("+"*20)
+        # print(promt_anh_xa_noi_dung_tuong_dong)
+        # print("+"*20)
         try:
             # Xử lý response từ OpenAI
             response_text = response.choices[0].message.content
+            print("===response_text anh_xa_noi_dung===")
+            print(response_text)
+            print("===end response_text anh_xa_noi_dung===")
             if response_text.strip().startswith("```json"):
                 response_text = response_text.strip()[7:-3].strip()
             elif response_text.strip().startswith("```"):
@@ -1043,7 +1411,7 @@ async def standardized_data(
             # Duyệt qua từng dòng trong dfBangDuLieuChiTietAI
             for index, row in dfBangDuLieuChiTietAI.iterrows():
                 # Tìm dòng tương ứng trong dfBangGhepKMCP có TenKMCP trùng khớp
-                matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'] == row['TenKMCP']]
+                matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'].str.lower() == row['TenKMCP'].lower()]
                 # Nếu tìm thấy dòng tương ứng
                 if not matching_row.empty:
                     # Cập nhật TenKMCP_AI trong dfBangDuLieuChiTietAI
@@ -1067,8 +1435,7 @@ async def standardized_data(
                 # Duyệt qua từng dòng trong df_filtered
                 for idx, filtered_row in df_filtered.iterrows():
                     # Tìm dòng tương ứng trong dfBangGhepKMCP có TenKMCP trùng khớp
-                    matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'] == filtered_row['TenKMCP']]
-                    
+                    matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'].str.lower() == filtered_row['TenKMCP'].lower()]
                     # Nếu tìm thấy dòng tương ứng
                     if not matching_row.empty:
                         # Cập nhật TenKMCP_AI trong df_filtered
@@ -1098,7 +1465,7 @@ async def standardized_data(
                         
                         if not df_kmcp.empty:
                             # Lấy tất cả các dòng có cùng TenKMCP_AI
-                            duplicate_rows = df_filtered[df_filtered['TenKMCP_AI'] == row['TenKMCP_AI']]
+                            duplicate_rows = df_filtered[df_filtered['TenKMCP_AI'].str.lower() == row['TenKMCP_AI'].lower()]
                             
                             # Duyệt qua từng dòng trùng lặp và gán KMCP khác nhau
                             for i, (_, duplicate_row) in enumerate(duplicate_rows.iterrows()):
@@ -1128,7 +1495,7 @@ async def standardized_data(
                         row['BangDuLieuChiTietAIID']
                     )
 
-                    print(f"Executing SQL query: {query_insert}")
+                    # print(f"Executing SQL query: {query_insert}")
                     thuc_thi_truy_van(query_insert)
             return JSONResponse(
                 status_code=200,
@@ -1151,164 +1518,7 @@ async def standardized_data(
                     "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
                 }
             )
-        # print("\nDữ liệu VanBanAI:")
-        # print("=" * 80)
-        # for index, row in dfVanBanAI.iterrows():
-        #     print(f"\nDòng {index + 1}:")
-        #     for column in dfVanBanAI.columns:
-        #         print(f"{column}: {row[column]}")
-        #     print("-" * 40)
-        # print("=" * 80)
-        # if not dfVanBanAI.empty:
-        #     for index, row in dfVanBanAI.iterrows():
-        #         van_ban_id = row['VanBanAIID']
-        #         ten_loai_van_ban = row['TenLoaiVanBan']
-        #         query_bangct = f"select BangDuLieuChiTietAIID=convert(nvarchar(36), BangDuLieuChiTietAIID), KMCPID=convert(nvarchar(36), KMCPID), TenKMCP_AI from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
-        #         df_bang_ct = lay_du_lieu_tu_sql_server(query_bangct)
-        #         # Xử lý thêm dữ liệu vào NTsoftDocumentAI
-        #         # print("=================ten_loai_van_ban===============")
-        #         # print(ten_loai_van_ban)
 
-        #         # Xử lý LayMaDoiTuong -> Cho Cơ quan ban hành
-        #         ten_toi_tuong = row['CoQuanBanHanh']
-        #         la_ca_nhan = "0"
-        #         doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
-        #         try:
-        #             query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_ToChuc=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
-        #             thuc_thi_truy_van(query_update_doi_tuong)
-        #         except Exception as e:
-        #             print(f"Lỗi khi cập nhật DoiTuongID_ToChuc: {str(e)}")
-        #         # Xử lý LayMaDoiTuong -> Cho Người ký
-        #         ten_toi_tuong = row['NguoiKy']
-        #         la_ca_nhan = "1"
-        #         doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
-        #         try:
-        #             query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_CaNhan=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
-        #             thuc_thi_truy_van(query_update_doi_tuong)
-        #         except Exception as e:
-        #             print(f"Lỗi khi cập nhật DoiTuongID_CaNhan: {str(e)}")
-
-        #         if f"[{ten_loai_van_ban}]" in "[QDPD_CT];[QDPD_DA]":    
-        #             if not df_bang_ct.empty:
-        #                 for _, row2 in df_bang_ct.iterrows():
-        #                     query_insert = f"""
-        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-        #                     ----------
-        #                     insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, TongMucDauTuKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriTMDTKMCP,GiaTriTMDTKMCP_DC,GiaTriTMDTKMCPTang,GiaTriTMDTKMCPGiam,TongMucDauTuKMCPID_goc)
-        #                     select 
-        #                       BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', TongMucDauTuKMCPID=newid()
-        #                     , KMCPID=N'{row2['KMCPID']}'
-        #                     , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-        #                     , N'{van_ban_id}'
-        #                     , TenKMCP=N'{row2['TenKMCP_AI']}'
-        #                     , GiaTriTMDTKMCP=(select GiaTriTMDTKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , GiaTriTMDTKMCP_DC=(select GiaTriTMDTKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , GiaTriTMDTKMCPTang=(select GiaTriTMDTKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , GiaTriTMDTKMCPGiam=(select GiaTriTMDTKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
-        #                     ---------- Cập nhật giá trị văn bản
-        #                     update dbo.VanBanAI 
-        #                     set 
-        #                     GiaTri = (select GiaTriTMDTKMCP=isnull(sum(GiaTriTMDTKMCP), 0) from dbo.BangDuLieuChiTietAI ai where ai.VanBanAIID='{van_ban_id}') 
-        #                     where VanBanAIID='{van_ban_id}'
-        #                     """
-        #                     #print(f"Executing SQL query: {query_insert}")
-        #                     if thuc_thi_truy_van(query_insert) == False:
-        #                         print(f"Executing SQL query: {query_insert}")
-        #         if f"[{ten_loai_van_ban}]" in "[QDPDDT_CBDT];[QDPD_DT_THDT]":    
-        #             if not df_bang_ct.empty:
-        #                 for _, row2 in df_bang_ct.iterrows():
-        #                     query_insert = f"""
-        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-        #                     ----------
-        #                     insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, DuToanKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
-        #                     select 
-        #                       BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', DuToanKMCPID=newid()
-        #                     , KMCPID=N'{row2['KMCPID']}'
-        #                     , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-        #                     , N'{van_ban_id}'
-        #                     , TenKMCP=N'{row2['TenKMCP_AI']}'
-        #                     , GiaTriDuToanKMCP=(select GiaTriDuToanKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , GiaTriDuToanKMCP_DC=(select GiaTriDuToanKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , GiaTriDuToanKMCPTang=(select GiaTriDuToanKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , GiaTriDuToanKMCPGiam=(select GiaTriDuToanKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-        #                     , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
-        #                     """
-        #                     print(f"Executing SQL query: {query_insert}")
-        #                     thuc_thi_truy_van(query_insert)
-
-        #         if f"[{ten_loai_van_ban}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
-        #             if not df_bang_ct.empty:
-        #                 for _, row2 in df_bang_ct.iterrows():
-        #                     query_insert = f"""
-        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-        #                     ----------
-        #                     insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID, TenKMCP, DauThauID, DauThauCTID,TenDauThau, GiaTriGoiThau, TenNguonVon, CoCauVonID
-        #                         ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
-        #                     SELECT
-        #                     BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}', DauThauID=newid(),
-        #                     DauThauCTID=newid(),
-        #                     TenDauThau,
-        #                     GiaTriGoiThau,
-        #                     TenNguonVon,
-        #                     CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
-        #                     LoaiGoiThauID=NULL, -- chưa xử lý
-        #                     HinhThucDThID=NULL, -- chưa xử lý
-        #                     PhuongThucDThID=NULL, -- chưa xử lý
-        #                     LoaiHopDongID=NULL, -- chưa xử lý
-        #                     ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
-        #                     KeHoachThoiGianHopDong=ThoiGianTHHopDong
-        #                     FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-        #                     """
-        #                     print(f"Executing SQL query: {query_insert}")
-        #                     thuc_thi_truy_van(query_insert)
-        #         if f"[{ten_loai_van_ban}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
-        #             if not df_bang_ct.empty:
-        #                 for _, row2 in df_bang_ct.iterrows():
-        #                     query_insert = f"""
-        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-        #                     ----------
-        #                     insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID,TenKMCP,TenDauThau,KeHoachThoiGianHopDong,LoaiHopDongID,GiaTrungThau, CoCauVonID)
-        #                     SELECT
-        #                     BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',TenDauThau,
-        #                     KeHoachThoiGianHopDong=ThoiGianTHHopDong,
-        #                     LoaiHopDongID=NULL, -- chưa xử lý
-        #                     GiaTrungThau, 
-        #                     CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-        #                     FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-        #                     """
-        #                     print(f"Executing SQL query: {query_insert}")
-        #                     thuc_thi_truy_van(query_insert)
-        #         if f"[{ten_loai_van_ban}]" in "[HOP_DONG]": # Hợp đồng mặc định là giai đoạn thực hiện
-        #             if not df_bang_ct.empty:
-        #                 for _, row2 in df_bang_ct.iterrows():
-        #                     query_insert = f"""
-        #                     delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-        #                     ----------
-        #                     insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID, VanBanAIID, TenKMCP, HopDongCTID, DauThauCTID,GiaTriHopDong,CoCauVonID
-        #                         ,GiaTriHopDongTang,GiaTriHopDongGiam,DuToanKMCPID,KMCPID)
-        #                     SELECT
-        #                     BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',HopDongCTID=newid(),
-        #                     DauThauCTID=NULL, -- khoá ngoại chưa xử lý
-        #                     GiaTriHopDong,
-        #                     CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
-        #                     GiaTriHopDongTang, -- khoá ngoại chưa xử lý
-        #                     GiaTriHopDongGiam, -- khoá ngoại chưa xử lý
-        #                     DuToanKMCPID=NULL, -- khoá ngoại chưa xử lý
-        #                     KMCPID -- chưa xử lý
-        #                     FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-        #                     """
-        #                     print(f"Executing SQL query: {query_insert}")
-        #                     thuc_thi_truy_van(query_insert)
-        # return JSONResponse(
-        #     status_code=200,
-        #     content={
-        #         "status": "success",
-        #         "code": 200,
-        #         "message": "Đã làm đẹp dữ liệu văn bản",
-        #         "detail": ""
-        #     }
-        # )
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -1602,7 +1812,7 @@ async def extract_multiple_images(
                 "TenLoaiVanBan": loaiVanBan,
                 "DuAnID": duAnID,
                 "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                "JsonAI": json.dumps(data_json, ensure_ascii=False),
                 "DataOCR": combined_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
             }
@@ -1623,7 +1833,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": combined_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -1642,7 +1852,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": combined_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -1663,7 +1873,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": combined_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -1688,7 +1898,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": combined_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -1716,7 +1926,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": combined_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -1755,7 +1965,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": combined_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
