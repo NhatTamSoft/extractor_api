@@ -1346,8 +1346,6 @@ async def extract_multiple_images(
                 return JSONResponse(
                     status_code=500,
                     content={
-
-                        
                         "status": "error",
                         "code": 500,
                         "message": "Lỗi khi upload file lên hệ thống QLDA",
