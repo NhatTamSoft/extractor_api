@@ -192,7 +192,7 @@ async def document_extract(
                     for file in files:
                         if file.lower().endswith('.pdf'):
                             full_path = os.path.join(root, file)
-                            list_duong_dan.append({'path': full_path, 'rangePage': rangePage})
+                            list_duong_dan.append({'path': full_path, 'rangePage': rangePage, 'ghiChu': ''})
             
             # Kiểm tra nếu path là file PDF
             elif path.lower().endswith('.pdf'):
@@ -207,6 +207,10 @@ async def document_extract(
             all_data = []
             loaiVanBan = None
             path = item['path'].lower()
+            print("\n=== Thông tin chi tiết item đang xử lý ===")
+            print(f"Đường dẫn: {item['path']}")
+            print(f"Trang: {item['rangePage']}")
+            print("=======================================\n")
             if 'qd_phe_duyet_chu_truong\\' in path:
                 loaiVanBan = 'QDPD_CT'
             elif 'qd_phe_duyet_du_toan_cbdt\\' in path:
@@ -248,7 +252,16 @@ async def document_extract(
             content_parts = [{"type": "text", "text": prompt}]
             valid_image_paths = []
             # Đọc file PDF và chuyển thành ảnh
-            image_PIL = pdf_to_images(item['path'], item['rangePage'])
+            image_PIL = pdf_to_images(item['path'], 2.0, item['rangePage'])
+
+            print("\n=== Thông tin chi tiết image_PIL ===")
+            print(f"Số lượng ảnh: {len(image_PIL)}")
+            for idx, img in enumerate(image_PIL):
+                print(f"\nẢnh {idx + 1}:")
+                print(f"- Kích thước: {img.size}")
+                print(f"- Mode: {img.mode}")
+                print(f"- Format: {img.format if hasattr(img, 'format') else 'Không có'}")
+            print("=======================================\n")
             try:
                 # Process each file with Azure Form Recognizer
                 combined_text = ""
@@ -276,19 +289,20 @@ async def document_extract(
                                 combined_text += " | ".join(row_cells) + "\n"
 
                     except Exception as e:
+                        item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}"
                         print(f"Error processing file {temp_file}: {str(e)}")
                 # print("&"*30)
                 # print(combined_text)
                 # print("&"*30)
             except Exception as e:
-                print(f"Lỗi khi xử lý file: {str(e)}")
+                item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}\nDòng lỗi: {e.__traceback__.tb_lineno}\nNội dung lỗi: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
                 return JSONResponse(
                     status_code=500,
                     content={
                         "status": "error",
                         "code": 500,
                         "message": "Lỗi khi xử lý file",
-                        "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                        "detail": f"Error processing file {temp_file}: {str(e)}\nDòng lỗi: {e.__traceback__.tb_lineno}\nNội dung lỗi: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
                     }
                 )
             messages = [
@@ -334,15 +348,8 @@ async def document_extract(
 
             # Xử lý response
             if "error" in response_text.lower() or "không thể" in response_text.lower():
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "code": 400,
-                        "message": "AI không thể nhận diện văn bản từ ảnh",
-                        "detail": response_text
-                    }
-                )
+                print("AI không thể nhận diện văn bản từ ảnh\n" + response_text)
+                item['ghiChu'] = "AI không thể nhận diện văn bản từ ảnh\n" + response_text
             try:
                 data_json = json.loads(response_text)
                 #data_json = data_json["results"]
@@ -387,7 +394,7 @@ async def document_extract(
             for col in data_json["ThongTinChung"]:
                 #print("ThongTinChung: cột >>> ", col)
                 if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
-                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
                                 or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                     try:
@@ -406,9 +413,9 @@ async def document_extract(
                         item["VanBanID"] = van_ban_id
                         # Convert all numeric values based on required columns
                         for col in required_columns:
-                            print("Cột kiểm tra:", col)
+                            # print("Cột kiểm tra:", col)
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
-                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
                                 or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                                 item[col] = convert_currency_to_int(str(item[col]))
@@ -621,20 +628,12 @@ async def document_extract(
             van_ban_data["UserID"] = user_id
             van_ban_data["DonViID"] = don_vi_id
 
-
             db_service = DatabaseService()
             result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
             
             if not result.get("success", False):
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "status": "error",
-                        "code": 500,
-                        "message": "Lỗi khi lưu dữ liệu vào database",
-                        "detail": result.get("error", "Unknown error")
-                    }
-                )
+                print("Lỗi khi lưu dữ liệu vào database\n" + result.get("error", "Unknown error"))
+                item['ghiChu'] = "Lỗi khi lưu dữ liệu vào database\n" + result.get("error", "Unknown error")
 
             # Insert BangDuLieu data if it exists
             if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
@@ -650,49 +649,42 @@ async def document_extract(
                     required_columns
                 )
                 if not bang_du_lieu_result.get("success", False):
-                    return JSONResponse(
-                        status_code=500,
-                        content={
-                            "status": "error",
-                            "code": 500,
-                            "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
-                            "detail": bang_du_lieu_result.get("error", "Unknown error")
-                        }
-                    )
+                    print("Lỗi khi lưu dữ liệu vào database\n" + bang_du_lieu_result.get("error", "Unknown error"))
+                    item['ghiChu'] = "Lỗi khi lưu dữ liệu vào database\n" + bang_du_lieu_result.get("error", "Unknown error")
             else:
                 print("Văn bản này không có chi tiết bảng dữ liệu")
             # After successful processing and database operations
             try:
                 # Get QLDA upload URL from environment
                 qlda_upload_url = os.getenv("API_URL_UPLOAD_QLDA")
-                if not qlda_upload_url:
-                    raise ValueError("Không tìm thấy API_URL_UPLOAD_QLDA trong file .env")
+                # if not qlda_upload_url:
+                #     raise ValueError("Không tìm thấy API_URL_UPLOAD_QLDA trong file .env")
 
                 # Prepare files for upload to QLDA
                 files_data = []
-                # Chuyển đổi đường dẫn file thành đối tượng File
-                file_path = path
-                file_name = os.path.basename(file_path)
+                # Chuyển đổi các ảnh PIL thành file để upload
+                for idx, img in enumerate(image_PIL):
+                    # Tạo tên file tạm thời
+                    temp_file = SpooledTemporaryFile()
+                    # Lưu ảnh vào file tạm
+                    img.save(temp_file, format='PNG')
+                    temp_file.seek(0)
+                    
+                    # Tạo tên file với số thứ tự
+                    file_name = f"page_{idx + 1}.png"
+                    
+                    # Tạo đối tượng UploadFile
+                    file_obj = UploadFile(
+                        filename=file_name,
+                        file=temp_file,
+                        headers={"content-type": "image/png"}
+                    )
+                    
+                    # Thêm vào danh sách files_data
+                    files_data.append(
+                        ("files", (file_name, file_obj.file, "image/png"))
+                    )
                 
-                # Đọc nội dung file
-                with open(file_path, 'rb') as f:
-                    file_content = f.read()
-                
-                # Tạo đối tượng UploadFile
-                temp_file = SpooledTemporaryFile()
-                temp_file.write(file_content)
-                temp_file.seek(0)
-                
-                file_obj = UploadFile(
-                    filename=file_name,
-                    file=temp_file,
-                    headers={"content-type": "application/pdf"}
-                )
-                
-                # Thêm vào danh sách files_data
-                files_data.append(
-                    ("files", (file_name, file_obj.file, "application/pdf"))
-                )
                 print(">>>>>>>>>>>> files_data chi tiết:")
                 for file_data in files_data:
                     print(f"- Tên file: {file_data[1][0]}")
@@ -705,17 +697,16 @@ async def document_extract(
                         files=files_data,
                         headers={"Authorization": authorization}
                     )
-                    
+                    print("Response status code:", response.status_code)
+                    print("Response headers:", response.headers)
+                    print("Response content:", response.text)
+                    print("Response URL:", response.url)
+                    print("Response encoding:", response.encoding)
+                    print("Response cookies:", response.cookies)
+                    print("Response elapsed time:", response.elapsed)
                     if response.status_code != 200:
-                        return JSONResponse(
-                            status_code=500,
-                            content={
-                                "status": "error",
-                                "code": 500,
-                                "message": "Lỗi khi upload file lên hệ thống QLDA",
-                                "detail": response.text
-                            }
-                        )
+                        print(f"Lỗi file {path} khi upload file lên hệ thống QLDA\n" + response.text)
+                        item['ghiChu'] = f"Lỗi file {path} khi upload file lên hệ thống QLDA\n" + response.text
                     
                     # Lấy response JSON từ API QLDA
                     qlda_response = response.json()
@@ -733,24 +724,10 @@ async def document_extract(
                         db.commit()
                     except Exception as e:
                         db.rollback()
-                        raise Exception(f"Lỗi khi cập nhật tên file trong bảng VanBanAI: {str(e)}")
-                # CHỔ NÀY XỬ LÝ BỎ VÀO BIÊN GHI NHẬT KÝ CÁC FILE ĐÃ ĐÍNH KÈM
-                # return JSONResponse(
-                #     status_code=200,
-                #     content={
-                #         "status": "success",
-                #         "code": 200,
-                #         "message": "Upload và xử lý nhiều file ảnh thành công",
-                #         "data": {
-                #             "files_processed": [{"filename": d['filename']} for d in all_data],
-                #             "van_ban": data_json,
-                #             "db_status": result.get("success", False),
-                #             "db_message": result.get("message", ""),
-                #             "qlda_upload_status": "success",
-                #             "qlda_response": qlda_response
-                #         }
-                #     }
-                # )
+                        print(f"Lỗi file {path} khi cập nhật tên file trong bảng VanBanAI: {str(e)}")
+                        item['ghiChu'] = f"Lỗi file {path} khi cập nhật tên file trong bảng VanBanAI: {str(e)}"
+                print(f"Tệp {path} upload và xử lý nhiều file ảnh thành công")
+                item['ghiChu'] = "Upload và xử lý nhiều file ảnh thành công"
 
             except Exception as e:
                 # CHỔ NÀY XỬ LÝ FILE DỰ ÁN CHƯA ĐÍNH KÈM ĐƯỢC
@@ -760,21 +737,12 @@ async def document_extract(
                 print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
                 print(f"\033[31m- Thông tin chi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\033[0m")
                 print(f"\033[31m- Dòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}\033[0m")
-                print(f"\033[31m- File lỗi: {e.__traceback__.tb_frame.f_code.co_filename if hasattr(e, '__traceback__') else 'Không có thông tin file lỗi'}\033[0m")
-                # return JSONResponse(
-                #     status_code=500,
-                #     content={
-                #         "status": "error",
-                #         "code": 500,
-                #         "message": "Lỗi khi upload file lên hệ thống QLDA",
-                #         "detail": str(e)
-                #     }
-                # )
+                item['ghiChu'] = f"Lỗi {path} khi upload file lên hệ thống QLDA"
 
-        print("===Danh sách đường dẫn file PDF===")
-        print(list_duong_dan)
-        print("===Danh sách đường dẫn file PDF không tồn tại===")
-        print(list_duong_dan_khong_ton_tai)
+        # print("===Danh sách đường dẫn file PDF===")
+        # print(list_duong_dan)
+        # print("===Danh sách đường dẫn file PDF không tồn tại===")
+        # print(list_duong_dan_khong_ton_tai)
         
         # Trả về kết quả là 2 DataFrame dưới dạng JSON
         return JSONResponse(
@@ -784,7 +752,8 @@ async def document_extract(
                 "message": "Trích xuất dữ liệu từ file Excel thành công.",
                 "data": {
                     "thong_tin_du_an": df_thong_tin_du_an.to_dict(orient='records'),
-                    "danh_sach_duong_dan": df_danh_sach_duong_dan.to_dict(orient='records')
+                    "danh_sach_path": df_danh_sach_duong_dan.to_dict(orient='records'),
+                    "ket_qua_xu_ly": list_duong_dan
                 }
             }
         )
@@ -796,7 +765,7 @@ async def document_extract(
                 "status": "error", 
                 "code": 500, 
                 "message": "Lỗi khi xử lý file Excel", 
-                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\nDòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}"
                 }
         )
 
@@ -996,7 +965,7 @@ async def extract_multiple_images(
             for col in data_json["ThongTinChung"]:
                 #print("ThongTinChung: cột >>> ", col)
                 if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
-                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
                                 or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                     try:
@@ -1016,7 +985,7 @@ async def extract_multiple_images(
                         for col in required_columns:
                             #print("Cột kiểm tra:", col)
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
-                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') 
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
                                 or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                                 item[col] = convert_currency_to_int(str(item[col]))
@@ -2119,7 +2088,7 @@ async def image_extract_multi_azure(
             for col in data_json["ThongTinChung"]:
                 #print("ThongTinChung: cột >>> ", col)
                 if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
-                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
                                 or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                     try:
@@ -2142,9 +2111,9 @@ async def image_extract_multi_azure(
                         item["VanBanID"] = van_ban_id
                         # Convert all numeric values based on required columns
                         for col in required_columns:
-                            print("Cột kiểm tra:", col)
+                            # print("Cột kiểm tra:", col)
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
-                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
                                 or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                                 item[col] = convert_currency_to_int(str(item[col]))

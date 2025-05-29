@@ -123,8 +123,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KQLCNT_CBDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc `số biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc "ngày...tháng...năm ..." biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..." định dạng (dd/MM/yyyy)
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng "dd/MM/yyyy"
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
@@ -270,8 +270,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KQLCNT_THDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc `số biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc "ngày...tháng...năm ..." biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..." định dạng (dd/MM/yyyy)
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.

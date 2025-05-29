@@ -261,7 +261,7 @@ class DatabaseService:
             try:
                 db.execute(insert_van_ban_ai_query, final_van_ban_data_for_sql)
                 # In ra dữ liệu trước khi insert vào VanBanAI
-                print("INSERT INTO VanBanAI (" + ", ".join(columns) + ") VALUES (" + ", ".join([f"'{str(value)}'" if isinstance(value, str) else str(value) for value in final_van_ban_data_for_sql.values()]) + ")")
+                # print("INSERT INTO VanBanAI (" + ", ".join(columns) + ") VALUES (" + ", ".join([f"'{str(value)}'" if isinstance(value, str) else str(value) for value in final_van_ban_data_for_sql.values()]) + ")")
                 db.commit()
             except Exception as e:
                 db.rollback()
@@ -387,10 +387,10 @@ class DatabaseService:
                             chi_tiet[col] = 0
                 
                 # Execute the query
-                print("insert_chi_tiet_query")
-                print(insert_chi_tiet_query)
-                print("chi_tiet")
-                print(chi_tiet)
+                # print("insert_chi_tiet_query")
+                # print(insert_chi_tiet_query)
+                # print("chi_tiet")
+                # print(chi_tiet)
                 db.execute(insert_chi_tiet_query, chi_tiet)
             
             db.commit()
