@@ -1724,6 +1724,19 @@ async def extract_document(
             }
         )
 
+def get_code_from_mapping(value: str, mapping_table: Dict[str, str]) -> str:
+    """Convert a value to its corresponding code from a mapping table"""
+    # Normalize the input value
+    value = value.strip().lower()
+    
+    # Try direct mapping
+    for code, mapped_value in mapping_table.items():
+        if mapped_value.lower() == value:
+            return code
+            
+    # If no direct match, return the original value
+    return value
+
 async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict):
     """Process a single image file"""
     try:
@@ -1740,7 +1753,11 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                    "content": """You are an AI assistant that extracts information from documents. 
+                    For fields with mapping tables, you MUST return the CODE (not the value).
+                    For example, if the language is 'Tiếng Việt', return '01' instead.
+                    You MUST return a valid JSON object containing the mapped fields. 
+                    Do not include any other text or explanation in your response."""
                 },
                 {
                     "role": "user",
@@ -1778,6 +1795,18 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
 
                             Field definitions and extraction rules:
                             {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                            IMPORTANT: For fields with mapping tables, return the CODE (not the value).
+                            For example:
+                            - For language: return '01' for 'Tiếng Việt', '02' for 'Tiếng Anh'
+                            - For maintenance: return '01' for 'Vĩnh viễn', '02' for '70 năm'
+                            - For typeName: return '01' for 'Nghị quyết', '02' for 'Quyết định'
+                            - For mode: return '01' for 'Công khai', '02' for 'Sử dụng có điều kiện'
+                            - For confidenceLevel: return '01' for 'Gốc điện tử', '02' for 'Số hóa'
+                            - For format: return '01' for 'Tốt', '02' for 'Bình thường'
+                            - For process: return '0' for 'Không có quy trình xử lý đi kèm', '1' for 'Có quy trình xử lý đi kèm'
+                            - For riskRecovery: return '0' for 'Không', '1' for 'Có'
+                            - For riskRecoveryStatus: return '01' for 'Đã dự phòng', '02' for 'Chưa dự phòng'
                             """
                         },
                         {
@@ -1790,8 +1819,8 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
                 }
             ],
             max_tokens=4000,
-            temperature=0,  # Set temperature to 0 for more consistent output
-            response_format={"type": "json_object"}  # Force JSON response
+            temperature=0,
+            response_format={"type": "json_object"}
         )
 
         # Parse response
@@ -1805,6 +1834,16 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
 
         # Parse JSON response
         data = json.loads(response_text)
+        
+        # Post-process fields with mapping tables
+        for field in require_fields:
+            field_name = field["tenTruong"]
+            if "extractionRules" in field and "mapping" in field["extractionRules"]:
+                if field_name in data and data[field_name]:
+                    data[field_name] = get_code_from_mapping(
+                        data[field_name], 
+                        field["extractionRules"]["mapping"]
+                    )
         
         # Update combined data
         for key, value in data.items():
@@ -1854,7 +1893,11 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                            "content": """You are an AI assistant that extracts information from documents. 
+                            For fields with mapping tables, you MUST return the CODE (not the value).
+                            For example, if the language is 'Tiếng Việt', return '01' instead.
+                            You MUST return a valid JSON object containing the mapped fields. 
+                            Do not include any other text or explanation in your response."""
                         },
                         {
                             "role": "user",
@@ -1892,6 +1935,18 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
 
                                     Field definitions and extraction rules:
                                     {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                                    IMPORTANT: For fields with mapping tables, return the CODE (not the value).
+                                    For example:
+                                    - For language: return '01' for 'Tiếng Việt', '02' for 'Tiếng Anh'
+                                    - For maintenance: return '01' for 'Vĩnh viễn', '02' for '70 năm'
+                                    - For typeName: return '01' for 'Nghị quyết', '02' for 'Quyết định'
+                                    - For mode: return '01' for 'Công khai', '02' for 'Sử dụng có điều kiện'
+                                    - For confidenceLevel: return '01' for 'Gốc điện tử', '02' for 'Số hóa'
+                                    - For format: return '01' for 'Tốt', '02' for 'Bình thường'
+                                    - For process: return '0' for 'Không có quy trình xử lý đi kèm', '1' for 'Có quy trình xử lý đi kèm'
+                                    - For riskRecovery: return '0' for 'Không', '1' for 'Có'
+                                    - For riskRecoveryStatus: return '01' for 'Đã dự phòng', '02' for 'Chưa dự phòng'
                                     """
                                 },
                                 {
@@ -1904,8 +1959,8 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                         }
                     ],
                     max_tokens=4000,
-                    temperature=0,  # Set temperature to 0 for more consistent output
-                    response_format={"type": "json_object"}  # Force JSON response
+                    temperature=0,
+                    response_format={"type": "json_object"}
                 )
 
                 # Parse response
@@ -1919,6 +1974,16 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
 
                 # Parse JSON response
                 data = json.loads(response_text)
+                
+                # Post-process fields with mapping tables
+                for field in require_fields:
+                    field_name = field["tenTruong"]
+                    if "extractionRules" in field and "mapping" in field["extractionRules"]:
+                        if field_name in data and data[field_name]:
+                            data[field_name] = get_code_from_mapping(
+                                data[field_name], 
+                                field["extractionRules"]["mapping"]
+                            )
                 
                 # Update combined data
                 for key, value in data.items():
