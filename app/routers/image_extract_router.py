@@ -183,7 +183,7 @@ async def document_extract(
         # Duyệt từng dòng trong DataFrame
         for index, row in df_danh_sach_duong_dan.iterrows():
             path = row['Path']
-            rangePage = row['RangePage']
+            rangePage = str(row['RangePage']).replace(".", ",")
             
             # Kiểm tra nếu path là thư mục
             if os.path.isdir(path):
@@ -2596,7 +2596,7 @@ async def find_content_similarity(
             nguonvon_list = result.fetchall()
             
             # Chuyển đổi kết quả thành list dict
-            nguonvon_data = {row.NguonVonID: row.TenNguonVon for row in nguonvon_list}
+            nguonvon_data = pd.DataFrame(nguonvon_list, columns=['NguonVonID', 'TenNguonVon'])
             # VIET_TAT = {
             #     "xskt": "Xổ số kiến thiết",
             # }
