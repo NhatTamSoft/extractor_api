@@ -79,7 +79,7 @@ class DatabaseService:
 
             if van_ban_data.get('GiaTri'):
                 try:
-                    print(f"Chuyển đổi số cho GiaTri: {van_ban_data['GiaTri']}")
+                    #print(f"Chuyển đổi số cho GiaTri: {van_ban_data['GiaTri']}")
                     van_ban_data['GiaTri'] = convert_currency_to_int(str(van_ban_data['GiaTri']))
                 except ValueError as e:
                     print(f"Lỗi chuyển đổi số cho GiaTri: {van_ban_data['GiaTri']}. Lỗi: {e}")
