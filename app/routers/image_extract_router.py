@@ -109,6 +109,18 @@ async def document_extract(
     # DANH SÁCH ĐƯỜNG DẪN DỰ ÁN CỦA THƯ MỤC
     listThuMuc = []
     # 2. Kiểm tra xem có file nào được tải lên không
+    # Kiểm tra xem đường dẫn có tồn tại không
+    if not os.path.exists(thuMuc):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Đường dẫn không tồn tại",
+                "detail": f"Không tìm thấy đường dẫn: {thuMuc}"
+            }
+        )
+
     try:
         # Lấy danh sách thư mục con
         for item in os.listdir(thuMuc):
@@ -142,7 +154,7 @@ async def document_extract(
                 "detail": str(e)
             }
         )
-    
+    listFinalPath = [] #Danh sách file pdf đã xử lý
     try: 
         for item in listThuMuc:
             ma_du_an = item['maDuAn']
@@ -216,7 +228,12 @@ async def document_extract(
                         matching_rows = dfRangPage[dfRangPage['Path'] == pdf_name]
                         if not matching_rows.empty:
                             pdfRangPage = matching_rows.iloc[0]['RangePage']
-                            
+                    # Bổ sung thông tin file PDF đã xử lý
+                    # listFinalPath.append({
+                    #     'pathPDF': pathPDF,
+                    #     'pdf_name': pdf_name,
+                    #     'pdfRangPage': pdfRangPage
+                    # })
                     # Chuyển PDF thành ảnh
                     try:
                         all_data = []
@@ -660,7 +677,7 @@ async def document_extract(
                             }
                         van_ban_data["UserID"] = user_id
                         van_ban_data["DonViID"] = don_vi_id
-
+                        van_ban_data["TenFilePDF"] = pathPDF
                         db_service = DatabaseService()
                         result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
                         
@@ -730,13 +747,13 @@ async def document_extract(
                                     files=files_data,
                                     headers={"Authorization": authorization}
                                 )
-                                print("Response status code:", response.status_code)
-                                print("Response headers:", response.headers)
-                                print("Response content:", response.text)
-                                print("Response URL:", response.url)
-                                print("Response encoding:", response.encoding)
-                                print("Response cookies:", response.cookies)
-                                print("Response elapsed time:", response.elapsed)
+                                # print("Response status code:", response.status_code)
+                                # print("Response headers:", response.headers)
+                                # print("Response content:", response.text)
+                                # print("Response URL:", response.url)
+                                # print("Response encoding:", response.encoding)
+                                # print("Response cookies:", response.cookies)
+                                # print("Response elapsed time:", response.elapsed)
                                 if response.status_code != 200:
                                     print(f"Lỗi file {path} khi upload file lên hệ thống QLDA\n" + response.text)
                                     item['ghiChu'] = f"Lỗi file {path} khi upload file lên hệ thống QLDA\n" + response.text
@@ -771,7 +788,7 @@ async def document_extract(
                             print(f"\033[31m- Thông tin chi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\033[0m")
                             print(f"\033[31m- Dòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}\033[0m")
                             item['ghiChu'] = f"Lỗi {path} khi upload file lên hệ thống QLDA"
-                        
+
                         # XOÁ FILE SAU KHI CHẠY
                         try:
                             if os.path.exists(pathPDF):
@@ -782,7 +799,19 @@ async def document_extract(
                         # KẾT THÚC XOÁ FILE SAU KHI CHẠY
                     except Exception as e:
                         print(f"Lỗi xử lý file {pathPDF}: {str(e)}")
-                        
+                        listFinalPath.append({
+                            'pathPDF': pathPDF,
+                            'pdf_name': pdf_name,
+                            'pdfRangPage': pdfRangPage,
+                            'status': f"Lỗi xử lý file: {type(e).__name__} - {str(e)} - Dòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}"
+                        })
+                    # Bổ sung thông tin file PDF đã xử lý
+                    listFinalPath.append({
+                        'pathPDF': pathPDF,
+                        'pdf_name': pdf_name,
+                        'pdfRangPage': pdfRangPage,
+                        'status': 'Xử lý thành công'
+                    })
                 # C2: Xử lý đệ quy các thư mục con
                 for thuMucCon in listThuMucCon:
                     # Tạo item mới cho thư mục con
@@ -801,9 +830,7 @@ async def document_extract(
                     "status": "success",
                     "message": "Trích xuất dữ liệu từ file Excel thành công.",
                     "data": {
-                        # "thong_tin_du_an": df_thong_tin_du_an.to_dict(orient='records'),
-                        # "danh_sach_path": df_danh_sach_duong_dan.to_dict(orient='records'),
-                        # "ket_qua_xu_ly": list_duong_dan
+                        "info_pdf": listFinalPath
                     }
                 }
             )
@@ -1401,6 +1428,7 @@ async def extract_multiple_images(
 async def standardized_data(
     duAnID: str,
     authorization: str = Header(...)
+
 ):
     # Xác thực token
     try:
@@ -1499,15 +1527,14 @@ Tôi cung cấp 2 bảng dữ liệu:
 
 | MaKMCP  | TenKMCP                                                                                                                     |
 | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| CP01    | Chi phí bồi thường, hỗ trợ, tái định cư                                                                                     |
 | CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác |
 | CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           |
 | CP103   | Chi phí tái định cư                                                                                                         |
-| CP104   | Chi phí tổ chức bồi thường, hỗ trợ và tái định cư                                                                           |
+| CP104   | Chi phí tổ chức bồi thường, hỗ trợ, tái định cư                                                                           |
 | CP105   | Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng                                                                 |
 | CP106   | Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng                      |
 | CP107   | Chi phí đầu tư vào đất                                                                                                      |
-| CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư                                                    |
+| CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ, tái định cư                                                    |
 | CP2     | Chi phí xây dựng                                                                                                            |
 | CP221   | Chi phí xây dựng phát sinh                                                                                                  |
 | CP222   | Chi phí xây dựng trước thuế                                                                                                 |
@@ -1734,9 +1761,9 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
             temperature=0,
             max_completion_tokens=5000
         )
-        # print("+"*20)
-        # print(promt_anh_xa_noi_dung_tuong_dong)
-        # print("+"*20)
+        print("+"*20+"promt_anh_xa_noi_dung_tuong_dong")
+        print(promt_anh_xa_noi_dung_tuong_dong)
+        print("+"*20)
         try:
             # Xử lý response từ OpenAI
             response_text = response.choices[0].message.content
@@ -1775,7 +1802,13 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
             select 
             BangDuLieuChiTietAIID = convert(nvarchar(36), BangDuLieuChiTietAIID)
             , VanBanAIID = convert(nvarchar(36), VanBanAIID)
-            , TenKMCP, TenKMCP_AI, MaKMCP='', GhiChuAI=''
+            , TenKMCP, TenKMCP_AI, MaKMCP='', GhiChuAI='', 
+            HinhThucLCNT=isnull(HinhThucLCNT, ''),
+            PhuongThucLCNT=isnull(PhuongThucLCNT, ''),
+            LoaiHopDong=isnull(LoaiHopDong, ''),
+            HinhThucDThID = convert(nvarchar(36), HinhThucDThID), 
+            PhuongThucDThID = convert(nvarchar(36), PhuongThucDThID), 
+            LoaiHopDongID = convert(nvarchar(36), LoaiHopDongID)
             from dbo.BangDuLieuChiTietAI ct 
             where VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), DuAnID)='{duAnID}' and vb.TenLoaiVanBan IN ('QDPD_CT', 'QDPDDT_CBDT', 'QDPD_DA', 'QDPD_DT_THDT', 'QDPD_KHLCNT_CBDT','QDPD_KHLCNT_THDT')
                 and isnull(TrangThai, 0) = 0)  -- các văn bản chưa insert vào csdl
@@ -1872,13 +1905,73 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
 
                     # print(f"Executing SQL query: {query_insert}")
                     thuc_thi_truy_van(query_insert)
+
+            # Duyệt từng dòng trong dfBangDuLieuChiTietAI
+            # print("\n=== Chi tiết dữ liệu trong dfBangDuLieuChiTietAI ===")
+            # for index, row in dfBangDuLieuChiTietAI.iterrows():
+            #     print(f"\nDòng {index + 1}:")
+            #     for column in dfBangDuLieuChiTietAI.columns:
+            #         print(f"{column}: {row[column]}")
+            #     print("-" * 50)
+            # print("\n=== Kết thúc chi tiết dữ liệu ===\n")
+            for index, row in dfBangDuLieuChiTietAI.iterrows():
+                # print(f"Row data: {row}")
+                # Xử lý PhuongThucLCNT
+                #print("Ghi chú AI: ", row['GhiChuAI'])
+                if str(row['PhuongThucLCNT']).strip() != "":
+                    result_pt = await find_content_similarity(loaiDuLieu='phuongthucdth', duLieuCanTim=row['PhuongThucLCNT'])
+                    # Chuyển đổi JSONResponse thành dict trước khi serialize
+                    if isinstance(result_pt, JSONResponse):
+                        result_pt = result_pt.body.decode('utf-8')
+                        result_pt = json.loads(result_pt)
+                    if result_pt.get('status') == 'success' and result_pt['data']['success'] == 1:
+                        phuong_thuc_id = result_pt['data']['results'][0]['PhuongThucDThID']
+                        query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET PhuongThucDThID = '{phuong_thuc_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
+                        print(f"Executing SQL query: {query_update}")
+                        thuc_thi_truy_van(query_update)
+
+                # Xử lý LoaiHopDong
+                if str(row['LoaiHopDong']).strip() != "":
+                    result_lhd = await find_content_similarity(loaiDuLieu='loaihopdong', duLieuCanTim=row['LoaiHopDong'])
+                    # Chuyển đổi JSONResponse thành dict trước khi serialize
+                    if isinstance(result_lhd, JSONResponse):
+                        result_lhd = result_lhd.body.decode('utf-8')
+                        result_lhd = json.loads(result_lhd)
+                    if result_lhd.get('status') == 'success' and result_lhd['data']['success'] == 1:
+                        loai_hop_dong_id = result_lhd['data']['results'][0]['LoaiHopDongID']
+                        query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET LoaiHopDongID = '{loai_hop_dong_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
+                        print(f"Executing SQL query: {query_update}")
+                        thuc_thi_truy_van(query_update)
+
+                # Xử lý HinhThucLCNT
+                if str(row['HinhThucLCNT']).strip() != "":
+                    result_ht = await find_content_similarity(loaiDuLieu='hinhthucdth', duLieuCanTim=row['HinhThucLCNT'])
+                    # Chuyển đổi JSONResponse thành dict trước khi serialize
+                    if isinstance(result_ht, JSONResponse):
+                        result_ht = result_ht.body.decode('utf-8')
+                        result_ht = json.loads(result_ht)
+                    if result_ht.get('status') == 'success' and result_ht['data']['success'] == 1:
+                        hinh_thuc_id = result_ht['data']['results'][0]['HinhThucDThID']
+                        query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET HinhThucDThID = '{hinh_thuc_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
+                        print(f"Executing SQL query: {query_update}")
+                        thuc_thi_truy_van(query_update)
+            # print("=== Danh sách KMCP đã ghép được ===")
+            dataKMCP = []
+            for item in kmcp_ghep_duoc:
+                dataKMCP.append({
+                    'BangDuLieuChiTietAIID': str(item['BangDuLieuChiTietAIID']),
+                    'TenKMCP': item['TenKMCP'],
+                    'TenKMCP_AI': item['TenKMCP_AI'],
+                    'GhiChuAI': item['GhiChuAI']
+                })
+
             return JSONResponse(
                 status_code=200,
                 content={
                     "status": "success", 
                     "code": 200,
                     "message": "Xử lý kết quả ánh xạ từ AI thành công",
-                    "data": [row.to_dict() for row in kmcp_ghep_duoc],
+                    "data": dataKMCP,
                     "not_standardized": chuoi_kmcp_khong_ghep_duoc
                 }
             )
@@ -1890,7 +1983,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                     "status": "error",
                     "code": 500,
                     "message": "Lỗi khi xử lý kết quả ánh xạ từ AI",
-                    "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                    "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\nDòng bị lỗi: {traceback.format_exc()}"
                 }
             )
 
@@ -2058,7 +2151,7 @@ async def image_extract_multi_azure(
                     """
                 }
             ]
-
+            print(messages)
             # Call OpenAI API
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             response = client.chat.completions.create(
@@ -2528,47 +2621,10 @@ async def image_extract_multi_azure(
 @router.get("/find_content_similarity")
 async def find_content_similarity(
     loaiDuLieu: Optional[str] = None, # KMCP; NguonVon; HinhThucDTh; LoaiHopDong
-    duLieuCanTim: Optional[str] = None,
-    authorization: str = Header(...),
-    db: Session = Depends(get_db)
+    duLieuCanTim: Optional[str] = None
 ):
-    # Xác thực token
-    try:
-        #Kiểm tra header Authorization
-        if not authorization.startswith("Bearer "):
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "status": "error",
-                    "code": 401,
-                    "message": "Token không hợp lệ",
-                    "detail": "Token phải bắt đầu bằng 'Bearer '"
-                }
-            )
-            
-        #Lấy token từ header
-        token = authorization.split(" ")[1]
-        # Giải mã token để lấy userID và donViID
-        token_data = decode_jwt_token(token)
-        user_id = token_data["userID"]
-        don_vi_id = token_data["donViID"]
-        
-        #Thêm thông tin user vào request
-        request_data = {
-            "userID": user_id,
-            "donViID": don_vi_id
-        }
-        print(request_data)
-    except Exception as e:
-        return JSONResponse(
-            status_code=401,
-            content={
-                "status": "error",
-                "code": 401,
-                "message": "Lỗi xác thực",
-                "detail": str(e)
-            }
-        )
+    # print("loaiDuLieu:", loaiDuLieu)
+    # print("duLieuCanTim:", duLieuCanTim)
     if loaiDuLieu.lower() == "kmcp":
         try:
             # Truy vấn lấy danh sách KMCP
@@ -2577,37 +2633,19 @@ async def find_content_similarity(
             from dbo.KMCP 
             order by TenKMCP
             """
-            
+
             # Thực thi truy vấn
-            result = db.execute(text(query))
-            kmcp_list = result.fetchall()
+            data_gui = lay_du_lieu_tu_sql_server(query)
             
-            # Chuyển đổi kết quả thành list dict
-            kmcp_data = {row.KMCPID: row.TenKMCP for row in kmcp_list}
-            # VIET_TAT_KMCP = {
-            #     "cpxd": "chi phí xây dựng",
-            #     "cpxl": "chi phí xây dựng",
-            #     "tdc": "tái định cư",
-            #     "cpql": "chi phí quản lý dự án",
-            #     "qlda": "chi phí quản lý dự án",
-            #     "tvtk": "tư vấn đầu tư xây dựng",
-            #     "tvgs": "tư vấn đầu tư xây dựng",
-            #     "cpdp": "chi phí dự phòng",
-            #     "khac": "chi phí khác",
-            #     "ktkt": "kinh tế kỹ thuật",
-            #     "bc": "báo cáo",
-            #     "bvtc": "bản vẽ thi công",
-            #     "dt": "dự toán"
-            # }
             try:
-                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, kmcp_data, 0.50)
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
                 # print(ket_qua_tim)
                 return JSONResponse(
                     status_code=200,
                     content={
                         "status": "success", 
                         "code": 200,
-                        "message": "Lấy danh sách KMCP thành công",
+                        "message": "Tìm kiếm thành công",
                         "data": ket_qua_tim
                     }
                 )
@@ -2617,7 +2655,7 @@ async def find_content_similarity(
                     content={
                         "status": "error",
                         "code": 500,
-                        "message": "Lỗi khi tìm kiếm KMCP",
+                        "message": "Lỗi khi tìm kiếm",
                         "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
                     }
                 )
@@ -2628,7 +2666,7 @@ async def find_content_similarity(
                 content={
                     "status": "error",
                     "code": 500,
-                    "message": "Lỗi khi lấy danh sách KMCP",
+                    "message": "Lỗi khi tìm kiếm",
                     "detail": str(e)
                 }
             )
@@ -2642,23 +2680,17 @@ async def find_content_similarity(
             """
             
             # Thực thi truy vấn
-            result = db.execute(text(query))
-            nguonvon_list = result.fetchall()
+            nguonvon_data = lay_du_lieu_tu_sql_server(query)
             
-            # Chuyển đổi kết quả thành list dict
-            nguonvon_data = pd.DataFrame(nguonvon_list, columns=['NguonVonID', 'TenNguonVon'])
-            # VIET_TAT = {
-            #     "xskt": "Xổ số kiến thiết",
-            # }
             try:
-                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, nguonvon_data, 0.50)
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, nguonvon_data, 0.70)
                 # print(ket_qua_tim)
                 return JSONResponse(
                     status_code=200,
                     content={
                         "status": "success", 
                         "code": 200,
-                        "message": "Lấy danh sách Nguồn vốn thành công",
+                        "message": "Tìm kiếm thành công",
                         "data": ket_qua_tim
                     }
                 )
@@ -2668,7 +2700,7 @@ async def find_content_similarity(
                     content={
                         "status": "error",
                         "code": 500,
-                        "message": "Lỗi khi tìm kiếm KMCP",
+                        "message": "Lỗi khi tìm kiếm",
                         "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
                     }
                 )
@@ -2679,7 +2711,190 @@ async def find_content_similarity(
                 content={
                     "status": "error",
                     "code": 500,
-                    "message": "Lỗi khi lấy danh sách KMCP",
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+        
+    if loaiDuLieu.lower() == "phuongthucdth":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select PhuongThucDThID=convert(nvarchar(36), PhuongThucDThID), TenPhuongThucDTh from PhuongThucDTh
+            order by MaPhuongThucDTh
+            """
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            # VIET_TAT = {
+            #     "xskt": "Xổ số kiến thiết",
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                print("KẾT QUẢ TÌM KIẾM:  ", duLieuCanTim)
+                print(ket_qua_tim)
+                print("END KẾT QUẢ TÌM KIẾM")
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "loaigoithau":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select LoaiGoiThauID=convert(nvarchar(36), LoaiGoiThauID), TenLoaiGoiThau from LoaiGoiThau
+            order by MaLoaiGoiThau
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "hinhthucdth":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select HinhThucDThID=convert(nvarchar(36), HinhThucDThID), TenHinhThucDTh from HinhThucDTh
+            order by TenHinhThucDTh
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            
+            
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "loaihopdong":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select LoaiHopDongID=convert(nvarchar(36), LoaiHopDongID), TenLoaiHopDong from LoaiHopDong order by TenLoaiHopDong
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            
+            # VIET_TAT = {
+            #     "xskt": "Xổ số kiến thiết",
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
                     "detail": str(e)
                 }
             )
