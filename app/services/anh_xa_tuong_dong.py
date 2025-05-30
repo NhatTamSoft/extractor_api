@@ -25,7 +25,7 @@ def tim_kiem_tuong_dong(chuoi_can_tim, danh_sach_du_lieu, nguong_diem=0.7, model
     # Bước 1: Khởi tạo mô hình SentenceTransformer
     # Kiểm tra xem GPU có sẵn không và sử dụng nếu có
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"Sử dụng thiết bị: {device}")
+    # print(f"Sử dụng thiết bị: {device}")
     model = SentenceTransformer(model_name, device=device)
 
     # Bước 2: Trích xuất các chuỗi văn bản từ DataFrame

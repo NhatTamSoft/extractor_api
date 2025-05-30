@@ -206,34 +206,130 @@ async def document_extract(
                 print("Danh sách file PDF:", listPDF) 
                 print("Danh sách file txt:", listIndexTxt)
                 print("================================")
+                listKichBanXuLy = []
+                if listIndexTxt:
+                    # Đọc tất cả các file txt và lấy danh sách các file cần xử lý
+                    # Tạo một tập hợp rỗng để lưu trữ danh sách các file cần xử lý
+                    files_to_process = set()
+                    listFileIndex = []
+                    for txt_file in listIndexTxt:
+                        try:
+                            df_temp = pd.read_csv(txt_file, sep='\t')
+                            # for itemT in df_temp:
+                            #     print("Path:", df_temp['Path'])
+                            #     print("RangePage:", df_temp['RangePage'])
+                            for itemT in df_temp.itertuples():
+                                if not itemT.Path or pd.isna(itemT.Path):
+                                    continue
+                                # Lấy giá trị Path và tách thành mảng các file PDF
+                                pdf_files = itemT.Path.split(';')
+                                # Lấy giá trị RangePage tương ứng
+                                range_pages = itemT.RangePage
+                                
+                                # Tạo danh sách đường dẫn đầy đủ cho các file PDF
+                                full_pdf_paths = []
+                                for pdf_file in pdf_files:
+                                    # Lấy tên file từ đường dẫn
+                                    pdf_name = os.path.basename(pdf_file)
+                                    # Loại bỏ đuôi .pdf nếu có
+                                    while pdf_name.endswith('.pdf'):
+                                        pdf_name = pdf_name.replace('.pdf', '')
+                                    
+                                    # Tìm file PDF trong listPDF
+                                    for full_pdf_path in listPDF:
+                                        # Lấy tên file từ đường dẫn đầy đủ
+                                        full_pdf_name = os.path.basename(full_pdf_path)
+                                        while full_pdf_name.endswith('.pdf'):
+                                            full_pdf_name = full_pdf_name.replace('.pdf', '')
+                                        
+                                        # Nếu tìm thấy file PDF trong listPDF
+                                        if pdf_name == full_pdf_name:
+                                            full_pdf_paths.append(full_pdf_path)
+                                            break
+                                
+                                # Thêm vào listKichBanXuLy với đường dẫn đầy đủ của tất cả các file PDF
+                                if full_pdf_paths:
+                                    listKichBanXuLy.append({
+                                        'Path': ';'.join(full_pdf_paths),
+                                        'RangePage': range_pages
+                                    })
+                        except Exception as e:
+                            print(f"Lỗi đọc file {txt_file}: {str(e)}")
+                else:
+                    for pdf_path in listPDF:
+                        listKichBanXuLy.append({
+                            'Path': pdf_path,
+                            'RangePage': ''
+                        })
 
-                # C1: Xử lý file PDF
-                dfRangPage = pd.DataFrame(columns=['Path', 'RangePage'])
-                
-                # Đọc các file txt
-                for txt_file in listIndexTxt:
-                    try:
-                        df_temp = pd.read_csv(txt_file, sep='\t')
-                        dfRangPage = pd.concat([dfRangPage, df_temp], ignore_index=True)
-                    except Exception as e:
-                        print(f"Lỗi đọc file {txt_file}: {str(e)}")
-                        
+                print("\n" + "═" * 80)
+                print(" " * 25 + "CHI TIẾT LIST KỊCH BẢN XỬ LÝ" + " " * 25)
+                print("═" * 80 + "\n")
+
+                for idx, item in enumerate(listKichBanXuLy, 1):
+                    print("─" * 80)
+                    print(f"\033[1mKỊCH BẢN {idx}\033[0m")
+                    print(f"Path: {item['Path']}")
+                    print(f"RangePage: {item['RangePage']}")
+                    print("─" * 80 + "\n")
+
+                print("═" * 80)
+                print(" " * 30 + "KẾT THÚC DANH SÁCH" + " " * 30)
+                print("═" * 80 + "\n")
+                         
                 # Xử lý từng file PDF
-                for pathPDF in listPDF:
+                for itemKichBan in listKichBanXuLy:
+                    pathPDF = str(itemKichBan['Path']).strip().split(';')[0] # Lấy file đầu tiên để dành lưu trữ // Các file ở phần tử 1 trở đi chỉ để ghép lấy số liệu
+                    # pathPDF là đường dẫn file pdf
                     pdf_name = os.path.basename(pathPDF)
                     pdfRangPage = ""
                     
-                    # Kiểm tra xem PDF có trong dfRangPage không
-                    if not dfRangPage.empty:
-                        matching_rows = dfRangPage[dfRangPage['Path'] == pdf_name]
-                        if not matching_rows.empty:
-                            pdfRangPage = matching_rows.iloc[0]['RangePage']
-                    # Bổ sung thông tin file PDF đã xử lý
-                    # listFinalPath.append({
-                    #     'pathPDF': pathPDF,
-                    #     'pdf_name': pdf_name,
-                    #     'pdfRangPage': pdfRangPage
-                    # })
+                    # Tách đường dẫn PDF và RangePage thành các phần
+                    pdf_paths = itemKichBan['Path'].split(';')
+                    range_pages = itemKichBan['RangePage'].split(';')
+                    
+                    # Danh sách chứa tất cả các ảnh PIL
+                    all_images = []
+                    
+                    # Xử lý từng cặp PDF và RangePage tương ứng
+                    for pdf_path, page_range in zip(pdf_paths, range_pages):
+                        # Kiểm tra nếu page_range rỗng thì chuyển tất cả trang
+                        # print(f"\n=== 888 Thông tin chi tiết PDF và Range Page 888 ===")
+                        # print(f"PDF Path: {pdf_path}")
+                        # print(f"Range Page: {page_range}")
+                        # print("=======================================\n")
+                        if page_range.strip() == "":
+                            images = pdf_to_images(pdf_path, 2.0, "")
+                        else:
+                            # Chuyển PDF thành ảnh với các trang được chỉ định
+                            images = pdf_to_images(pdf_path, 2.0, page_range)
+                        # print("\n=== Thông tin chi tiết biến images ===")
+                        # print(f"Số lượng ảnh: {len(images)}")
+                        # print("\nChi tiết từng ảnh:")
+                        # for idx, img in enumerate(images):
+                        #     print(f"\nẢnh thứ {idx + 1}:")
+                        #     print(f"Kích thước: {img.size}")
+                        #     print(f"Mode: {img.mode}")
+                        #     print(f"Format: {img.format if hasattr(img, 'format') else 'N/A'}")
+                        # print("=======================================\n")
+                        # Thêm các ảnh vào danh sách kết quả
+                        all_images.extend(images)
+                    
+                    image_PIL = all_images
+
+                    print("\n=== Chi tiết biến image_PIL và itemKichBan ===")
+                    print(f"Số lượng ảnh: {len(image_PIL)}")
+                    print("\nThông tin itemKichBan:")
+                    print(f"Path: {itemKichBan['Path']}")
+                    print(f"RangePage: {itemKichBan['RangePage']}")
+                    print("\nChi tiết từng ảnh:")
+                    for idx, img in enumerate(image_PIL):
+                        print(f"\nẢnh thứ {idx + 1}:")
+                        print(f"Kích thước: {img.size}")
+                        print(f"Mode: {img.mode}")
+                        print(f"Format: {img.format if hasattr(img, 'format') else 'N/A'}")
+                    print("=======================================\n")
+
                     # Chuyển PDF thành ảnh
                     try:
                         all_data = []
@@ -283,18 +379,13 @@ async def document_extract(
                         # print(prompt)
                         # print("*"*30)
                         # CHUYỂN PDF SANG DANH SÁCH ẢNH
-                        print(f"Tách PDF thành ẢNH với tên file {pathPDF}, với pdfRangPage: ", pdfRangPage)
-                        image_PIL = pdf_to_images(pathPDF, 2.0, pdfRangPage)
-                        # print("\n=== Thông tin chi tiết về biến image_PIL ===")
-                        # print(f"Số lượng ảnh: {len(image_PIL)}")
-                        # for idx, img in enumerate(image_PIL):
-                        #     print(f"\nẢnh thứ {idx + 1}:")
-                        #     print(f"- Kích thước: {img.size}")
-                        #     print(f"- Mode: {img.mode}")
-                        #     print(f"- Format: {img.format if hasattr(img, 'format') else 'Không có'}")
-                        print("=======================================\n")
-                        print(f"\nĐang xử lý file PDF: {pathPDF}")
-                        print("=======================================\n")
+                        
+                        print(f"\n{'='*50}")
+                        print(f"Đang xử lý kịch bản: {itemKichBan}")
+                        print(f"Thời gian bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        print(f"Đường dẫn file: {itemKichBan['Path']}")
+                        print(f"Đường dẫn file CHÍNH: {pathPDF}")
+                        print(f"{'='*50}\n")
                         try:
                             # Process each file with Azure Form Recognizer
                             combined_text = ""
@@ -459,7 +550,7 @@ async def document_extract(
                         if "BangDuLieu" in data_json:
                             for item in data_json["BangDuLieu"]:
                                 try:
-                                    print("Kiểm tra van_ban_id: ", van_ban_id)
+                                    # print("Kiểm tra van_ban_id: ", van_ban_id)
                                     item["VanBanID"] = van_ban_id
                                     # Convert all numeric values based on required columns
                                     for col in required_columns:
@@ -735,11 +826,11 @@ async def document_extract(
                                     ("files", (file_name, file_obj.file, "image/png"))
                                 )
                             
-                            print(">>>>>>>>>>>> files_data chi tiết:")
-                            for file_data in files_data:
-                                print(f"- Tên file: {file_data[1][0]}")
-                                print(f"- Loại file: {file_data[1][2]}")
-                                print("-" * 50)
+                            # print(">>>>>>>>>>>> files_data chi tiết:")
+                            # for file_data in files_data:
+                            #     print(f"- Tên file: {file_data[1][0]}")
+                            #     print(f"- Loại file: {file_data[1][2]}")
+                            #     print("-" * 50)
                             # Upload files to QLDA system
                             async with httpx.AsyncClient() as client:
                                 response = await client.post(
@@ -791,9 +882,12 @@ async def document_extract(
 
                         # XOÁ FILE SAU KHI CHẠY
                         try:
-                            if os.path.exists(pathPDF):
-                                os.remove(pathPDF)
-                                print(f"Đã xóa file {pathPDF} thành công")
+                            # Xóa từng file PDF trong danh sách
+                            pdf_pathsX = str(itemKichBan['Path']).strip().split(';')
+                            for pdf_pathX in pdf_pathsX:
+                                if os.path.exists(pdf_pathX):
+                                    os.remove(pdf_pathX)
+                                    print(f"Đã xóa file {pdf_pathX} thành công")
                         except Exception as e:
                             print(f"Lỗi khi xóa file {pathPDF}: {str(e)}")
                         # KẾT THÚC XOÁ FILE SAU KHI CHẠY
@@ -1056,7 +1150,7 @@ async def extract_multiple_images(
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
                     try:
-                        print("Kiểm tra van_ban_id: ", van_ban_id)
+                        # print("Kiểm tra van_ban_id: ", van_ban_id)
                         item["VanBanID"] = van_ban_id
                         # Convert all numeric values based on required columns
                         for col in required_columns:
@@ -1511,225 +1605,215 @@ async def standardized_data(
 
 
             promt_anh_xa_noi_dung_tuong_dong = """
-Bạn là chuyên gia trong lĩnh vực Đầu tư xây dựng cơ bản.
+Bạn là chuyên gia AI trong lĩnh vực xây dựng cơ bản. Nhiệm vụ của bạn là ánh xạ từng khoản mục chi phí từ danh sách nhập vào (`DanhSachCanAnhXa`) với danh mục khoản mục chi phí chuẩn (`DanhMucChuan`). Hãy thực hiện theo các quy tắc dưới đây:
+### QUY TẮC ÁNH XẠ
 
-Tôi cung cấp 2 bảng dữ liệu:
+1. **Ánh xạ 1:1**: Mỗi dòng trong danh sách cần ánh xạ chỉ được gán cho một dòng duy nhất trong danh mục chuẩn.
+2. **So khớp từ khóa gần đúng**: Cho phép sai lệch chính tả, viết hoa/thường, từ dư thừa hoặc thiếu, nhưng phải đảm bảo nghĩa gốc tương đương.
+3. **Loại bỏ ký tự nhiễu**: Bỏ dấu chấm cuối câu, dấu cách thừa.
+4. **Tự động phát hiện và hợp nhất các trường hợp viết khác nhau** (ví dụ: "Chi phí lập Báo cáo kinh tế - kỹ thuật" và "Chí phí lập báo cáo Kinh tế - kỹ thuật").
+5. Nếu không tìm được ánh xạ phù hợp, ghi rõ `"KHÔNG TÌM ĐƯỢC"`.
 
-#### Bảng 1 – Danh sách khoản mục chi phí cần ánh xạ (`KMCP_AnhXa`)
-- Gồm cột: `TenKMCP` (tên khoản mục thực tế từ hồ sơ dự toán hoặc quyết toán)
-
+#### Bảng 1 - Danh mục chuẩn chi phí (`DanhSachCanAnhXa`)
 """+chuoi_markdown_tenkmcp+"""
 
-#### Bảng 2 – Danh mục chuẩn chi phí (`KMCP`)
+#### Bảng 2 - Danh mục chuẩn chi phí (`DanhMucChuan`)
 - Gồm các cột:
   - `MaKMCP`: mã khoản mục chuẩn
   - `TenKMCP`: tên khoản mục chi phí chuẩn
+  - `TuKhoaGoiY`: Từ khoá gợi ý
+| MaKMCP  | TenKMCP                                                                                                                     | TuKhoaGoiY                                                                                                                   |
+| ------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác | mặt, nước, về, chi, đất, liền, bồi, trình, các, gắn, thường, công, sản, Chi, nhà, tài, phí, trên, khác, với, và              |
+| CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           | khi, phí, Chi, trợ, nước, đất, nhà, các, hồi, thu, hỗ, khoản                                                                 |
+| CP103   | Chi phí tái định cư                                                                                                         | phí, tái, Chi, định, cư                                                                                                      |
+| CP104   | Chi phí tổ chức bồi thường, hỗ trợ, tái định cư                                                                             | thường, phí, tái, Chi, trợ, tổ, bồi, chức, định, cư, hỗ                                                                      |
+| CP105   | Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng                                                                 | sử, phí, gian, dụng, Chi, xây, đất, tính, thời, thuê, trong, dựng                                                            |
+| CP106   | Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng                      | mặt, phần, di, bằng, xây, hoàn, cho, hạ, tư, trả, Chi, phóng, giải, được, kỹ, dời, dựng, phí, thuật, tầng, phục, đã, vụ, đầu |
+| CP107   | Chi phí đầu tư vào đất                                                                                                      | phí, Chi, đất, vào, tư, đầu                                                                                                  |
+| CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ, tái định cư                                                      | thường, công, phí, tái, Chi, đến, trợ, khác, tác, quan, bồi, định, có, cư, hỗ, liên                                          |
+| CP2     | Chi phí xây dựng                                                                                                            | phí, Chi, xây, dựng                                                                                                          |
+| CP221   | Chi phí xây dựng phát sinh                                                                                                  | phí, Chi, phát, xây, sinh, dựng                                                                                              |
+| CP222   | Chi phí xây dựng trước thuế                                                                                                 | thuế, phí, Chi, xây, dựng, trước                                                                                             |
+| CP223   | Chi phí xây dựng sau thuế                                                                                                   | thuế, phí, Chi, sau, xây, dựng                                                                                               |
+| CP224   | Chi phí xây dựng công trình phụ                                                                                             | công, phí, Chi, xây, phụ, trình, dựng                                                                                        |
+| CP225   | Chi phí xây dựng công trình chính                                                                                           | công, phí, Chi, xây, trình, chính, dựng                                                                                      |
+| CP226   | Chi phí xây dựng điều chỉnh                                                                                                 | phí, Chi, xây, điều, dựng, chỉnh                                                                                             |
+| CP227   | Chi phí xây dựng công trình chính và phụ                                                                                    | công, phí, Chi, xây, phụ, trình, và, chính, dựng                                                                             |
+| CP228   | Chi phí xây dựng khác                                                                                                       | phí, Chi, xây, khác, dựng                                                                                                    |
+| CP3     | Chi phí thiết bị                                                                                                            | phí, bị, Chi, thiết                                                                                                          |
+| CP321   | Chi phí thiết bị phát sinh                                                                                                  | phí, Chi, phát, sinh, bị, thiết                                                                                              |
+| CP4     | Chi phí quản lý dự án                                                                                                       | quản, phí, án, Chi, dự, lý                                                                                                   |
+| CP421   | Chi phí quản lý dự án phát sinh                                                                                             | quản, phí, án, Chi, phát, dự, sinh, lý                                                                                       |
+| CP5     | Chi phí tư vấn đầu tư xây dựng                                                                                              | phí, Chi, xây, vấn, tư, dựng, đầu                                                                                            |
+| CP501   | Chi phí lập báo cáo nghiên cứu tiền khả thi                                                                                 | lập, cáo, phí, Chi, khả, nghiên, tiền, thi, cứu, báo                                                                         |
+| CP502   | Chi phí lập báo cáo nghiên cứu khả thi                                                                                      | lập, cáo, phí, Chi, khả, nghiên, thi, cứu, báo                                                                               |
+| CP503   | Chi phí lập báo cáo kinh tế - kỹ thuật                                                                                      | lập, cáo, phí, Chi, tế, thuật, kinh, kỹ, báo                                                                                 |
+| CP50301 | Chi phí lập dự án đầu tư                                                                                                    | lập, phí, án, Chi, dự, tư, đầu                                                                                               |
+| CP504   | Chi phí thiết kế xây dựng                                                                                                   | phí, Chi, xây, kế, dựng, thiết                                                                                               |
+| CP50411 | Chi phí thiết kế xây dựng (Phát sinh)                                                                                       | phí, Chi, xây, sinh, kế, Phát, dựng, thiết                                                                                   |
+| CP50420 | Chi phí thiết kế kỹ thuật                                                                                                   | phí, Chi, thuật, kế, kỹ, thiết                                                                                               |
+| CP50431 | Chi phí thiết kế kỹ thuật (Phát sinh)                                                                                       | phí, Chi, thuật, Phát, sinh, kế, kỹ, thiết                                                                                   |
+| CP505   | Chi phí thiết kế bản vẽ thi công                                                                                            | bản, phí, công, Chi, kế, vẽ, thi, thiết                                                                                      |
+| CP50511 | Chi phí thiết kế bản vẽ thi công (Phát sinh)                                                                                | bản, phí, công, Chi, Phát, sinh, kế, vẽ, thi, thiết                                                                          |
+| CP50530 | Chi phí lập thiết kế bản vẽ thi công - dự toán                                                                              | lập, bản, phí, công, Chi, toán, dự, kế, vẽ, thi, thiết                                                                       |
+| CP50541 | Chi phí lập thiết kế bản vẽ thi công - dự toán (Phát sinh)                                                                  | lập, bản, phí, công, Chi, toán, Phát, dự, sinh, kế, vẽ, thi, thiết                                                           |
+| CP506   | Chi phí lập nhiệm vụ khảo sát xây dựng                                                                                      | lập, phí, Chi, xây, nhiệm, vụ, khảo, dựng, sát                                                                               |
+| CP50602 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                            | lập, cáo, phí, Chi, nhiệm, khả, nghiên, vụ, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                      |
+| CP50603 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                  | lập, cáo, phí, Chi, nhiệm, khả, NCKT, nghiên, vụ, thi, khảo, cứu, Bước, báo, sát                                             |
+| CP50604 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                  | lập, bản, phí, công, Chi, nhiệm, TKBVTC, kế, vẽ, vụ, thi, khảo, Bước, thiết, sát                                             |
+| CP50605 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                     | lập, bản, phí, công, Chi, toán, nhiệm, dự, TKBVTCDT, kế, vẽ, vụ, thi, khảo, Bước, thiết, sát                                 |
+| CP507   | Chi phí thẩm tra báo cáo kinh tế - kỹ thuật                                                                                 | cáo, phí, Chi, tế, thuật, thẩm, tra, kinh, kỹ, báo                                                                           |
+| CP508   | Chi phí thẩm tra báo cáo nghiên cứu khả thi                                                                                 | cáo, phí, Chi, thẩm, tra, khả, nghiên, thi, cứu, báo                                                                         |
+| CP509   | Chi phí thẩm tra thiết kế xây dựng                                                                                          | phí, Chi, xây, thẩm, tra, kế, dựng, thiết                                                                                    |
+| CP50911 | Chi phí thẩm tra thiết kế xây dựng (Phát sinh)                                                                              | phí, Chi, xây, thẩm, tra, sinh, kế, Phát, dựng, thiết                                                                        |
+| CP510   | Chi phí thẩm tra dự toán xây dựng                                                                                           | phí, Chi, xây, toán, dự, thẩm, tra, dựng                                                                                     |
+| CP51011 | Chi phí thẩm tra dự toán xây dựng (Phát sinh)                                                                               | phí, Chi, xây, toán, dự, thẩm, tra, sinh, Phát, dựng                                                                         |
+| CP511   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuât) tư vấn                                   | lập, đề, phí, Chi, sơ, giá, xuât, hồ, thầu, mời, dự, vấn, tư, yêu, đánh, cầu                                                 |
+| CP512   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) tư vấn                                                                           | lập, phí, Chi, sơ, vấn, hồ, thầu, mời, tư, yêu, cầu                                                                          |
+| CP513   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn                                                                       | đề, phí, xuất, Chi, sơ, giá, vấn, hồ, thầu, dự, tư, đánh                                                                     |
+| CP51311 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn (Phát sinh)                                                           | đề, phí, xuất, Chi, sơ, giá, vấn, hồ, thầu, dự, sinh, tư, đánh, Phát                                                         |
+| CP514   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng                                                             | lập, công, phí, Chi, xây, giá, HSYC, HSĐX, HSMT, đánh, thi, dựng, HSDT                                                       |
+| CP51411 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng (Phát sinh)                                                 | lập, công, phí, Chi, xây, giá, HSYC, Phát, HSĐX, sinh, HSMT, đánh, thi, dựng, HSDT                                           |
+| CP515   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng                                                                | lập, công, phí, Chi, sơ, xây, hồ, thầu, mời, yêu, thi, cầu, dựng                                                             |
+| CP51511 | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng (Phát sinh)                                                    | lập, công, phí, Chi, sơ, xây, hồ, thầu, mời, Phát, sinh, yêu, thi, cầu, dựng                                                 |
+| CP516   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                                                            | đề, phí, xuất, Chi, sơ, công, giá, xây, hồ, thầu, dự, đánh, thi, dựng                                                        |
+| CP51611 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng (Phát sinh)                                                | đề, phí, xuất, Chi, sơ, công, giá, xây, hồ, thầu, Phát, dự, sinh, đánh, thi, dựng                                            |
+| CP517   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                      | lập, phí, Chi, giá, HSYC, sắm, vật, mua, HSĐX, HSMT, tư, đánh, bị, HSDT, thiết                                               |
+| CP51711 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                          | lập, phí, Chi, giá, HSYC, sắm, vật, mua, HSĐX, sinh, HSMT, tư, đánh, Phát, bị, HSDT, thiết                                   |
+| CP518   | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị                                                                            | lập, phí, Chi, sắm, HSYC, vật, mua, HSMT, tư, bị, thiết                                                                      |
+| CP51811 | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị (Phát sinh)                                                                | lập, phí, Chi, sắm, HSYC, vật, mua, sinh, HSMT, tư, Phát, bị, thiết                                                          |
+| CP519   | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                                       | phí, Chi, giá, sắm, vật, mua, HSĐX, tư, đánh, bị, HSDT, thiết                                                                |
+| CP51911 | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                                           | phí, Chi, giá, sắm, vật, mua, HSĐX, sinh, tư, đánh, Phát, bị, HSDT, thiết                                                    |
+| CP520   | Chi phí giám sát thi công xây dựng                                                                                          | công, phí, Chi, xây, thi, dựng, giám, sát                                                                                    |
+| CP52099 | Chi phí giám sát thi công xây dựng (Phát sinh)                                                                              | công, phí, Chi, xây, Phát, sinh, thi, dựng, giám, sát                                                                        |
+| CP521   | Chi phí giám sát lắp đặt thiết bị                                                                                           | phí, Chi, lắp, đặt, bị, giám, thiết, sát                                                                                     |
+| CP52111 | Chi phí giám sát lắp đặt thiết bị (Phát sinh)                                                                               | phí, Chi, lắp, đặt, sinh, Phát, bị, giám, thiết, sát                                                                         |
+| CP522   | Chi phí giám sát công tác khảo sát xây dựng                                                                                 | công, phí, Chi, xây, tác, khảo, dựng, giám, sát                                                                              |
+| CP523   | Chi phí quy đổi vốn đầu tư xây dựng                                                                                         | phí, Chi, xây, đổi, quy, tư, vốn, dựng, đầu                                                                                  |
+| CP526   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu)                                                                                | sơ, Phí, hồ, thầu, mời, thẩm, định, yêu, cầu                                                                                 |
+| CP527   | Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi                                                                            | cáo, phí, Chi, thẩm, tra, khả, nghiên, tiền, thi, cứu, báo                                                                   |
+| CP528   | Chi phí khảo sát xây dựng                                                                                                   | phí, Chi, xây, khảo, dựng, sát                                                                                               |
+| CP52802 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                         | lập, cáo, phí, Chi, khả, nghiên, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                                 |
+| CP52803 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                               | lập, cáo, phí, Chi, khả, NCKT, nghiên, thi, khảo, cứu, Bước, báo, sát                                                        |
+| CP52804 | Chi phí khảo sát (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                                 | lập, cáo, phí, Chi, tế, thuật, kinh, kỹ, KTKT, khảo, Bước, báo, sát                                                          |
+| CP52805 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                               | lập, bản, phí, công, Chi, TKBVTC, kế, vẽ, thi, khảo, Bước, thiết, sát                                                        |
+| CP52806 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                                  | lập, bản, phí, công, Chi, toán, dự, TKBVTCDT, kế, vẽ, thi, khảo, Bước, thiết, sát                                            |
+| CP532   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu thi công xây dựng                                                     | công, sơ, xây, Phí, hồ, thầu, mời, thẩm, định, yêu, thi, cầu, gói, dựng                                                      |
+| CP533   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu lắp đặt thiết bị                                                      | sơ, Phí, hồ, thầu, mời, lắp, đặt, thẩm, định, thiết, yêu, bị, cầu, gói                                                       |
+| CP534   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu tư vấn đầu tư xây dựng                                                | sơ, xây, vấn, Phí, hồ, thầu, mời, thẩm, định, tư, yêu, cầu, đầu, gói, dựng                                                   |
+| CP535   | Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng                                                                   | công, lựa, xây, Phí, thầu, nhà, thẩm, định, chọn, kết, thi, quả, dựng                                                        |
+| CP536   | Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị                                                                    | lựa, Phí, thầu, nhà, lắp, đặt, thẩm, định, chọn, bị, kết, quả, thiết                                                         |
+| CP537   | Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng                                                              | lựa, xây, vấn, Phí, thầu, nhà, thẩm, định, chọn, tư, kết, quả, dựng, đầu                                                     |
+| CP538   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) xây lắp                    | giá, mời, lắp, xuất, lựa, sơ, xây, định, quả, đề, hồ, nhà, đánh, kết, Phí, thầu, thẩm, chọn, yêu, cầu                        |
+| CP539   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) lắp đặt thiết bị           | giá, mời, lắp, xuất, lựa, sơ, đặt, định, quả, bị, thiết, đề, hồ, nhà, đánh, kết, Phí, thầu, thẩm, chọn, yêu, cầu             |
+| CP540   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) tư vấn đầu tư xây dựng     | giá, mời, xuất, lựa, sơ, xây, vấn, định, tư, quả, đề, hồ, nhà, đánh, kết, dựng, Phí, thầu, thẩm, chọn, yêu, cầu, đầu         |
+| CP541   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất)                            | đề, lựa, xuất, sơ, giá, Phí, hồ, thầu, mời, nhà, thẩm, định, chọn, yêu, đánh, kết, quả, cầu                                  |
+| CP551   | Chi phí khảo sát, thiết kế                                                                                                  | phí, Chi, kế, khảo, thiết, sát                                                                                               |
+| CP552   | Chi phí nhiệm vụ thử tỉnh cọc                                                                                               | tỉnh, phí, Chi, cọc, nhiệm, thử, vụ                                                                                          |
+| CP553   | Công tác điều tra, đo đạt và thu thập số liệu                                                                               | đo, đạt, số, liệu, tác, tra, Công, thập, điều, thu, và                                                                       |
+| CP554   | Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng                                                 | phù, phí, công, Chi, xây, sự, hợp, về, chất, nhận, tra, lượng, trình, kiểm, chứng, và, dựng                                  |
+| CP556   | Chi phí thẩm tra an toàn giao thông                                                                                         | thông, phí, Chi, an, toàn, thẩm, tra, giao                                                                                   |
+| CP557   | Chi phí thử tĩnh                                                                                                            | tĩnh, phí, Chi, thử                                                                                                          |
+| CP558   | Chi phí công bố quy hoạch                                                                                                   | công, phí, bố, Chi, hoạch, quy                                                                                               |
+| CP559   | Chi phí thử tải cừ tràm                                                                                                     | tràm, phí, Chi, cừ, thử, tải                                                                                                 |
+| CP560   | Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu                                                                    | công, phí, nghiệm, Chi, chất, tác, lượng, định, phục, vụ, thu, kiểm                                                          |
+| CP561   | Chi phí cắm mốc ranh giải phóng mặt bằng                                                                                    | mặt, phí, mốc, Chi, ranh, giải, phóng, bằng, cắm                                                                             |
+| CP56111 | Chi phí lập đồ án quy hoạch                                                                                                 | lập, phí, án, Chi, hoạch, đồ, quy                                                                                            |
+| CP56201 | Chi phí khảo sát địa chất                                                                                                   | phí, Chi, chất, địa, khảo, sát                                                                                               |
+| CP56202 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                | lập, cáo, phí, Chi, chất, khả, địa, nghiên, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                      |
+| CP56203 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      | lập, cáo, phí, Chi, chất, khả, NCKT, địa, nghiên, thi, khảo, cứu, Bước, báo, sát                                             |
+| CP56204 | Chi phí khảo sát địa chất (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        | lập, cáo, phí, Chi, tế, chất, thuật, địa, kinh, kỹ, KTKT, khảo, Bước, báo, sát                                               |
+| CP56205 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        | lập, bản, phí, công, Chi, chất, BVTC, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                               |
+| CP56206 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           | lập, bản, phí, công, Chi, chất, toán, dự, BVTCDT, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                   |
+| CP563   | Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án                                                                      | phí, án, Chi, dự, tính, thẩm, tra, khả, hiệu, thi, quả, của                                                                  |
+| CP56301 | Chi phí khảo sát địa hình                                                                                                   | phí, Chi, hình, địa, khảo, sát                                                                                               |
+| CP56302 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                | lập, cáo, phí, Chi, hình, khả, địa, nghiên, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                      |
+| CP56303 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      | lập, cáo, phí, Chi, hình, khả, NCKT, địa, nghiên, thi, khảo, cứu, Bước, báo, sát                                             |
+| CP56304 | Chi phí khảo sát địa hình (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        | lập, cáo, phí, Chi, hình, tế, thuật, địa, kinh, kỹ, KTKT, khảo, Bước, báo, sát                                               |
+| CP56305 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        | lập, bản, phí, công, Chi, hình, BVTC, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                               |
+| CP56306 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           | lập, bản, phí, công, Chi, hình, toán, dự, BVTCDT, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                   |
+| CP564   | Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án                                                               | lập, cáo, án, kiện, vấn, phần, văn, Tư, dự, các, của, thành, và, báo                                                         |
+| CP56401 | Chi phí khảo sát địa hình, địa hình                                                                                         | phí, Chi, hình, địa, khảo, sát                                                                                               |
+| CP565   | Chi phí lập kế hoạch bảo vệ môi trường                                                                                      | lập, phí, bảo, Chi, hoạch, môi, kế, trường, vệ                                                                               |
+| CP566   | Chi phí lập báo cáo đánh giá tác động môi trường                                                                            | lập, cáo, phí, Chi, giá, tác, động, môi, đánh, trường, báo                                                                   |
+| CP567   | Chi phí thí nghiệm đối chứng, kiểm định xây dựng, thử nghiệm khả năng chịu lực của công trình                               | công, phí, nghiệm, Chi, thí, xây, năng, chịu, lực, đối, thử, định, khả, trình, kiểm, chứng, dựng, của                        |
+| CP568   | Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1                                                     | phí, Chi, mẫu, phác, bước, tác, sáng, thảo, 1, tư, ban, thi, tuyển, chuẩn, bị, đầu                                           |
+| CP569   | Chi phí chỉ đạo thể hiện phần mỹ thuật                                                                                      | mỹ, phí, đạo, Chi, thuật, hiện, phần, thể, chỉ                                                                               |
+| CP570   | Chi phí nội đồng nghệ thuật                                                                                                 | phí, Chi, thuật, đồng, nội, nghệ                                                                                             |
+| CP571   | Chi phí sáng tác mẫu phác thảo tượng đài                                                                                    | phí, Chi, mẫu, phác, đài, tác, sáng, thảo, tượng                                                                             |
+| CP572   | Chi phí hoạt động của Hội đồng nghệ thuật                                                                                   | phí, Chi, thuật, đồng, động, Hội, hoạt, nghệ, của                                                                            |
+| CP573   | Chi phí giám sát thi công xây dựng phát sinh                                                                                | công, phí, Chi, xây, phát, sinh, thi, dựng, giám, sát                                                                        |
+| CP57301 | Chi phí kiểm định theo yêu cầu chủ đầu tư                                                                                   | theo, phí, Chi, định, tư, yêu, kiểm, cầu, đầu, chủ                                                                           |
+| CP574   | Chi phí tư vấn thẩm tra dự toán                                                                                             | phí, Chi, vấn, toán, dự, thẩm, tra, tư                                                                                       |
+| CP57401 | Chi phí thẩm tra dự toán phát sinh                                                                                          | phí, Chi, phát, toán, dự, thẩm, tra, sinh                                                                                    |
+| CP575   | Chi phí thẩm định dự toán giá gói thầu                                                                                      | phí, Chi, giá, toán, thầu, dự, thẩm, định, gói                                                                               |
+| CP577   | Chi phí lập hồ sơ điều chỉnh dự toán                                                                                        | lập, phí, Chi, sơ, toán, hồ, dự, điều, chỉnh                                                                                 |
+| CP578   | Chi phí chuyển giao công nghệ                                                                                               | công, phí, Chi, chuyển, nghệ, giao                                                                                           |
+| CP579   | Chi phí thẩm định giá                                                                                                       | phí, Chi, giá, thẩm, định                                                                                                    |
+| CP580   | Chi phí tư vấn giám sát                                                                                                     | phí, Chi, vấn, tư, giám, sát                                                                                                 |
+| CP581   | Chi phí báo cáo giám sát đánh giá đầu tư                                                                                    | cáo, phí, Chi, đầu, giá, tư, đánh, giám, báo, sát                                                                            |
+| CP582   | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT)                                                               | bản, phí, công, Chi, toán, dự, thẩm, tra, BVTCDT, kế, vẽ, thi, thiết                                                         |
+| CP58211 | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT) (Phát sinh)                                                   | bản, phí, công, Chi, toán, Phát, dự, thẩm, tra, sinh, BVTCDT, kế, vẽ, thi, thiết                                             |
+| CP58220 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC)                                                                            | bản, phí, công, Chi, thẩm, tra, BVTC, kế, vẽ, thi, thiết                                                                     |
+| CP58231 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC) (Phát sinh)                                                                | bản, phí, công, Chi, Phát, thẩm, tra, BVTC, sinh, kế, vẽ, thi, thiết                                                         |
+| CP583   | Tư vấn đầu tư xây dựng                                                                                                      | xây, vấn, Tư, tư, dựng, đầu                                                                                                  |
+| CP584   | Chi phí đăng báo đấu thầu                                                                                                   | phí, Chi, thầu, đăng, đấu, báo                                                                                               |
+| CP599   | Chi phí đo đạc thu hồi đất                                                                                                  | đo, phí, Chi, đất, thu, hồi, đạc                                                                                             |
+| CP6     | Chi phí khác                                                                                                                | khác, phí, Chi                                                                                                               |
+| CP601   | Phí thẩm định dự án đầu tư xây dựng                                                                                         | án, xây, Phí, dự, thẩm, định, tư, dựng, đầu                                                                                  |
+| CP602   | Phí thẩm định dự toán xây dựng                                                                                              | xây, Phí, toán, dự, thẩm, định, dựng                                                                                         |
+| CP603   | Chi phí rà phá bom mìn, vật nổ                                                                                              | phí, phá, rà, Chi, vật, mìn, nổ, bom                                                                                         |
+| CP604   | Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy                                                                 | về, Phí, chữa, phòng, thẩm, phê, định, cháy, kế, duyệt, và, thiết                                                            |
+| CP605   | Chi phí thẩm định giá thiết bị                                                                                              | phí, Chi, giá, thẩm, định, bị, thiết                                                                                         |
+| CP606   | Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở                                                               | khai, xây, sau, Phí, sở, thẩm, triển, định, kế, cơ, dựng, thiết                                                              |
+| CP607   | Chi phí thẩm tra, phê duyệt quyết toán                                                                                      | phí, Chi, toán, quyết, thẩm, phê, tra, duyệt                                                                                 |
+| CP608   | Chi phí kiểm tra công tác nghiệm thu                                                                                        | công, phí, nghiệm, Chi, tác, tra, thu, kiểm                                                                                  |
+| CP609   | Chi phí kiểm toán độc lập                                                                                                   | lập, phí, Chi, toán, độc, kiểm                                                                                               |
+| CP60902 | Chi phí kiểm toán công trình                                                                                                | công, phí, Chi, toán, trình, kiểm                                                                                            |
+| CP60999 | Chi phí kiểm toán độc lập (Phát sinh)                                                                                       | lập, phí, Chi, toán, sinh, Phát, độc, kiểm                                                                                   |
+| CP610   | Chi phí bảo hiểm                                                                                                            | hiểm, phí, Chi, bảo                                                                                                          |
+| CP61099 | Chi phí bảo hiểm (Phát sinh)                                                                                                | phí, bảo, Chi, Phát, sinh, hiểm                                                                                              |
+| CP611   | Chi phí thẩm định báo cáo đánh giá tác động môi trường                                                                      | cáo, phí, Chi, giá, tác, thẩm, động, định, môi, đánh, trường, báo                                                            |
+| CP612   | Chi phí bảo hành, bảo trì                                                                                                   | trì, phí, hành, Chi, bảo                                                                                                     |
+| CP613   | Phí bảo vệ môi trường                                                                                                       | bảo, Phí, môi, trường, vệ                                                                                                    |
+| CP614   | Chi phí di dời điện                                                                                                         | phí, Chi, dời, điện, di                                                                                                      |
+| CP61401 | Chi phí di dời hệ thống điện chiếu sáng                                                                                     | phí, thống, Chi, sáng, hệ, chiếu, dời, điện, di                                                                              |
+| CP61402 | Chi phí di dời đường dây hạ thế                                                                                             | phí, Chi, đường, thế, dây, hạ, dời, di                                                                                       |
+| CP61403 | Chi phí di dời nhà                                                                                                          | phí, Chi, nhà, dời, di                                                                                                       |
+| CP61404 | Chi phí di dời nước                                                                                                         | phí, Chi, nước, dời, di                                                                                                      |
+| CP61405 | Chi phí di dời trụ điện trong trường                                                                                        | phí, Chi, trụ, trường, dời, điện, di, trong                                                                                  |
+| CP615   | Phí thẩm tra di dời điện                                                                                                    | Phí, thẩm, tra, dời, điện, di                                                                                                |
+| CP616   | Chi phí hạng mục chung                                                                                                      | mục, phí, Chi, hạng, chung                                                                                                   |
+| CP617   | Chi phí đo đạc địa chính                                                                                                    | đo, phí, Chi, địa, chính, đạc                                                                                                |
+| CP61701 | Chi phí đo đạc bản đồ địa chính                                                                                        | đo, đô, Chi, chinh, ban, phi, đạc, đia                                                                                       |
+| CP61702 | Chi phí đo đạc lập bản đồ địa chính giải phóng mặt bằng (GPMB)                                                              | đo, lập, phí, bản, Chi, phóng, giải, mặt, bằng, GPMB, đồ, địa, chính, đạc                                                    |
+| CP61703 | Chi phí đo đạc, đền bù giải phóng mặt bằng (GPMB)                                                                           | đo, mặt, phí, GPMB, Chi, bù, giải, phóng, bằng, đền, đạc                                                                     |
+| CP61704 | Chi phí đo đạc thu hồi đất                                                                                                  | đo, phí, Chi, đất, thu, hồi, đạc                                                                                             |
+| CP61820 | Chi phí tổ chức kiểm tra công tác nghiệm thu                                                                                | công, phí, nghiệm, Chi, tác, tổ, chức, tra, thu, kiểm                                                                        |
+| CP619   | Chi phí lán trại                                                                                                            | lán, phí, trại, Chi                                                                                                          |
+| CP620   | Chi phí đảm bảo giao thông                                                                                                  | thông, phí, bảo, Chi, đảm, giao                                                                                              |
+| CP621   | Chi phí điều tiết giao thông                                                                                                | thông, phí, Chi, điều, giao, tiết                                                                                            |
+| CP62101 | Chi phí điều tiết giao thông khác                                                                                           | thông, phí, Chi, khác, điều, giao, tiết                                                                                      |
+| CP622   | Chi phí một số công tác không xác định số lượng từ thiết kế                                                                 | công, phí, số, Chi, tác, từ, lượng, định, xác, kế, một, không, thiết                                                         |
+| CP623   | Chi phí thẩm định thiết kế bản vẽ thi công, lệ phí thẩm định báo cáo kinh tế kỹ thuật (KTKT)                                | bản, phí, công, Chi, cáo, tế, kỹ, thuật, thẩm, định, báo, kế, vẽ, kinh, thi, KTKT, lệ, thiết                                 |
+| CP624   | Chi phí nhà tạm                                                                                                             | phí, Chi, nhà, tạm                                                                                                           |
+| CP62501 | Chi phí giám sát đánh giá đầu tư                                                                                            | phí, Chi, đầu, giá, tư, đánh, giám, sát                                                                                      |
+| CP626   | Chi phí thẩm định kết quả lựa chọn nhà thầu                                                                                 | phí, lựa, Chi, thầu, nhà, thẩm, định, chọn, kết, quả                                                                         |
+| CP62701 | Chi phí khoan địa chất                                                                                                      | phí, Chi, chất, địa, khoan                                                                                                   |
+| CP628   | Chi phí thẩm định đồ án quy hoạch                                                                                           | phí, án, Chi, hoạch, đồ, thẩm, quy, định                                                                                     |
+| CP629   | Chi phí thẩm định HSMT (HSYC)                                                                                               | phí, Chi, HSYC, thẩm, HSMT, định                                                                                             |
+| CP630   | Lệ phí thẩm tra thiết kế                                                                                                    | phí, Lệ, thẩm, tra, kế, thiết                                                                                                |
+| CP631   | Phí thẩm định lựa chọn nhà thầu                                                                                             | lựa, Phí, thầu, nhà, thẩm, định, chọn                                                                                        |
+| CP632   | Chi phí thẩm tra quyết toán                                                                                                 | phí, Chi, toán, quyết, thẩm, tra                                                                                             |
+| CP633   | Chi phí thẩm định phê duyệt quyết toán                                                                                      | phí, Chi, toán, quyết, thẩm, phê, định, duyệt                                                                                |
+| CP634   | Chi phí thẩm định báo cáo nghiên cứu khả thi                                                                                | cáo, phí, Chi, thẩm, định, khả, nghiên, thi, cứu, báo                                                                        |
+| CP699   | Chi phí khác                                                                                                                | khác, phí, Chi                                                                                                               |
+| CP7     | Chi phí dự phòng                                                                                                            | dự, phí, Chi, phòng                                                                                                          |
+| CP701   | Chi phí dự phòng cho khối lượng, công việc phát sinh                                                                        | việc, công, phí, Chi, phát, cho, dự, phòng, sinh, lượng, khối                                                                |
+| CP702   | Chi phí dự phòng cho yếu tố trược giá                                                                                       | phí, Chi, giá, cho, dự, phòng, tố, yếu, trược                                                                                |
+| CP703   | Chi phí dự phòng phát sinh khối lượng (cho yếu tố khối lượng phát sinh (KLPS))                                              | phí, Chi, KLPS, phát, cho, dự, phòng, sinh, lượng, khối, tố, yếu                                                             |
 
-| MaKMCP  | TenKMCP                                                                                                                     |
-| ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác |
-| CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           |
-| CP103   | Chi phí tái định cư                                                                                                         |
-| CP104   | Chi phí tổ chức bồi thường, hỗ trợ, tái định cư                                                                           |
-| CP105   | Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng                                                                 |
-| CP106   | Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng                      |
-| CP107   | Chi phí đầu tư vào đất                                                                                                      |
-| CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ, tái định cư                                                    |
-| CP2     | Chi phí xây dựng                                                                                                            |
-| CP221   | Chi phí xây dựng phát sinh                                                                                                  |
-| CP222   | Chi phí xây dựng trước thuế                                                                                                 |
-| CP223   | Chi phí xây dựng sau thuế                                                                                                   |
-| CP224   | Chi phí xây dựng công trình phụ                                                                                             |
-| CP225   | Chi phí xây dựng công trình chính                                                                                           |
-| CP226   | Chi phí xây dựng điều chỉnh                                                                                                 |
-| CP227   | Chi phí xây dựng công trình chính và phụ                                                                                    |
-| CP228   | Chi phí xây dựng khác                                                                                                       |
-| CP3     | Chi phí thiết bị                                                                                                            |
-| CP321   | Chi phí thiết bị phát sinh                                                                                                  |
-| CP4     | Chi phí quản lý dự án                                                                                                       |
-| CP421   | Chi phí quản lý dự án phát sinh                                                                                             |
-| CP5     | Chi phí tư vấn đầu tư xây dựng                                                                                              |
-| CP501   | Chi phí lập báo cáo nghiên cứu tiền khả thi                                                                                 |
-| CP502   | Chi phí lập báo cáo nghiên cứu khả thi                                                                                      |
-| CP503   | Chi phí lập báo cáo kinh tế - kỹ thuật                                                                                      |
-| CP50301 | Chi phí lập dự án đầu tư                                                                                                    |
-| CP504   | Chi phí thiết kế xây dựng                                                                                                   |
-| CP50411 | Chi phí thiết kế xây dựng (Phát sinh)                                                                                       |
-| CP50420 | Chi phí thiết kế kỹ thuật                                                                                                   |
-| CP50431 | Chi phí thiết kế kỹ thuật (Phát sinh)                                                                                       |
-| CP505   | Chi phí thiết kế bản vẽ thi công                                                                                            |
-| CP50511 | Chi phí thiết kế bản vẽ thi công (Phát sinh)                                                                                |
-| CP50530 | Chi phí lập thiết kế bản vẽ thi công - dự toán                                                                              |
-| CP50541 | Chi phí lập thiết kế bản vẽ thi công - dự toán (Phát sinh)                                                                  |
-| CP506   | Chi phí lập nhiệm vụ khảo sát xây dựng                                                                                      |
-| CP50602 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                            |
-| CP50603 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                  |
-| CP50604 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                  |
-| CP50605 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                     |
-| CP507   | Chi phí thẩm tra báo cáo kinh tế - kỹ thuật                                                                                 |
-| CP508   | Chi phí thẩm tra báo cáo nghiên cứu khả thi                                                                                 |
-| CP509   | Chi phí thẩm tra thiết kế xây dựng                                                                                          |
-| CP50911 | Chi phí thẩm tra thiết kế xây dựng (Phát sinh)                                                                              |
-| CP510   | Chi phí thẩm tra dự toán xây dựng                                                                                           |
-| CP51011 | Chi phí thẩm tra dự toán xây dựng (Phát sinh)                                                                               |
-| CP511   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuât) tư vấn                                   |
-| CP512   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) tư vấn                                                                           |
-| CP513   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn                                                                       |
-| CP51311 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn (Phát sinh)                                                           |
-| CP514   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng                                                             |
-| CP51411 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng (Phát sinh)                                                 |
-| CP515   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng                                                                |
-| CP51511 | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng (Phát sinh)                                                    |
-| CP516   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                                                            |
-| CP51611 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng (Phát sinh)                                                |
-| CP517   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                      |
-| CP51711 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                          |
-| CP518   | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị                                                                            |
-| CP51811 | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị (Phát sinh)                                                                |
-| CP519   | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                                       |
-| CP51911 | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                                           |
-| CP520   | Chi phí giám sát thi công xây dựng                                                                                          |
-| CP52099 | Chi phí giám sát thi công xây dựng (Phát sinh)                                                                              |
-| CP521   | Chi phí giám sát lắp đặt thiết bị                                                                                           |
-| CP52111 | Chi phí giám sát lắp đặt thiết bị (Phát sinh)                                                                               |
-| CP522   | Chi phí giám sát công tác khảo sát xây dựng                                                                                 |
-| CP523   | Chi phí quy đổi vốn đầu tư xây dựng                                                                                         |
-| CP526   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu)                                                                                |
-| CP527   | Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi                                                                            |
-| CP528   | Chi phí khảo sát xây dựng                                                                                                   |
-| CP52802 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                         |
-| CP52803 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                               |
-| CP52804 | Chi phí khảo sát (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                                 |
-| CP52805 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                               |
-| CP52806 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                                  |
-| CP532   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu thi công xây dựng                                                     |
-| CP533   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu lắp đặt thiết bị                                                      |
-| CP534   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu tư vấn đầu tư xây dựng                                                |
-| CP535   | Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng                                                                   |
-| CP536   | Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị                                                                    |
-| CP537   | Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng                                                              |
-| CP538   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) xây lắp                    |
-| CP539   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) lắp đặt thiết bị           |
-| CP540   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) tư vấn đầu tư xây dựng     |
-| CP541   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất)                            |
-| CP551   | Chi phí khảo sát, thiết kế                                                                                                  |
-| CP552   | Chi phí nhiệm vụ thử tỉnh cọc                                                                                               |
-| CP553   | Công tác điều tra, đo đạt và thu thập số liệu                                                                               |
-| CP554   | Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng                                                 |
-| CP556   | Chi phí thẩm tra an toàn giao thông                                                                                         |
-| CP557   | Chi phí thử tĩnh                                                                                                            |
-| CP558   | Chi phí công bố quy hoạch                                                                                                   |
-| CP559   | Chi phí thử tải cừ tràm                                                                                                     |
-| CP560   | Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu                                                                    |
-| CP561   | Chi phí cắm mốc ranh giải phóng mặt bằng                                                                                    |
-| CP56111 | Chi phí lập đồ án quy hoạch                                                                                                 |
-| CP56201 | Chi phí khảo sát địa chất                                                                                                   |
-| CP56202 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
-| CP56203 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
-| CP56204 | Chi phí khảo sát địa chất (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        |
-| CP56205 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        |
-| CP56206 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           |
-| CP563   | Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án                                                                      |
-| CP56301 | Chi phí khảo sát địa hình                                                                                                   |
-| CP56302 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                |
-| CP56303 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      |
-| CP56304 | Chi phí khảo sát địa hình (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                       |
-| CP56305 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công (BVTC))                                                       |
-| CP56306 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                          |
-| CP564   | Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án                                                               |
-| CP56401 | Chi phí khảo sát địa hình, địa hình                                                                                              |
-| CP565   | Chi phí lập kế hoạch bảo vệ môi trường                                                                                      |
-| CP566   | Chi phí lập báo cáo đánh giá tác động môi trường                                                                            |
-| CP567   | Chi phí thí nghiệm đối chứng, kiểm định xây dựng, thử nghiệm khả năng chịu lực của công trình                               |
-| CP568   | Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1                                                     |
-| CP569   | Chi phí chỉ đạo thể hiện phần mỹ thuật                                                                                      |
-| CP570   | Chi phí nội đồng nghệ thuật                                                                                                 |
-| CP571   | Chi phí sáng tác mẫu phác thảo tượng đài                                                                                    |
-| CP572   | Chi phí hoạt động của Hội đồng nghệ thuật                                                                                   |
-| CP573   | Chi phí giám sát thi công xây dựng phát sinh                                                                                |
-| CP57301 | Chi phí kiểm định theo yêu cầu chủ đầu tư                                                                                   |
-| CP574   | Chi phí tư vấn thẩm tra dự toán                                                                                             |
-| CP57401 | Chi phí thẩm tra dự toán phát sinh                                                                                          |
-| CP575   | Chi phí thẩm định dự toán giá gói thầu                                                                                      |
-| CP577   | Chi phí lập hồ sơ điều chỉnh dự toán                                                                                        |
-| CP578   | Chi phí chuyển giao công nghệ                                                                                               |
-| CP579   | Chi phí thẩm định giá                                                                                                       |
-| CP580   | Chi phí tư vấn giám sát                                                                                                     |
-| CP581   | Chi phí báo cáo giám sát đánh giá đầu tư                                                                                    |
-| CP582   | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT)                                                               |
-| CP58211 | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT) (Phát sinh)                                                   |
-| CP58220 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC)                                                                            |
-| CP58231 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC) (Phát sinh)                                                                |
-| CP583   | Tư vấn đầu tư xây dựng                                                                                                      |
-| CP584   | Chi phí đăng báo đấu thầu                                                                                                   |
-| CP599   | Chi phí đo đạc thu hồi đất                                                                                                  |
-| CP6     | Chi phí khác                                                                                                                |
-| CP601   | Phí thẩm định dự án đầu tư xây dựng                                                                                         |
-| CP602   | Phí thẩm định dự toán xây dựng                                                                                              |
-| CP603   | Chi phí rà phá bom mìn, vật nổ                                                                                              |
-| CP604   | Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy                                                                 |
-| CP605   | Chi phí thẩm định giá thiết bị                                                                                              |
-| CP606   | Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở                                                               |
-| CP607   | Chi phí thẩm tra, phê duyệt quyết toán                                                                                      |
-| CP608   | Chi phí kiểm tra công tác nghiệm thu                                                                                        |
-| CP609   | Chi phí kiểm toán độc lập                                                                                                   |
-| CP60902 | Chi phí kiểm toán công trình                                                                                                |
-| CP60999 | Chi phí kiểm toán độc lập (Phát sinh)                                                                                       |
-| CP610   | Chi phí bảo hiểm                                                                                                            |
-| CP61099 | Chi phí bảo hiểm (Phát sinh)                                                                                                |
-| CP611   | Chi phí thẩm định báo cáo đánh giá tác động môi trường                                                                      |
-| CP612   | Chi phí bảo hành, bảo trì                                                                                                   |
-| CP613   | Phí bảo vệ môi trường                                                                                                       |
-| CP614   | Chi phí di dời điện                                                                                                         |
-| CP61401 | Chi phí di dời hệ thống điện chiếu sáng                                                                                     |
-| CP61402 | Chi phí di dời đường dây hạ thế                                                                                             |
-| CP61403 | Chi phí di dời nhà                                                                                                          |
-| CP61404 | Chi phí di dời nước                                                                                                         |
-| CP61405 | Chi phí di dời trụ điện trong trường                                                                                        |
-| CP615   | Phí thẩm tra di dời điện                                                                                                    |
-| CP616   | Chi phí hạng mục chung                                                                                                      |
-| CP617   | Chi phí đo đạc địa chính                                                                                                    |
-| CP61701 | Chi phí đo đạc bản đồ địa chính                                                                                        |
-| CP61702 | Chi phí đo đạc lập bản đồ địa chính giải phóng mặt bằng (GPMB)                                                              |
-| CP61703 | Chi phí đo đạc, đền bù giải phóng mặt bằng (GPMB)                                                                           |
-| CP61704 | Chi phí đo đạc thu hồi đất                                                                                                  |
-| CP61820 | Chi phí tổ chức kiểm tra công tác nghiệm thu                                                                                |
-| CP619   | Chi phí lán trại                                                                                                            |
-| CP620   | Chi phí đảm bảo giao thông                                                                                                  |
-| CP621   | Chi phí điều tiết giao thông                                                                                                |
-| CP62101 | Chi phí điều tiết giao thông khác                                                                                           |
-| CP622   | Chi phí một số công tác không xác định số lượng từ thiết kế                                                                 |
-| CP623   | Chi phí thẩm định thiết kế bản vẽ thi công, lệ phí thẩm định báo cáo kinh tế kỹ thuật (KTKT)                                |
-| CP624   | Chi phí nhà tạm                                                                                                             |
-| CP62501 | Chi phí giám sát đánh giá đầu tư                                                                                            |
-| CP626   | Chi phí thẩm định kết quả lựa chọn nhà thầu                                                                                 |
-| CP62701 | Chi phí khoan địa chất                                                                                                      |
-| CP628   | Chi phí thẩm định đồ án quy hoạch                                                                                           |
-| CP629   | Chi phí thẩm định HSMT (HSYC)                                                                                               |
-| CP630   | Lệ phí thẩm tra thiết kế                                                                                                    |
-| CP631   | Phí thẩm định lựa chọn nhà thầu                                                                                             |
-| CP632   | Chi phí thẩm tra quyết toán                                                                                                 |
-| CP633   | Chi phí thẩm định phê duyệt quyết toán                                                                                      |
-| CP634   | Chi phí thẩm định báo cáo nghiên cứu khả thi                                                                                |
-| CP699   | Chi phí khác                                                                                                                |
-| CP7     | Chi phí dự phòng                                                                                                            |
-| CP701   | Chi phí dự phòng cho khối lượng, công việc phát sinh                                                                        |
-| CP702   | Chi phí dự phòng cho yếu tố trược giá                                                                                       |
-| CP703   | Chi phí dự phòng phát sinh khối lượng (cho yếu tố khối lượng phát sinh (KLPS))                                              |
-
-### Yêu cầu xử lý:
-
-Thực hiện ánh xạ từng dòng `TenKMCP` trong bảng `KMCP_AnhXa` với mục tương ứng trong bảng chuẩn `KMCP` theo **thứ tự ưu tiên sau**:
-
-#### 1. Ưu tiên so khớp theo **nghĩa chuyên môn nghiệp vụ**:
-- Sử dụng hiểu biết chuyên ngành để ánh xạ đúng các từ viết tắt, quy ước phổ biến (VD: KLPS = khối lượng phát sinh).
-- So sánh các cụm từ chính như: "thẩm định báo cáo KTKT", "giám sát thi công", "lập hồ sơ yêu cầu", "bảo hiểm công trình", v.v.
-- Không phụ thuộc hoàn toàn vào độ giống chuỗi ký tự.
-
-#### 2. Nếu không tìm được theo nghĩa chuyên môn, mới **so khớp theo độ tương đồng chuỗi ký tự** (sử dụng thuật toán so sánh như `difflib` hoặc `fuzz`).
-- Chỉ chọn ánh xạ nếu độ tương đồng ≥ 65% (hoặc ≥ 50% nếu muốn mở rộng).
-- Trường hợp độ tương đồng < ngưỡng, để giá trị ánh xạ rỗng và ghi chú rõ lý do.
----
 ### Kết quả trả về:
 Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các trường sau:
 ```json
@@ -1740,9 +1824,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
   "GhiChu": "<tỷ lệ tương đồng hoặc ghi chú ánh xạ thủ công theo nghiệp vụ>"
 }
 ```
-⚠️ Nếu ánh xạ theo nghiệp vụ (không qua so chuỗi), ghi rõ "Ánh xạ theo nghiệp vụ" trong trường GhiChu.
-⚠️ Chỉ ánh xạ 1:1, không ánh xạ nhiều khoản mục về một mã chuẩn.
-⚠️ Không tự tạo khoản mục mới ngoài danh mục chuẩn.
+
 """
         # Gọi OpenAI API để xử lý
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -1792,7 +1874,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
 
             # Duyệt qua từng dòng trong DataFrame để xử lý trường hợp GhiChu='Không có thông tin'
             for index, row in dfBangGhepKMCP.iterrows():
-                if row['GhiChu'] == 'Không có thông tin':
+                if row['GhiChu'] == 'KHÔNG TÌM ĐƯỢC':
                     dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
                     dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
             
@@ -1917,7 +1999,6 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
             for index, row in dfBangDuLieuChiTietAI.iterrows():
                 # print(f"Row data: {row}")
                 # Xử lý PhuongThucLCNT
-                #print("Ghi chú AI: ", row['GhiChuAI'])
                 if str(row['PhuongThucLCNT']).strip() != "":
                     result_pt = await find_content_similarity(loaiDuLieu='phuongthucdth', duLieuCanTim=row['PhuongThucLCNT'])
                     # Chuyển đổi JSONResponse thành dict trước khi serialize
@@ -1927,7 +2008,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                     if result_pt.get('status') == 'success' and result_pt['data']['success'] == 1:
                         phuong_thuc_id = result_pt['data']['results'][0]['PhuongThucDThID']
                         query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET PhuongThucDThID = '{phuong_thuc_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
-                        print(f"Executing SQL query: {query_update}")
+                        # print(f"Executing SQL query: {query_update}")
                         thuc_thi_truy_van(query_update)
 
                 # Xử lý LoaiHopDong
@@ -1940,7 +2021,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                     if result_lhd.get('status') == 'success' and result_lhd['data']['success'] == 1:
                         loai_hop_dong_id = result_lhd['data']['results'][0]['LoaiHopDongID']
                         query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET LoaiHopDongID = '{loai_hop_dong_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
-                        print(f"Executing SQL query: {query_update}")
+                        # print(f"Executing SQL query: {query_update}")
                         thuc_thi_truy_van(query_update)
 
                 # Xử lý HinhThucLCNT
@@ -1953,7 +2034,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                     if result_ht.get('status') == 'success' and result_ht['data']['success'] == 1:
                         hinh_thuc_id = result_ht['data']['results'][0]['HinhThucDThID']
                         query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET HinhThucDThID = '{hinh_thuc_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
-                        print(f"Executing SQL query: {query_update}")
+                        # print(f"Executing SQL query: {query_update}")
                         thuc_thi_truy_van(query_update)
             # print("=== Danh sách KMCP đã ghép được ===")
             dataKMCP = []
@@ -2117,20 +2198,21 @@ async def image_extract_multi_azure(
                     for line in page.lines:
                         combined_text += line.content + "\n"
 
+
                 # Process tables if any
-                for table in result.tables:
-                    combined_text += "\nBảng:\n"
-                    for row_index in range(table.row_count):
-                        row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
-                        combined_text += " | ".join(row_cells) + "\n"
+                # for table in result.tables:
+                #     combined_text += "\nBảng:\n"
+                #     for row_index in range(table.row_count):
+                #         row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
+                #         combined_text += " | ".join(row_cells) + "\n"
 
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
                 continue
-
-        # print("&"*30)
-        # print(combined_text)
-        # print("&"*30)
+        
+        print("&"*30)
+        print(combined_text)
+        print("&"*30)
         # Process extracted text with OpenAI
         try:
             # Prepare messages for OpenAI
@@ -2250,7 +2332,7 @@ async def image_extract_multi_azure(
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
                     try:
-                        print("Kiểm tra van_ban_id: ", van_ban_id)
+                        # print("Kiểm tra van_ban_id: ", van_ban_id)
                         item["VanBanID"] = van_ban_id
                         # Convert all numeric values based on required columns
                         for col in required_columns:

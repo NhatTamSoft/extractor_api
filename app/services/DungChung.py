@@ -107,6 +107,7 @@ def pdf_to_images(pdf_path, zoom=2.0, pageRange=""):
             pages_to_process = range(len(doc))
         else:
             # Nếu có pageRange, sử dụng hàm parse_page_string để lấy danh sách trang
+            # print("====================> pageRange: ", pageRange)
             pages_to_process = parse_page_string(pageRange)
             # Điều chỉnh index (trừ 1 vì parse_page_string trả về số trang bắt đầu từ 1)
             pages_to_process = [p-1 for p in pages_to_process if p-1 < len(doc)]
@@ -128,7 +129,9 @@ def pdf_to_images(pdf_path, zoom=2.0, pageRange=""):
     except RuntimeError as e_fitz:
          print(f"Lỗi PyMuPDF (RuntimeError) khi xử lý file {os.path.basename(pdf_path)} trong pdf_to_images: {e_fitz}")
     except Exception as e:
-        print(f"Lỗi khi chuyển đổi PDF thành ảnh '{os.path.basename(pdf_path)}': {e}")
+        print(f"Lỗi khi chuyển đổi PDF thành ảnh '{os.path.basename(pdf_path)}': {str(e)}")
+        print(f"Nguyên nhân lỗi: {type(e).__name__}")
+        print(f"Dòng code gây lỗi: {e.__traceback__.tb_lineno}")
     finally:
         if doc:
             doc.close() # Đảm bảo đóng file

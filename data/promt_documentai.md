@@ -63,24 +63,25 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-
-### 🚫 **Quy tắc loại bỏ Loại công trình**:
-Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây thì:
-❌ **Không xuất dòng không thuộc "Danh sách Loại công trình"**
-✅ **Chỉ xuất các dòng thuộc "Danh sách Loại công trình"**
-**Danh sách Loại công trình**
-|  Mã |Loại công trình                               |
-|-----|----------------------------------------------|
-| `1` |Công trình dân dụng                           |
-| `2` |Công trình công nghiệp                        |
-| `3` |Công trình giao thông                         |
-| `4` |Công trình nông nghiệp và phát triển nông thôn|
-| `5` |Công trình hạ tầng kỹ thuật                   |
-
+### QUY TẮC LOẠI BỎ
+❌ Không trích các dòng sau nếu là loại công trình:
+Ví dụ: "Chi phí… – Công trình dân dụng", "Công trình giao thông", "Công trình hạ tầng kỹ thuật"…
+❌ Nếu có cả dòng cha và dòng con, thì:
+✅ Chỉ giữ dòng con nếu dòng con không thuộc loại công trình
+❌ Nếu dòng con thuộc loại công trình → bị loại
+✅ Nếu tất cả các dòng con bị loại do là loại công trình → giữ lại dòng cha
+📌 Ví dụ:
+Có "Chi phí quản lý dự án" (cha) và "Chi phí quản lý dự án – Công trình dân dụng" (con)
+Dòng con là loại công trình → loại
+⇒ ✅ Giữ lại dòng cha "Chi phí quản lý dự án"
+❌ Nếu có dòng con và dòng cháu, trùng tên và trùng số tiền:
+Nếu cháu không thuộc loại công trình → giữ cháu, loại con
+Nếu cháu thuộc loại công trình → giữ con, loại cháu
+❌ Nếu đã có đầy đủ các dòng con của một dòng cha (VD: "Chi phí khác" gồm đủ các mục con), thì loại dòng cha
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Gộp toàn bộ bảng trong nội dung OCR thành một danh sách duy nhất, đúng thứ tự
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -212,23 +213,25 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-### 🚫 **Quy tắc loại bỏ Loại công trình**:
-Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây thì:
-❌ **Không xuất dòng không thuộc "Danh sách Loại công trình"**
-✅ **Chỉ xuất các dòng thuộc "Danh sách Loại công trình"**
-**Danh sách Loại công trình**
-|  Mã |Loại công trình                               |
-|-----|----------------------------------------------|
-| `1` |Công trình dân dụng                           |
-| `2` |Công trình công nghiệp                        |
-| `3` |Công trình giao thông                         |
-| `4` |Công trình nông nghiệp và phát triển nông thôn|
-| `5` |Công trình hạ tầng kỹ thuật                   |
-
+### QUY TẮC LOẠI BỎ
+❌ Không trích các dòng sau nếu là loại công trình:
+Ví dụ: "Chi phí… – Công trình dân dụng", "Công trình giao thông", "Công trình hạ tầng kỹ thuật"…
+❌ Nếu có cả dòng cha và dòng con, thì:
+✅ Chỉ giữ dòng con nếu dòng con không thuộc loại công trình
+❌ Nếu dòng con thuộc loại công trình → bị loại
+✅ Nếu tất cả các dòng con bị loại do là loại công trình → giữ lại dòng cha
+📌 Ví dụ:
+Có "Chi phí quản lý dự án" (cha) và "Chi phí quản lý dự án – Công trình dân dụng" (con)
+Dòng con là loại công trình → loại
+⇒ ✅ Giữ lại dòng cha "Chi phí quản lý dự án"
+❌ Nếu có dòng con và dòng cháu, trùng tên và trùng số tiền:
+Nếu cháu không thuộc loại công trình → giữ cháu, loại con
+Nếu cháu thuộc loại công trình → giữ con, loại cháu
+❌ Nếu đã có đầy đủ các dòng con của một dòng cha (VD: "Chi phí khác" gồm đủ các mục con), thì loại dòng cha
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Gộp toàn bộ bảng trong nội dung OCR thành một danh sách duy nhất, đúng thứ tự
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
