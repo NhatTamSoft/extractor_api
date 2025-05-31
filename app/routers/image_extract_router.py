@@ -2980,3 +2980,189 @@ async def find_content_similarity(
                     "detail": str(e)
                 }
             )
+@router.post("/document_extract_SoHoa")
+async def extract_document_SoHoa(
+    files: List[UploadFile] = File(...),
+    file_type: str = Form(...),  # 'image' or 'pdf'
+    pages: Optional[str] = Form(None)  # Comma-separated list of page numbers for PDF
+):
+    # Load require_fields from Markdown file
+    try:
+        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Parse markdown content to extract field information
+        require_fields = []
+        current_field = None
+        in_mapping_table = False
+        
+        for line in content.split('\n'):
+            line = line.strip()
+            if not line:  # Skip empty lines
+                continue
+                
+            # Check for field headers (## number. fieldName)
+            if line.startswith('## '):
+                if current_field:
+                    require_fields.append(current_field)
+                parts = line.split('. ', 1)  # Split only on first occurrence
+                if len(parts) == 2:
+                    field_name = parts[1].strip()
+                    current_field = {
+                        "tenTruong": field_name,
+                        "moTa": "",
+                        "extractionRules": {}
+                    }
+                    in_mapping_table = False
+                continue
+
+            # Check for description
+            if line.startswith('**Mô tả:**'):
+                if current_field:
+                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
+                continue
+
+            # Check for extraction rules section
+            if line.startswith('**Quy tắc trích xuất:**'):
+                continue
+
+            # Check for rule items
+            if line.startswith('- **'):
+                if current_field:
+                    parts = line.split(':**', 1)  # Split only on first occurrence
+                    if len(parts) == 2:
+                        key = parts[0].replace('- **', '').strip()
+                        value = parts[1].strip()
+                        current_field["extractionRules"][key] = value
+                continue
+
+            # Check for mapping table header
+            if '| Mã | Giá trị |' in line:
+                if current_field and 'mapping' not in current_field["extractionRules"]:
+                    current_field["extractionRules"]["mapping"] = {}
+                in_mapping_table = True
+                continue
+
+            # Check for mapping table rows
+            if in_mapping_table and line.startswith('|'):
+                if current_field:
+                    parts = [p.strip() for p in line.split('|')]
+                    if len(parts) >= 3:  # Ensure we have enough parts
+                        code = parts[1].strip()
+                        value = parts[2].strip()
+                        if code and value:  # Only add if both code and value exist
+                            current_field["extractionRules"]["mapping"][code] = value
+                continue
+
+            # Reset mapping table flag if we encounter a non-table line
+            if in_mapping_table and not line.startswith('|'):
+                in_mapping_table = False
+
+        # Add the last field if exists
+        if current_field:
+            require_fields.append(current_field)
+
+        if not require_fields:
+            raise ValueError("No fields were parsed from require_fields.md")
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi đọc file require_fields.md",
+                "detail": f"Error parsing file: {str(e)}"
+            }
+        )
+
+    # Validate file type
+    if file_type not in ['image', 'pdf']:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Invalid file type",
+                "detail": "file_type must be either 'image' or 'pdf'"
+            }
+        )
+
+    # Validate files based on type
+    if file_type == 'image':
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"Invalid file type for {file.filename}",
+                        "detail": f"Expected image file, got {file.content_type}"
+                    }
+                )
+    else:  # PDF
+        if len(files) > 1:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Only one PDF file can be uploaded at a time",
+                    "detail": "Multiple files are only allowed for images"
+                }
+            )
+        if files[0].content_type != ALLOWED_PDF_TYPE:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Invalid file type",
+                    "detail": "Expected PDF file"
+                }
+            )
+
+    # Parse pages parameter for PDF
+    selected_pages = None
+    if file_type == 'pdf' and pages:
+        try:
+            selected_pages = [int(p.strip()) for p in pages.split(',')]
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Invalid pages parameter",
+                    "detail": "Pages must be comma-separated numbers"
+                }
+            )
+
+    # Initialize combined data
+    combined_data = {}
+
+    try:
+        if file_type == 'image':
+            # Process each image file
+            for file in files:
+                await process_image_file(file, require_fields, combined_data)
+        else:
+            # Process PDF file
+            await process_pdf_file(files[0], selected_pages, require_fields, combined_data)
+
+        return {
+            "status": "success",
+            "data": combined_data
+        }
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Error processing document",
+                "detail": str(e)
+            }
+        )
