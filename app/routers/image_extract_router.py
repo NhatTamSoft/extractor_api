@@ -36,6 +36,7 @@ import openpyxl
 from fastapi import UploadFile, File, HTTPException, Query, Depends, Form, Header
 import logging
 from tempfile import SpooledTemporaryFile
+from app.services.extract_document_azure import process_multiple_documents
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -2189,23 +2190,7 @@ async def image_extract_multi_azure(
         for temp_file in temp_files:
             try:
                 # Extract data with Azure Form Recognizer
-                with open(temp_file, "rb") as f:
-                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
-                    result = poller.result()
-
-                # Collect text and tables
-                for page in result.pages:
-                    for line in page.lines:
-                        combined_text += line.content + "\n"
-
-
-                # Process tables if any
-                # for table in result.tables:
-                #     combined_text += "\nBảng:\n"
-                #     for row_index in range(table.row_count):
-                #         row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
-                #         combined_text += " | ".join(row_cells) + "\n"
-
+                combined_text += process_multiple_documents([temp_file])
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
                 continue
@@ -2213,23 +2198,22 @@ async def image_extract_multi_azure(
         print("&"*30)
         print(combined_text)
         print("&"*30)
+        return
         # Process extracted text with OpenAI
         try:
             # Prepare messages for OpenAI
             messages = [
                 {
                     "role": "system",
-                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                    "content": "Bạn là trợ lý AI, có nhiệm vụ trích xuất thông tin từ văn bản hành chính liên quan đến đầu tư xây dựng."
                 },
                 {
                     "role": "user",
                     "content": f"""
                     {prompt}
-
-                    Data extracted from images:
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     {combined_text}
-
-                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     """
                 }
             ]
@@ -2254,10 +2238,10 @@ async def image_extract_multi_azure(
                 response_text = response_text.strip()[3:-3].strip()
 
 
-            print("+"*20)
-            print(response_text)
-            print("+"*20)
-
+            # print("+"*20)
+            # print(response_text)
+            # print("+"*20)
+            # return
             # Xử lý response
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
