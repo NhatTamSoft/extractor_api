@@ -36,6 +36,7 @@ import openpyxl
 from fastapi import UploadFile, File, HTTPException, Query, Depends, Form, Header
 import logging
 from tempfile import SpooledTemporaryFile
+import requests
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -2198,7 +2199,6 @@ async def image_extract_multi_azure(
                     for line in page.lines:
                         combined_text += line.content + "\n"
 
-
                 # Process tables if any
                 # for table in result.tables:
                 #     combined_text += "\nBảng:\n"
@@ -2698,7 +2698,10 @@ async def image_extract_multi_azure(
     finally:
         for temp_file in temp_files:
             if os.path.exists(temp_file):
-                os.remove(temp_file)
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
 
 @router.get("/find_content_similarity")
 async def find_content_similarity(
@@ -3549,3 +3552,263 @@ async def extract_multiple_images_azure_mapping(
                     os.remove(temp_file)
                 except Exception as e:
                     print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
+
+@router.post("/image_extract_multi_cloud")
+async def image_extract_multi_cloud(
+    files: List[UploadFile] = File(...),
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
+    authorization: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    # Xác thực token
+    try:
+        #Kiểm tra header Authorization
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+            
+        #Lấy token từ header
+        token = authorization.split(" ")[1]
+        # Giải mã token để lấy userID và donViID
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        
+        #Thêm thông tin user vào request
+        request_data = {
+            "userID": user_id,
+            "donViID": don_vi_id
+        }
+        print(request_data)
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+
+    temp_files = []
+    all_data = []
+    try:
+        # Generate UUID only once and use it consistently
+        van_ban_id = str(uuid.uuid4())
+        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
+        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
+        print("======================prompt==================")
+        print(prompt)
+        print("======================end prompt==================")
+
+        # Process each file
+        temp_files = []
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
+            # Tạo tên file tạm thời với timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Chuyển đổi tên file sang tiếng Việt không dấu
+            filename_no_accent = unidecode(file.filename)
+            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{filename_no_accent}")
+            temp_files.append(temp_file_path)
+            print(temp_file_path)
+            # Lưu file tạm thời
+            with open(temp_file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+        content_parts = [{"type": "text", "text": prompt}]
+
+        # Process each file with Cloud AI API
+        combined_text = ""
+        for temp_file in temp_files:
+            try:
+                # Read the image file
+                with open(temp_file, "rb") as f:
+                    image_data = f.read()
+                
+                # Convert image to base64
+                base64_image = base64.b64encode(image_data).decode('utf-8')
+                
+                # Prepare the request to Cloud AI API
+                cloud_ai_request = {
+                    "requests": [{
+                        "image": {
+                            "content": base64_image
+                        },
+                        "features": [{
+                            "type": "TEXT_DETECTION",
+                            "maxResults": 50
+                        }]
+                    }]
+                }
+
+                # Call Cloud AI API
+                cloud_ai_response = requests.post(
+                    f"https://vision.googleapis.com/v1/images:annotate?key={os.getenv('GOOGLE_API_KEY')}",
+                    json=cloud_ai_request
+                )
+                
+                if cloud_ai_response.status_code != 200:
+                    raise Exception(f"Cloud AI API error: {cloud_ai_response.text}")
+
+                # Extract text from response
+                response_data = cloud_ai_response.json()
+                if 'responses' in response_data and len(response_data['responses']) > 0:
+                    if 'textAnnotations' in response_data['responses'][0]:
+                        text_annotations = response_data['responses'][0]['textAnnotations']
+                        if text_annotations:
+                            combined_text += text_annotations[0]['description'] + "\n"
+
+            except Exception as e:
+                print(f"Error processing file {temp_file}: {str(e)}")
+                continue
+        
+        print("&"*30)
+        print(combined_text)
+        print("&"*30)
+
+        # Process extracted text with OpenAI
+        try:
+            # Prepare messages for OpenAI
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    {prompt}
+
+                    Data extracted from images:
+                    {combined_text}
+
+                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    """
+                }
+            ]
+            print(messages)
+            # Call OpenAI API
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=messages,
+                max_tokens=4096,
+                temperature=0,
+                response_format={"type": "json_object"}
+            )
+
+            # Process response
+            response_text = response.choices[0].message.content.strip()
+            
+            # Clean up response text
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
+
+            print("+"*20)
+            print(response_text)
+            print("+"*20)
+
+            # Xử lý response
+            if "error" in response_text.lower() or "không thể" in response_text.lower():
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "AI không thể nhận diện văn bản từ ảnh",
+                        "detail": response_text
+                    }
+                )
+            try:
+                data_json = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                if response_text.strip().startswith("<"):
+                    msg = "AI trả về HTML hoặc file không phải là ảnh văn bản."
+                elif len(response_text.strip()) < 30:
+                    msg = "Ảnh không chứa đủ thông tin văn bản hoặc quá mờ."
+                else:
+                    msg = "Kết quả trả về không đúng định dạng."
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": msg,
+                        "detail": str(e)
+                    }
+                )
+
+            # Clean up temporary files
+            for temp_file in temp_files:
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Error removing temporary file {temp_file}: {str(e)}")
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "code": 200,
+                    "message": "Xử lý ảnh thành công",
+                    "data": data_json
+                }
+            )
+
+        except Exception as e:
+            # Clean up temporary files in case of error
+            for temp_file in temp_files:
+                try:
+                    os.remove(temp_file)
+                except Exception as cleanup_error:
+                    print(f"Error removing temporary file {temp_file}: {str(cleanup_error)}")
+            
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi xử lý ảnh",
+                    "detail": str(e)
+                }
+            )
+
+    except Exception as e:
+        # Clean up temporary files in case of error
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except Exception as cleanup_error:
+                print(f"Error removing temporary file {temp_file}: {str(cleanup_error)}")
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi xử lý ảnh",
+                "detail": str(e)
+            }
+        )
