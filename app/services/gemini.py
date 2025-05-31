@@ -17,7 +17,7 @@ def ask_gemini(prompt: str, model_name: str = "gemini-2.0-flash") -> str:
     """
     try:
         # Kiểm tra và cấu hình API key
-        api_key = os.getenv('GOOGLE_API_KEY') #"AIzaSyDQaVqocOL27eZkJq6kGB_WzDXer6KrceI"
+        api_key = os.getenv('GOOGLE_API_KEY')
         
         genai.configure(api_key=api_key)
 
