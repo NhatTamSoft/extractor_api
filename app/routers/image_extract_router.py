@@ -3166,3 +3166,236 @@ async def extract_document_SoHoa(
                 "detail": str(e)
             }
         )
+    
+def get_code_from_mapping(value: str, mapping_table: Dict[str, str]) -> str:
+    """Convert a value to its corresponding code from a mapping table"""
+    # Normalize the input value
+    value = value.strip().lower()
+    
+    # Try direct mapping
+    for code, mapped_value in mapping_table.items():
+        if mapped_value.lower() == value:
+            return code
+            
+    # If no direct match, return the original value
+    return value
+
+async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict):
+    """Process a single image file"""
+    try:
+        # Read file content
+        content = await file.read()
+        
+        # Convert image to base64
+        image_base64 = base64.b64encode(content).decode('utf-8')
+        
+        # Process with OpenAI
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant that extracts information from documents according to the provided field definitions and rules. You MUST return a valid JSON object."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Extract information from the following image according to these field definitions and rules:\n{json.dumps(require_fields, ensure_ascii=False, indent=2)}"
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=4000,
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+
+        # Parse response
+        response_text = response.choices[0].message.content
+        
+        # Clean up response text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
+
+        # Parse JSON response
+        data = json.loads(response_text)
+        
+        # Post-process fields with mapping tables
+        for field in require_fields:
+            field_name = field["tenTruong"]
+            if "extractionRules" in field and "mapping" in field["extractionRules"]:
+                if field_name in data and data[field_name]:
+                    data[field_name] = get_code_from_mapping(
+                        data[field_name], 
+                        field["extractionRules"]["mapping"]
+                    )
+        
+        # Update combined data
+        for key, value in data.items():
+            if key not in combined_data or not combined_data[key]:
+                combined_data[key] = value
+
+    except Exception as e:
+        raise Exception(f"Error processing image file {file.filename}: {str(e)}")
+
+async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], require_fields: List[Dict], combined_data: Dict):
+    """Process a PDF file"""
+    temp_file_path = None
+    doc = None
+    try:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.flush()
+            temp_file_path = temp_file.name
+
+        # Read PDF pages
+        doc = fitz.open(temp_file_path)
+        total_pages = len(doc)
+
+        if selected_pages is None:
+            selected_pages = list(range(1, total_pages + 1))
+
+        # Process each selected page
+        for page_num in selected_pages:
+            if 1 <= page_num <= total_pages:
+                page = doc.load_page(page_num - 1)
+                
+                # Convert page to image
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
+                
+                # Convert image to base64
+                buffered = BytesIO()
+                img.save(buffered, format="PNG")
+                image_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+                # Process with OpenAI
+                client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": """You are an AI assistant that extracts information from documents. 
+                            For fields with mapping tables, you MUST return the CODE (not the value).
+                            For example, if the language is 'Tiếng Việt', return '01' instead.
+                            You MUST return a valid JSON object containing the mapped fields. 
+                            Do not include any other text or explanation in your response."""
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"""
+                                    Extract and map information from the following PDF page to the specified fields.
+                                    Return ONLY a JSON object with the following structure:
+                                    {{
+                                        "docId": "string or null",
+                                        "arcDocCode": "string or null",
+                                        "maintenance": "string or null",
+                                        "typeName": "string or null",
+                                        "codeNumber": "string or null",
+                                        "codeNotation": "string or null",
+                                        "issuedDate": "string or null",
+                                        "organName": "string or null",
+                                        "subject": "string or null",
+                                        "language": "string or null",
+                                        "numberOfPage": "string or null",
+                                        "inforSign": "string or null",
+                                        "keyword": "string or null",
+                                        "mode": "string or null",
+                                        "confidenceLevel": "string or null",
+                                        "autograph": "string or null",
+                                        "format": "string or null",
+                                        "process": "string or null",
+                                        "riskRecovery": "string or null",
+                                        "riskRecoveryStatus": "string or null",
+                                        "description": "string or null",
+                                        "SignerTitle": "string or null",
+                                        "SignerName": "string or null"
+                                    }}
+
+                                    Field definitions and extraction rules:
+                                    {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                                    IMPORTANT: For fields with mapping tables, return the CODE (not the value).
+                                    For example:
+                                    - For language: return '01' for 'Tiếng Việt', '02' for 'Tiếng Anh'
+                                    - For maintenance: return '01' for 'Vĩnh viễn', '02' for '70 năm'
+                                    - For typeName: return '01' for 'Nghị quyết', '02' for 'Quyết định'
+                                    - For mode: return '01' for 'Công khai', '02' for 'Sử dụng có điều kiện'
+                                    - For confidenceLevel: return '01' for 'Gốc điện tử', '02' for 'Số hóa'
+                                    - For format: return '01' for 'Tốt', '02' for 'Bình thường'
+                                    - For process: return '0' for 'Không có quy trình xử lý đi kèm', '1' for 'Có quy trình xử lý đi kèm'
+                                    - For riskRecovery: return '0' for 'Không', '1' for 'Có'
+                                    - For riskRecoveryStatus: return '01' for 'Đã dự phòng', '02' for 'Chưa dự phòng'
+                                    """
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{image_base64}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens=4000,
+                    temperature=0,
+                    response_format={"type": "json_object"}
+                )
+
+                # Parse response
+                response_text = response.choices[0].message.content
+                
+                # Clean up response text
+                if response_text.strip().startswith("```json"):
+                    response_text = response_text.strip()[7:-3].strip()
+                elif response_text.strip().startswith("```"):
+                    response_text = response_text.strip()[3:-3].strip()
+
+                # Parse JSON response
+                data = json.loads(response_text)
+                
+                # Post-process fields with mapping tables
+                for field in require_fields:
+                    field_name = field["tenTruong"]
+                    if "extractionRules" in field and "mapping" in field["extractionRules"]:
+                        if field_name in data and data[field_name]:
+                            data[field_name] = get_code_from_mapping(
+                                data[field_name], 
+                                field["extractionRules"]["mapping"]
+                            )
+                
+                # Update combined data
+                for key, value in data.items():
+                    if key not in combined_data or not combined_data[key]:
+                        combined_data[key] = value
+
+    except Exception as e:
+        raise Exception(f"Error processing PDF file {file.filename}: {str(e)}")
+    finally:
+        # Close the PDF document if it's open
+        if doc:
+            doc.close()
+        
+        # Delete the temporary file if it exists
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
