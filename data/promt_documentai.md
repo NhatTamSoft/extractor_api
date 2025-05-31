@@ -2,7 +2,7 @@
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt chủ trương đầu tư hoặc phê duyệt điều chỉnh chủ trương đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_CT"
-`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
+`SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:" theo quy tắc "^\d{1,6}(\/\d{1,4})?(\/)?(QĐ|TTr|BC|TB|CV)-UBND$"
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ..." định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Trích "số hiệu văn bản" Báo cáo thẩm định báo cáo đề xuất chủ trương đầu tư, tại dòng "Căn cứ Báo cáo thẩm định số..." hoặc "Căn cứ Báo cáo số ..." có chứa cụm từ "báo cáo đề xuất chủ trương đầu tư..."
 `NgayKyCanCu`: Trích "ngày...tháng...năm ... Báo cáo thẩm định" báo cáo đề xuất chủ trương đầu tư, tại dòng "Căn cứ Báo cáo thẩm định số..." hoặc "Căn cứ Báo cáo số ..." có chứa cụm từ "báo cáo đề xuất chủ trương đầu tư..."  định dạng (dd/MM/yyyy)
@@ -43,7 +43,6 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc
 
 
-
 {{CHUCNANG03}} Chức năng `Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư`
 ### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
@@ -64,24 +63,25 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-
-### 🚫 **Quy tắc loại bỏ Loại công trình**:
-Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây thì:
-❌ **Không xuất dòng không thuộc "Danh sách Loại công trình"**
-✅ **Chỉ xuất các dòng thuộc "Danh sách Loại công trình"**
-**Danh sách Loại công trình**
-|  Mã |Loại công trình                               |
-|-----|----------------------------------------------|
-| `1` |Công trình dân dụng                           |
-| `2` |Công trình công nghiệp                        |
-| `3` |Công trình giao thông                         |
-| `4` |Công trình nông nghiệp và phát triển nông thôn|
-| `5` |Công trình hạ tầng kỹ thuật                   |
-
+### QUY TẮC LOẠI BỎ
+❌ Không trích các dòng sau nếu là loại công trình:
+Ví dụ: "Chi phí… – Công trình dân dụng", "Công trình giao thông", "Công trình hạ tầng kỹ thuật"…
+❌ Nếu có cả dòng cha và dòng con, thì:
+✅ Chỉ giữ dòng con nếu dòng con không thuộc loại công trình
+❌ Nếu dòng con thuộc loại công trình → bị loại
+✅ Nếu tất cả các dòng con bị loại do là loại công trình → giữ lại dòng cha
+📌 Ví dụ:
+Có "Chi phí quản lý dự án" (cha) và "Chi phí quản lý dự án – Công trình dân dụng" (con)
+Dòng con là loại công trình → loại
+⇒ ✅ Giữ lại dòng cha "Chi phí quản lý dự án"
+❌ Nếu có dòng con và dòng cháu, trùng tên và trùng số tiền:
+Nếu cháu không thuộc loại công trình → giữ cháu, loại con
+Nếu cháu thuộc loại công trình → giữ con, loại cháu
+❌ Nếu đã có đầy đủ các dòng con của một dòng cha (VD: "Chi phí khác" gồm đủ các mục con), thì loại dòng cha
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Gộp toàn bộ bảng trong nội dung OCR thành một danh sách duy nhất, đúng thứ tự
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -103,8 +103,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 ### Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenDauThau`: Trích tên đầy đủ của gói thầu
-`TenKMCP`: Trích khoản mục chi phí tại `TenDauThau` gán vào cột `TenKMCP`
+`TenDauThau`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu)
+`TenKMCP`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu), loại bỏ các cụm từ ("Gói thầu số xx:", "Gói số xx:", "Gói xx:", "Tên gói thầu số xx:")
 `GiaTriGoiThau`: Trích cột giá gói thầu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNguonVon`: Trích cột nguồn vốn, nếu không có để ""
 `HinhThucLCNT`: Trích cột hình thức lựa chọn nhà thầu
@@ -124,8 +124,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KQLCNT_CBDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc `số biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc "ngày...tháng...năm ..." biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..." định dạng (dd/MM/yyyy)
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng "dd/MM/yyyy"
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
@@ -213,23 +213,25 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-### 🚫 **Quy tắc loại bỏ Loại công trình**:
-Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây thì:
-❌ **Không xuất dòng không thuộc "Danh sách Loại công trình"**
-✅ **Chỉ xuất các dòng thuộc "Danh sách Loại công trình"**
-**Danh sách Loại công trình**
-|  Mã |Loại công trình                               |
-|-----|----------------------------------------------|
-| `1` |Công trình dân dụng                           |
-| `2` |Công trình công nghiệp                        |
-| `3` |Công trình giao thông                         |
-| `4` |Công trình nông nghiệp và phát triển nông thôn|
-| `5` |Công trình hạ tầng kỹ thuật                   |
-
+### QUY TẮC LOẠI BỎ
+❌ Không trích các dòng sau nếu là loại công trình:
+Ví dụ: "Chi phí… – Công trình dân dụng", "Công trình giao thông", "Công trình hạ tầng kỹ thuật"…
+❌ Nếu có cả dòng cha và dòng con, thì:
+✅ Chỉ giữ dòng con nếu dòng con không thuộc loại công trình
+❌ Nếu dòng con thuộc loại công trình → bị loại
+✅ Nếu tất cả các dòng con bị loại do là loại công trình → giữ lại dòng cha
+📌 Ví dụ:
+Có "Chi phí quản lý dự án" (cha) và "Chi phí quản lý dự án – Công trình dân dụng" (con)
+Dòng con là loại công trình → loại
+⇒ ✅ Giữ lại dòng cha "Chi phí quản lý dự án"
+❌ Nếu có dòng con và dòng cháu, trùng tên và trùng số tiền:
+Nếu cháu không thuộc loại công trình → giữ cháu, loại con
+Nếu cháu thuộc loại công trình → giữ con, loại cháu
+❌ Nếu đã có đầy đủ các dòng con của một dòng cha (VD: "Chi phí khác" gồm đủ các mục con), thì loại dòng cha
 ### Yêu cầu xử lý:
 🚫 **Không lấy giá trị trong cột "Trước thuế"**
 ✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Gộp toàn bộ bảng trong tất cả ảnh thành một danh sách duy nhất, đúng thứ tự
+- Gộp toàn bộ bảng trong nội dung OCR thành một danh sách duy nhất, đúng thứ tự
 - Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
@@ -250,8 +252,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
 `DieuChinh`: Gán `1` nếu trích yếu văn bản có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 **Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): `BangDuLieu`:
-`TenDauThau`: Trích tên đầy đủ của gói thầu
-`TenKMCP`: Trích khoản mục chi phí tại thông tin "tên gói thầu" gán vào cột `TenKMCP`
+`TenDauThau`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu)
+`TenKMCP`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu), loại bỏ các cụm từ ("Gói thầu số xx:", "Gói số xx:", "Gói xx:", "Tên gói thầu số xx:")
 `GiaTriGoiThau`: Trích cột giá gói thầu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNguonVon`: Trích cột nguồn vốn
 `HinhThucLCNT`: Trích cột hình thức lựa chọn nhà thầu
@@ -271,8 +273,8 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "QDPD_KQLCNT_THDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
-`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu"
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích `số hiệu quyết định phê duyệt kế hoạch lựa chọn nhà thầu`, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc `số biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." Quyết định phê duyệt kế hoạch lựa chọn nhà thầu, tại dòng "Căn cứ Quyết định ... phê duyệt kế hoạch lựa chọn nhà thầu" hoặc "ngày...tháng...năm ..." biên bản thương thảo (hoặc hoàn thiện) hợp đồng`, tại dòng "Căn cứ biên bản thương thảo (hoặc hoàn thiện) hợp đồng ..." định dạng (dd/MM/yyyy)
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
 `NguoiKy`: Trích tên người ký văn bản ở phần cuối văn bản.
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
@@ -345,7 +347,7 @@ Nếu một dòng **thuộc "Danh sách Loại công trình"** dưới đây th�
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.a/TT"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "KLCVHT_THD"
-`SoVanBan`: Số biên bản nghiệm thu (trích sau dòng "Biên bản nghiệm thu số..." hoặc dòng tương đương)
+`SoVanBan`: Số biên bản nghiệm thu (trích sau dòng "Biên bản nghiệm thu số..." hoặc dòng tương đương), nếu có nhiều dòng tương tự nối chuỗi Số biên bản nghiệm thu lại 
 `NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ...") định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)

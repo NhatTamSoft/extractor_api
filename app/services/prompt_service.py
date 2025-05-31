@@ -26,10 +26,8 @@ class PromptService:
                         
                     ky_hieu = ky_hieu_match.group(1)
                     prompt = section.strip()
-                    prompt = """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới:
-
-""" + prompt + """
-🎯 Yêu cầu: 
+                    prompt = prompt + """
+🎯 Lưu ý: 
 1. Trích **chính xác tên cơ quan trực tiếp ban hành văn bản** theo các quy tắc sau:
 * Nếu văn bản có:
   * Dòng 1 là cơ quan chủ quản (VD: “UBND TỈNH...”)
@@ -48,7 +46,17 @@ class PromptService:
 - **"HĐTĐ"** - viết tắt của "Hội đồng thẩm định"
 - Các từ viết tắt khác có chữ **"Đ"**, **không được chuyển thành "D"**
 
-3. Kết quả xuất ra dạng JSON duy nhất có dạng
+3. Trong quá trình nhận dạng, nếu có sự mờ, nhiễu hoặc khó đọc, hãy ưu tiên dự đoán các ký tự theo nguyên tắc sau:
+- 1 dễ nhầm với 7, 4, I, l → ưu tiên chọn 1 nếu toàn bộ chuỗi khớp mẫu.
+- 0 dễ nhầm với O, D, Q → nếu đi kèm văn bản hành chính thì chọn 0.
+- 2 dễ nhầm với Z, S → nếu xuất hiện ở đầu chuỗi thì ưu tiên là 2.
+- 5 dễ nhầm với S → nếu nằm trong số hiệu thì ưu tiên là 5.
+- 8 dễ nhầm với B, 3 → nếu ký tự đi kèm là “Công văn” thì chọn B, ngược lại chọn 8.
+- 9 dễ nhầm với g, q, 4 → nếu trong cụm số hiệu thì chọn 9.
+- Chỉ chấp nhận kết quả nếu thỏa mãn regex định dạng chuẩn: ^\d{1,6}(/\d{1,4})?(/)?(QĐ|TTr|BC|TB|CV|KH|PA)-UBND$
+- Trả về duy nhất chuỗi số hiệu văn bản hợp lệ. Nếu không nhận diện được đúng mẫu, trả về chuỗi rỗng ""
+
+4. Kết quả xuất ra dạng JSON duy nhất có dạng
 ```
 {
     "ThongTinChung": {

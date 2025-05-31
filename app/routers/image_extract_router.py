@@ -16,7 +16,8 @@ from sqlalchemy import text
 from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
-from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token, LayMaDoiTuong
+from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token, LayMaDoiTuong, pdf_to_images
+from app.services.anh_xa_tuong_dong import tim_kiem_tuong_dong
 from app.core.auth import get_current_user
 from app.schemas.user import User
 import pandas as pd
@@ -31,6 +32,10 @@ import tempfile
 import fitz  # PyMuPDF for PDF processing
 import traceback
 import PIL
+import openpyxl
+from fastapi import UploadFile, File, HTTPException, Query, Depends, Form, Header
+import logging
+from tempfile import SpooledTemporaryFile
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -55,8 +60,6 @@ ALLOWED_IMAGE_TYPES = {
     'image/webp'
 }
 
-ALLOWED_PDF_TYPE = 'application/pdf'
-
 # Azure Form Recognizer configuration
 AZURE_ENDPOINT = os.getenv('AZURE_FORM_RECOGNIZER_ENDPOINT')
 AZURE_KEY = os.getenv('AZURE_FORM_RECOGNIZER_KEY')
@@ -70,7 +73,875 @@ class MultiImageExtractRequest(BaseModel):
 class DocumentExtractRequest(BaseModel):
     file_type: str  # 'image' or 'pdf'
     pages: Optional[List[int]] = None  # For PDF, specify which pages to process
+@router.post("/document_extract")
+async def document_extract(
+    thuMuc: str = Form(...),
+    authorization: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Xác thực token (giữ nguyên logic cũ)
+    try:
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
+        token = authorization.split(" ")[1]
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
+        print(f"Token validated for userID: {user_id}, donViID: {don_vi_id}")
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
+    # DANH SÁCH ĐƯỜNG DẪN DỰ ÁN CỦA THƯ MỤC
+    listThuMuc = []
+    # 2. Kiểm tra xem có file nào được tải lên không
+    # Kiểm tra xem đường dẫn có tồn tại không
+    if not os.path.exists(thuMuc):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Đường dẫn không tồn tại",
+                "detail": f"Không tìm thấy đường dẫn: {thuMuc}"
+            }
+        )
 
+    try:
+        # Lấy danh sách thư mục con
+        for item in os.listdir(thuMuc):
+            item_path = os.path.join(thuMuc, item)
+            if os.path.isdir(item_path):
+                listThuMuc.append({
+                    'path': item_path,
+                    'duAnID': '',
+                    'maDuAn': item,
+                    'ghiChu': ''
+                })
+        
+        if not listThuMuc:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không tìm thấy thư mục con nào trong đường dẫn đã cung cấp.",
+                    "detail": f"Đường dẫn: {thuMuc}"
+                }
+            )
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi khi đọc thư mục",
+                "detail": str(e)
+            }
+        )
+    listFinalPath = [] #Danh sách file pdf đã xử lý
+    try: 
+        for item in listThuMuc:
+            ma_du_an = item['maDuAn']
+            try:
+                query = text(f"""
+                    SELECT DuAnID 
+                    FROM dbo.DuAn 
+                    WHERE (DonViID = '{don_vi_id}' OR DonViID_chudautu = '{don_vi_id}')
+                    AND MaDuAn = N'{ma_du_an}'
+                """)
+                
+                result = db.execute(query).fetchone()
+                if not result:
+                    item['ghiChu'] = f"Không tìm thấy dự án với mã {ma_du_an}"
+                else:
+                    item['duAnID'] = result[0]
+            except Exception as e:
+                item['ghiChu'] = f"Có lỗi tuy vấn khi tìm mã dự án với mã {ma_du_an}"
+
+            # XỬ LÝ TỪNG THƯ MỤC
+
+            for item in listThuMuc:
+                if item['duAnID'] == "":
+                    continue
+                
+                path = item['path']
+                duAnID = item['duAnID']
+                
+                # B1: Duyệt tìm thư mục con và file
+                listThuMucCon = []
+                listPDF = []
+                listIndexTxt = []
+                try:
+                    print("Đang xử lý path: ", path)
+                    for item_path in os.listdir(path):
+                        full_path = os.path.join(path, item_path)
+                        if os.path.isdir(full_path):
+                            listThuMucCon.append(full_path)
+                        elif item_path.lower().endswith('.pdf'):
+                            listPDF.append(full_path)
+                        elif item_path.lower().endswith('.txt'):
+                            listIndexTxt.append(full_path)
+                except Exception as e:
+                    print(f"Lỗi khi đọc thư mục {path}: {str(e)}")
+                    print(f"Chi tiết lỗi: {type(e).__name__}")
+                    print(f"Stack trace: {traceback.format_exc()}")
+                print("================================")
+                print("Danh sách thư mục con:", listThuMucCon)
+                print("Danh sách file PDF:", listPDF) 
+                print("Danh sách file txt:", listIndexTxt)
+                print("================================")
+                listKichBanXuLy = []
+                if listIndexTxt:
+                    # Đọc tất cả các file txt và lấy danh sách các file cần xử lý
+                    # Tạo một tập hợp rỗng để lưu trữ danh sách các file cần xử lý
+                    files_to_process = set()
+                    listFileIndex = []
+                    for txt_file in listIndexTxt:
+                        try:
+                            df_temp = pd.read_csv(txt_file, sep='\t')
+                            # for itemT in df_temp:
+                            #     print("Path:", df_temp['Path'])
+                            #     print("RangePage:", df_temp['RangePage'])
+                            for itemT in df_temp.itertuples():
+                                if not itemT.Path or pd.isna(itemT.Path):
+                                    continue
+                                # Lấy giá trị Path và tách thành mảng các file PDF
+                                pdf_files = itemT.Path.split(';')
+                                # Lấy giá trị RangePage tương ứng
+                                range_pages = itemT.RangePage
+                                
+                                # Tạo danh sách đường dẫn đầy đủ cho các file PDF
+                                full_pdf_paths = []
+                                for pdf_file in pdf_files:
+                                    # Lấy tên file từ đường dẫn
+                                    pdf_name = os.path.basename(pdf_file)
+                                    # Loại bỏ đuôi .pdf nếu có
+                                    while pdf_name.endswith('.pdf'):
+                                        pdf_name = pdf_name.replace('.pdf', '')
+                                    
+                                    # Tìm file PDF trong listPDF
+                                    for full_pdf_path in listPDF:
+                                        # Lấy tên file từ đường dẫn đầy đủ
+                                        full_pdf_name = os.path.basename(full_pdf_path)
+                                        while full_pdf_name.endswith('.pdf'):
+                                            full_pdf_name = full_pdf_name.replace('.pdf', '')
+                                        
+                                        # Nếu tìm thấy file PDF trong listPDF
+                                        if pdf_name == full_pdf_name:
+                                            full_pdf_paths.append(full_pdf_path)
+                                            break
+                                
+                                # Thêm vào listKichBanXuLy với đường dẫn đầy đủ của tất cả các file PDF
+                                if full_pdf_paths:
+                                    listKichBanXuLy.append({
+                                        'Path': ';'.join(full_pdf_paths),
+                                        'RangePage': range_pages
+                                    })
+                        except Exception as e:
+                            print(f"Lỗi đọc file {txt_file}: {str(e)}")
+                else:
+                    for pdf_path in listPDF:
+                        listKichBanXuLy.append({
+                            'Path': pdf_path,
+                            'RangePage': ''
+                        })
+
+                print("\n" + "═" * 80)
+                print(" " * 25 + "CHI TIẾT LIST KỊCH BẢN XỬ LÝ" + " " * 25)
+                print("═" * 80 + "\n")
+
+                for idx, item in enumerate(listKichBanXuLy, 1):
+                    print("─" * 80)
+                    print(f"\033[1mKỊCH BẢN {idx}\033[0m")
+                    print(f"Path: {item['Path']}")
+                    print(f"RangePage: {item['RangePage']}")
+                    print("─" * 80 + "\n")
+
+                print("═" * 80)
+                print(" " * 30 + "KẾT THÚC DANH SÁCH" + " " * 30)
+                print("═" * 80 + "\n")
+                         
+                # Xử lý từng file PDF
+                for itemKichBan in listKichBanXuLy:
+                    pathPDF = str(itemKichBan['Path']).strip().split(';')[0] # Lấy file đầu tiên để dành lưu trữ // Các file ở phần tử 1 trở đi chỉ để ghép lấy số liệu
+                    # pathPDF là đường dẫn file pdf
+                    pdf_name = os.path.basename(pathPDF)
+                    pdfRangPage = ""
+                    
+                    # Tách đường dẫn PDF và RangePage thành các phần
+                    pdf_paths = itemKichBan['Path'].split(';')
+                    range_pages = itemKichBan['RangePage'].split(';')
+                    
+                    # Danh sách chứa tất cả các ảnh PIL
+                    all_images = []
+                    
+                    # Xử lý từng cặp PDF và RangePage tương ứng
+                    for pdf_path, page_range in zip(pdf_paths, range_pages):
+                        # Kiểm tra nếu page_range rỗng thì chuyển tất cả trang
+                        # print(f"\n=== 888 Thông tin chi tiết PDF và Range Page 888 ===")
+                        # print(f"PDF Path: {pdf_path}")
+                        # print(f"Range Page: {page_range}")
+                        # print("=======================================\n")
+                        if page_range.strip() == "":
+                            images = pdf_to_images(pdf_path, 2.0, "")
+                        else:
+                            # Chuyển PDF thành ảnh với các trang được chỉ định
+                            images = pdf_to_images(pdf_path, 2.0, page_range)
+                        # print("\n=== Thông tin chi tiết biến images ===")
+                        # print(f"Số lượng ảnh: {len(images)}")
+                        # print("\nChi tiết từng ảnh:")
+                        # for idx, img in enumerate(images):
+                        #     print(f"\nẢnh thứ {idx + 1}:")
+                        #     print(f"Kích thước: {img.size}")
+                        #     print(f"Mode: {img.mode}")
+                        #     print(f"Format: {img.format if hasattr(img, 'format') else 'N/A'}")
+                        # print("=======================================\n")
+                        # Thêm các ảnh vào danh sách kết quả
+                        all_images.extend(images)
+                    
+                    image_PIL = all_images
+
+                    print("\n=== Chi tiết biến image_PIL và itemKichBan ===")
+                    print(f"Số lượng ảnh: {len(image_PIL)}")
+                    print("\nThông tin itemKichBan:")
+                    print(f"Path: {itemKichBan['Path']}")
+                    print(f"RangePage: {itemKichBan['RangePage']}")
+                    print("\nChi tiết từng ảnh:")
+                    for idx, img in enumerate(image_PIL):
+                        print(f"\nẢnh thứ {idx + 1}:")
+                        print(f"Kích thước: {img.size}")
+                        print(f"Mode: {img.mode}")
+                        print(f"Format: {img.format if hasattr(img, 'format') else 'N/A'}")
+                    print("=======================================\n")
+
+                    # Chuyển PDF thành ảnh
+                    try:
+                        all_data = []
+                        loaiVanBan = None
+                        path = pathPDF.lower()
+                        print("\n=== Thông tin chi tiết đường dẫn đang xử lý ===")
+                        print(f"Đường dẫn: {pathPDF}")
+                        print("=======================================\n")
+                        if 'qd_phe_duyet_chu_truong\\' in path:
+                            loaiVanBan = 'QDPD_CT'
+                        elif 'qd_phe_duyet_du_toan_cbdt\\' in path:
+                            loaiVanBan = 'QDPDDT_CBDT'
+                        elif 'qd_phe_duyet_khlcnt_cbdt\\' in path:
+                            loaiVanBan = 'QDPD_KHLCNT_CBDT'
+                        elif 'qd_phe_duyet_kqlcnt_cbdt\\' in path:
+                            loaiVanBan = 'QDPD_KQLCNT_CBDT'
+                        elif 'qd_phe_duyet_du_an\\' in path:
+                            loaiVanBan = 'QDPD_DA'
+                        elif 'qd_phe_duyet_du_toan_thdt\\' in path:
+                            loaiVanBan = 'QDPD_DT_THDT'
+                        elif 'qd_phe_duyet_khlcnt_thdt\\' in path:
+                            loaiVanBan = 'QDPD_KHLCNT_THDT'
+                        elif 'qd_phe_duyet_kqlcnt_thdt\\' in path:
+                            loaiVanBan = 'QDPD_KQLCNT_THDT'
+                        elif 'phu_luc_hop_dong\\' in path:
+                            loaiVanBan = 'PL_HOP_DONG'
+                        elif 'hop_dong\\' in path:
+                            loaiVanBan = 'HOP_DONG'                        
+                        elif 'xac_nhan_klcv_hoan_thanh\\' in path:
+                            loaiVanBan = 'KLCVHT_THD'
+                        elif 'de_nghi_thanh_toan\\' in path:
+                            loaiVanBan = 'GIAI_NGAN_DNTT'
+                        elif 'giay_rut_von\\' in path:
+                            loaiVanBan = 'GIAI_NGAN_GRV'
+                        elif 'giay_de_nghi_thu_hoi_von\\' in path:
+                            loaiVanBan = 'GIAI_NGAN_THV'
+                        elif 'nghiem_thu_ban_giao\\' in path:
+                            loaiVanBan = 'QDPDDT_CBDT'
+                        elif 'bc_quyet_toan_daht\\' in path:
+                            loaiVanBan = 'BC_QTDAHT'
+                        elif 'vb_khac\\' in path:
+                            loaiVanBan = 'VanBanKhac'
+                        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
+                        van_ban_id = str(uuid.uuid4())
+                        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
+                        # print("*"*30)
+                        # print(prompt)
+                        # print("*"*30)
+                        # CHUYỂN PDF SANG DANH SÁCH ẢNH
+                        
+                        print(f"\n{'='*50}")
+                        print(f"Đang xử lý kịch bản: {itemKichBan}")
+                        print(f"Thời gian bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        print(f"Đường dẫn file: {itemKichBan['Path']}")
+                        print(f"Đường dẫn file CHÍNH: {pathPDF}")
+                        print(f"{'='*50}\n")
+                        try:
+                            # Process each file with Azure Form Recognizer
+                            combined_text = ""
+                            for temp_file in image_PIL:
+                                try:
+                                    # Chuyển đổi PIL Image thành bytes
+                                    img_byte_arr = BytesIO()
+                                    temp_file.save(img_byte_arr, format='PNG')
+                                    img_byte_arr = img_byte_arr.getvalue()
+                                    # print(img_byte_arr)
+                                    # Extract data with Azure Form Recognizer
+                                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=img_byte_arr)
+                                    result = poller.result()
+
+                                    # Collect text and tables
+                                    for page in result.pages:
+                                        for line in page.lines:
+                                            combined_text += line.content + "\n"
+
+                                    # Process tables if any
+                                    for table in result.tables:
+                                        combined_text += "\nBảng:\n"
+                                        for row_index in range(table.row_count):
+                                            row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
+                                            combined_text += " | ".join(row_cells) + "\n"
+
+                                except Exception as e:
+                                    item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}"
+                                    print(f"Error processing file {temp_file}: {str(e)}")
+                            # print("&"*30)
+                            # print(combined_text)
+                            # print("&"*30)
+                            # break
+                            # try:
+                            #     # Tạo tên file text dựa trên tên file PDF
+                            #     text_file_path = os.path.splitext(pathPDF)[0] + '.txt'
+                                
+                            #     # Ghi nội dung combined_text vào file
+                            #     with open(text_file_path, 'w', encoding='utf-8') as f:
+                            #         f.write(combined_text)
+                                    
+                            #     print(f"Đã ghi nội dung text vào file: {text_file_path}")
+                                
+                            # except Exception as e:
+                            #     print(f"Lỗi khi ghi file text: {str(e)}")
+                            #     item['ghiChu'] = f"Lỗi khi ghi file text: {str(e)}"
+                            
+                        # Ghi combined_text ra file text
+                        except Exception as e:
+                            item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}\nDòng lỗi: {e.__traceback__.tb_lineno}\nNội dung lỗi: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                            return JSONResponse(
+                                status_code=500,
+                                content={
+                                    "status": "error",
+                                    "code": 500,
+                                    "message": "Lỗi khi xử lý file",
+                                    "detail": f"Error processing file {temp_file}: {str(e)}\nDòng lỗi: {e.__traceback__.tb_lineno}\nNội dung lỗi: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                                }
+                            )
+                      
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                            },
+                            {
+                                "role": "user",
+                                "content": f"""
+                                {prompt}
+
+                                Data extracted from images:
+                                {combined_text}
+
+                                Remember: Return ONLY the JSON object, no other text or explanation.
+                                """
+                            }
+                        ]
+
+                        # Call OpenAI API
+                        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                        response = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=messages,
+                            max_tokens=4096,
+                            temperature=0,
+                            response_format={"type": "json_object"}
+                        )
+
+                        # Process response
+                        response_text = response.choices[0].message.content.strip()
+                        
+                        # Clean up response text
+                        if response_text.strip().startswith("```json"):
+                            response_text = response_text.strip()[7:-3].strip()
+                        elif response_text.strip().startswith("```"):
+                            response_text = response_text.strip()[3:-3].strip()
+
+                        # print("+"*20)
+                        # print(response_text)
+                        # print("+"*20)
+
+                        # Xử lý response
+                        if "error" in response_text.lower() or "không thể" in response_text.lower():
+                            print("AI không thể nhận diện văn bản từ ảnh\n" + response_text)
+                            item['ghiChu'] = "AI không thể nhận diện văn bản từ ảnh\n" + response_text
+                        try:
+                            data_json = json.loads(response_text)
+                            #data_json = data_json["results"]
+                            #print(data_json)
+                        except json.JSONDecodeError as e:
+                            if response_text.strip().startswith("<"):
+                                msg = "AI trả về HTML hoặc file không phải là ảnh văn bản."
+                            elif len(response_text.strip()) < 30:
+                                msg = "Ảnh không chứa đủ thông tin văn bản hoặc quá mờ."
+                            else:
+                                msg = "Kết quả trả về không đúng định dạng."
+                            return JSONResponse(
+                                status_code=400,
+                                content={
+                                    "status": "error",
+                                    "code": 400,
+                                    "message": msg,
+                                    "detail": str(e),
+                                    "raw_response": response_text
+                                }
+                            )
+                        # Validate required fields in the response
+                        query = """select NghiepVuID=ChucNangAIID, ThongTinChung from ChucNangAI where ChucNangAIID='"""+loaiVanBan+"""' order by STT"""
+                        dfChucNang = lay_du_lieu_tu_sql_server(query)
+                        # Lấy động các cột của bảng Thông tin chung cần lưu vào bản VanBanAI
+                        required_fields = []
+                        for _, row in dfChucNang.iterrows():
+                            bang_du_lieu = row['ThongTinChung']
+                            required_fields = bang_du_lieu.split(';')
+
+                        # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
+                        missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
+                        if missing_fields:
+                            print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
+                            print(f"Thiếu các trường: {', '.join(missing_fields)}")
+
+                        # Set UUIDs in the response data
+                        data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+                        data_json["VanBanID"] = van_ban_id
+
+                        # Kiểm tra và chuyển đổi các giá trị tiền tệ trong ThongTinChung
+                        for col in data_json["ThongTinChung"]:
+                            #print("ThongTinChung: cột >>> ", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                            or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                            or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                            or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                try:
+                                    data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
+                                except Exception as e:
+                                    print(f"\033[31m[ERROR] Lỗi khi chuyển đổi giá trị tiền tệ cho cột {col}:\033[0m")
+                                    print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                                    print(f"\033[31m- Giá trị gốc: {data_json['ThongTinChung'][col]}\033[0m")
+                        #print("ThongTinChung >>> ", col)
+                        #print(data_json["ThongTinChung"]);
+                        # Convert currency values in the response
+                        if "BangDuLieu" in data_json:
+                            for item in data_json["BangDuLieu"]:
+                                try:
+                                    # print("Kiểm tra van_ban_id: ", van_ban_id)
+                                    item["VanBanID"] = van_ban_id
+                                    # Convert all numeric values based on required columns
+                                    for col in required_columns:
+                                        # print("Cột kiểm tra:", col)
+                                        if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                            or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                            or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                            or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                            item[col] = convert_currency_to_int(str(item[col]))
+                                except Exception as e:
+                                    print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
+                                    print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                                    print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                                    print(f"\033[31m- Item gây lỗi: {json.dumps(item, ensure_ascii=False, indent=2)}\033[0m")
+                        # dữ liệu mặc định
+                        van_ban_data = {
+                            "VanBanAIID": van_ban_id,
+                            "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                            "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                            "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                            "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                            "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                            "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                            "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "TenLoaiVanBan": loaiVanBan,
+                            "DuAnID": duAnID,
+                            "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                            "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                            "DataOCR": combined_text,
+                            "TenFile": "*".join([d['filename'] for d in all_data])
+                        }
+                        if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPDDT_CBDT];[QDPD_DT_THDT];[QDPD_DA]":
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "DuAnID": duAnID,
+                                "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data])
+                            }
+                        elif  f"[{loaiVanBan}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "DuAnID": duAnID,
+                                "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data])
+                            }
+                        elif  f"[{loaiVanBan}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]":
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "DuAnID": duAnID,
+                                "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data])
+                            }
+                        elif  f"[{loaiVanBan}]" in "[HOP_DONG]":
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                                "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                                "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                                "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "GiaiDoanID": "",
+                                "DuAnID": duAnID,
+                                "DieuChinh": "0",
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data]),
+                                "UserID": user_id,
+                                "DonViID": don_vi_id
+                            }
+                        elif  f"[{loaiVanBan}]" in "[PL_HOP_DONG]":
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""), # Tương đương Số phụ lục hợp đồng
+                                "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                                "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""), # Tương đương Số hợp đồng (gốc)
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                                "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                                "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "GiaiDoanID": "",
+                                "DuAnID": duAnID,
+                                "DieuChinh": "0",
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data]),
+                                "UserID": user_id,
+                                "DonViID": don_vi_id
+                            }
+                        elif  f"[{loaiVanBan}]" in "[KLCVHT_THD]":
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                                "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                                "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                                "LanThanhToan": data_json["ThongTinChung"].get("LanThanhToan", ""),
+                                "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                                "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "GiaTriHopDong": data_json["ThongTinChung"].get("GiaTriHopDong", "0"),
+                                "TamUngChuaThuaHoi": data_json["ThongTinChung"].get("TamUngChuaThuaHoi", "0"),
+                                "ThanhToanDenCuoiKyTruoc": data_json["ThongTinChung"].get("ThanhToanDenCuoiKyTruoc", "0"),
+                                "LuyKeDenCuoiKy": data_json["ThongTinChung"].get("LuyKeDenCuoiKy", "0"),
+                                "ThanhToanThuHoiTamUng": data_json["ThongTinChung"].get("ThanhToanThuHoiTamUng", "0"),
+                                "GiaiNganKyNay": data_json["ThongTinChung"].get("GiaiNganKyNay", "0"),
+                                "TamUngGiaiNganKyNayKyTruoc": data_json["ThongTinChung"].get("TamUngGiaiNganKyNayKyTruoc", "0"),
+                                "ThanhToanKLHTKyTruoc": data_json["ThongTinChung"].get("ThanhToanKLHTKyTruoc", "0"),
+                                "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
+                                "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
+                                "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "GiaiDoanID": "",
+                                "DuAnID": duAnID,
+                                "DieuChinh": "0",
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data]),
+                                "UserID": user_id,
+                                "DonViID": don_vi_id
+                            }
+                        elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                            print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+                            van_ban_data = {
+                                "VanBanAIID": van_ban_id,
+                                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                                "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                                "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                                "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                                "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                                "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                                "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
+                                "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
+                                "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
+                                "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "TenLoaiVanBan": loaiVanBan,
+                                "DuAnID": duAnID,
+                                "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                                "DataOCR": combined_text,
+                                "TenFile": "*".join([d['filename'] for d in all_data])
+                            }
+                        van_ban_data["UserID"] = user_id
+                        van_ban_data["DonViID"] = don_vi_id
+                        van_ban_data["TenFilePDF"] = pathPDF
+                        db_service = DatabaseService()
+                        result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
+                        
+                        if not result.get("success", False):
+                            print("Lỗi khi lưu dữ liệu vào database\n" + result.get("error", "Unknown error"))
+                            item['ghiChu'] = "Lỗi khi lưu dữ liệu vào database\n" + result.get("error", "Unknown error")
+
+                        # Insert BangDuLieu data if it exists
+                        if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
+                            bang_du_lieu_data = []
+                            for item in data_json["BangDuLieu"]:
+                                bang_du_lieu_data.append({
+                                    "VanBanAIID": van_ban_id,
+                                    **{col: item.get(col, 0) for col in required_columns}
+                                })
+                            bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
+                                db, 
+                                bang_du_lieu_data,
+                                required_columns
+                            )
+                            if not bang_du_lieu_result.get("success", False):
+                                print("Lỗi khi lưu dữ liệu vào database\n" + bang_du_lieu_result.get("error", "Unknown error"))
+                                item['ghiChu'] = "Lỗi khi lưu dữ liệu vào database\n" + bang_du_lieu_result.get("error", "Unknown error")
+                        else:
+                            print("Văn bản này không có chi tiết bảng dữ liệu")
+                        # After successful processing and database operations
+                        try:
+                            # Get QLDA upload URL from environment
+                            qlda_upload_url = os.getenv("API_URL_UPLOAD_QLDA")
+                            # if not qlda_upload_url:
+                            #     raise ValueError("Không tìm thấy API_URL_UPLOAD_QLDA trong file .env")
+
+                            # Prepare files for upload to QLDA
+                            files_data = []
+                            # Chuyển đổi các ảnh PIL thành file để upload
+                            for idx, img in enumerate(image_PIL):
+                                # Tạo tên file tạm thời
+                                temp_file = SpooledTemporaryFile()
+                                # Lưu ảnh vào file tạm
+                                img.save(temp_file, format='PNG')
+                                temp_file.seek(0)
+                                
+                                # Tạo tên file với số thứ tự
+                                file_name = f"page_{idx + 1}.png"
+                                
+                                # Tạo đối tượng UploadFile
+                                file_obj = UploadFile(
+                                    filename=file_name,
+                                    file=temp_file,
+                                    headers={"content-type": "image/png"}
+                                )
+                                
+                                # Thêm vào danh sách files_data
+                                files_data.append(
+                                    ("files", (file_name, file_obj.file, "image/png"))
+                                )
+                            
+                            # print(">>>>>>>>>>>> files_data chi tiết:")
+                            # for file_data in files_data:
+                            #     print(f"- Tên file: {file_data[1][0]}")
+                            #     print(f"- Loại file: {file_data[1][2]}")
+                            #     print("-" * 50)
+                            # Upload files to QLDA system
+                            async with httpx.AsyncClient() as client:
+                                response = await client.post(
+                                    f"{qlda_upload_url}/api/v1/Uploads/uploadMultipleFiles",
+                                    files=files_data,
+                                    headers={"Authorization": authorization}
+                                )
+                                # print("Response status code:", response.status_code)
+                                # print("Response headers:", response.headers)
+                                # print("Response content:", response.text)
+                                # print("Response URL:", response.url)
+                                # print("Response encoding:", response.encoding)
+                                # print("Response cookies:", response.cookies)
+                                # print("Response elapsed time:", response.elapsed)
+                                if response.status_code != 200:
+                                    print(f"Lỗi file {path} khi upload file lên hệ thống QLDA\n" + response.text)
+                                    item['ghiChu'] = f"Lỗi file {path} khi upload file lên hệ thống QLDA\n" + response.text
+                                
+                                # Lấy response JSON từ API QLDA
+                                qlda_response = response.json()
+                                
+                                try:
+                                    # Nối các đường dẫn file trong data thành 1 chuỗi, phân cách bằng dấu *
+                                    string_url_qlda_response = '*'.join(qlda_response['data'])
+                                    # Thực thi câu lệnh SQL để cập nhật tên file trong bảng VanBanAI
+                                    update_query = text(f"""
+                                        UPDATE dbo.VanBanAI 
+                                        SET tenFile = N'{string_url_qlda_response}'
+                                        WHERE VanBanAIID = N'{van_ban_id}'
+                                    """)
+                                    db.execute(update_query)
+                                    db.commit()
+                                except Exception as e:
+                                    db.rollback()
+                                    print(f"Lỗi file {path} khi cập nhật tên file trong bảng VanBanAI: {str(e)}")
+                                    item['ghiChu'] = f"Lỗi file {path} khi cập nhật tên file trong bảng VanBanAI: {str(e)}"
+                            print(f"Tệp {path} upload và xử lý nhiều file ảnh thành công")
+                            item['ghiChu'] = "Upload và xử lý nhiều file ảnh thành công"
+
+                        except Exception as e:
+                            # CHỔ NÀY XỬ LÝ FILE DỰ ÁN CHƯA ĐÍNH KÈM ĐƯỢC
+                            nhat_ky_loi_upload_file = "Lỗi khi upload file lên hệ thống QLDA"
+                            print(f"\033[31m[ERROR] Chi tiết lỗi khi upload file:\033[0m")
+                            print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                            print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                            print(f"\033[31m- Thông tin chi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\033[0m")
+                            print(f"\033[31m- Dòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}\033[0m")
+                            item['ghiChu'] = f"Lỗi {path} khi upload file lên hệ thống QLDA"
+
+                        # XOÁ FILE SAU KHI CHẠY
+                        try:
+                            # Xóa từng file PDF trong danh sách
+                            pdf_pathsX = str(itemKichBan['Path']).strip().split(';')
+                            for pdf_pathX in pdf_pathsX:
+                                if os.path.exists(pdf_pathX):
+                                    os.remove(pdf_pathX)
+                                    print(f"Đã xóa file {pdf_pathX} thành công")
+                        except Exception as e:
+                            print(f"Lỗi khi xóa file {pathPDF}: {str(e)}")
+                        # KẾT THÚC XOÁ FILE SAU KHI CHẠY
+                    except Exception as e:
+                        print(f"Lỗi xử lý file {pathPDF}: {str(e)}")
+                        listFinalPath.append({
+                            'pathPDF': pathPDF,
+                            'pdf_name': pdf_name,
+                            'pdfRangPage': pdfRangPage,
+                            'status': f"Lỗi xử lý file: {type(e).__name__} - {str(e)} - Dòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}"
+                        })
+                    # Bổ sung thông tin file PDF đã xử lý
+                    listFinalPath.append({
+                        'pathPDF': pathPDF,
+                        'pdf_name': pdf_name,
+                        'pdfRangPage': pdfRangPage,
+                        'status': 'Xử lý thành công'
+                    })
+                # C2: Xử lý đệ quy các thư mục con
+                for thuMucCon in listThuMucCon:
+                    # Tạo item mới cho thư mục con
+                    item_con = {
+                        'path': thuMucCon,
+                        'duAnID': duAnID,
+                        'maDuAn': os.path.basename(thuMucCon),
+                        'ghiChu': ''
+                    }
+                    listThuMuc.append(item_con)
+
+            # Trả về kết quả là 2 DataFrame dưới dạng JSON
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "message": "Trích xuất dữ liệu từ file Excel thành công.",
+                    "data": {
+                        "info_pdf": listFinalPath
+                    }
+                }
+            )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error", 
+                "code": 500, 
+                "message": "Lỗi khi xử lý file Excel", 
+                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\nDòng lỗi: {e.__traceback__.tb_lineno if hasattr(e, '__traceback__') else 'Không có thông tin dòng lỗi'}"
+                }
+        )
+
+
+#MÔ HÌNH OPENAI
 @router.post("/image_extract_multi")
 async def extract_multiple_images(
     files: List[UploadFile] = File(...),
@@ -79,6 +950,12 @@ async def extract_multiple_images(
     authorization: str = Header(...),
     db: Session = Depends(get_db)
 ):
+    # print("===Thông tin files===")
+    # for file in files:
+    #     print(f"Tên file: {file.filename}")
+    #     print(f"Content type: {file.content_type}")
+    #     print(f"Headers: {file.headers}")
+    #     print("-------------------")
     # Xác thực token
     try:
         #Kiểm tra header Authorization
@@ -124,9 +1001,9 @@ async def extract_multiple_images(
         van_ban_id = str(uuid.uuid4())
         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
-        print("======================prompt==================")
-        print(prompt)
-        print("======================end prompt==================")
+        # print("======================prompt==================")
+        # print(prompt)
+        # print("======================end prompt==================")
         #return
         # Process each file
         temp_files = []
@@ -153,7 +1030,7 @@ async def extract_multiple_images(
                 content = await file.read()
                 buffer.write(content)
 
-            content_parts = [{"type": "text", "text": prompt}]
+        content_parts = [{"type": "text", "text": prompt}]
         valid_image_paths = []
         for image_name in temp_files:
             # Trong Colab, files.upload() lưu file vào thư mục hiện tại
@@ -168,6 +1045,7 @@ async def extract_multiple_images(
                 }
                 content_parts.append(image_url_object)
                 valid_image_paths.append(image_path)
+
         # print("valid_image_paths")
         # print(valid_image_paths)
         # Get the appropriate prompt based on loaiVanBan
@@ -177,7 +1055,7 @@ async def extract_multiple_images(
             messages = [
                 {
                     "role": "system",
-                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt). Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
+                    "content": """Bạn là một AI có khả năng trích chính xác văn bản từ hình ảnh hoặc pdf (đa số là tiếng Việt) tuyệt đối không bịa, không suy diễn, không được đoán, không được làm tròn, không điền bất kỳ nội dung nào khác ngoài văn bản. Nhiệm vụ của bạn trích nội dung chính xác 100% của tài liệu được cung cấp và xử lý theo yêu cầu bên dưới"""
                 },
                 {
                     "role": "user",
@@ -189,7 +1067,8 @@ async def extract_multiple_images(
             response = client.chat.completions.create(
                 model="gpt-4o",  # Hoặc mô hình hỗ trợ xử lý nhiều ảnh khác
                 messages=messages,
-                max_tokens=4000  # Tăng max_tokens nếu cần cho kết quả dài hơn
+                temperature=0,
+                max_tokens=15000  # Tăng max_tokens nếu cần cho kết quả dài hơn
             )
             #print(response)
             # Xử lý response từ OpenAI
@@ -202,28 +1081,6 @@ async def extract_multiple_images(
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
 
-            # Gọi Gemini API
-            # try:
-            #     response = model.generate_content(content_parts)
-            #     response_text = response.text.strip()
-                
-            #     if response_text.strip().startswith("```json"):
-            #         response_text = response_text.strip()[7:-3].strip()
-            #     elif response_text.strip().startswith("```"):
-            #         response_text = response_text.strip()[3:-3].strip()
-                
-            #     print("\033[31mKẾT QUẢ NHẬN DẠNG HÌNH ẢNH\033[0m")
-            #     print(response_text)
-            # except Exception as e:
-            #     return JSONResponse(
-            #         status_code=500,
-            #         content={
-            #             "status": "error",
-            #             "code": 500,
-            #             "message": "Lỗi khi xử lý ảnh",
-            #             "detail": str(e)
-            #         }
-            #     )
             # Xử lý response từ Gemini
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -269,16 +1126,6 @@ async def extract_multiple_images(
             # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
             missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
             if missing_fields:
-                # return JSONResponse(
-                #     status_code=400,
-                #     content={
-                #         "status": "error",
-                #         "code": 400,
-                #         "message": "Không thể trích xuất đầy đủ thông tin từ ảnh",
-                #         "detail": f"Thiếu các trường: {', '.join(missing_fields)}",
-                #         "missing_fields": missing_fields
-                #     }
-                # )
                 print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
                 print(f"Thiếu các trường: {', '.join(missing_fields)}")
 
@@ -286,16 +1133,32 @@ async def extract_multiple_images(
             data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
             data_json["VanBanID"] = van_ban_id
 
+            for col in data_json["ThongTinChung"]:
+                #print("ThongTinChung: cột >>> ", col)
+                if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                    try:
+                        data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi chuyển đổi giá trị tiền tệ cho cột {col}:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Giá trị gốc: {data_json['ThongTinChung'][col]}\033[0m")
+
             # Convert currency values in the response
             if "BangDuLieu" in data_json:
                 for item in data_json["BangDuLieu"]:
                     try:
-                        print("Kiểm tra van_ban_id: ", van_ban_id)
+                        # print("Kiểm tra van_ban_id: ", van_ban_id)
                         item["VanBanID"] = van_ban_id
                         # Convert all numeric values based on required columns
                         for col in required_columns:
-                            print("Cột kiểm tra:", col)
-                            if (col.startswith('GiaTri') or col.startswith('SoTien')):
+                            #print("Cột kiểm tra:", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
                                 item[col] = convert_currency_to_int(str(item[col]))
                     except Exception as e:
                         print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
@@ -316,7 +1179,7 @@ async def extract_multiple_images(
                 "TenLoaiVanBan": loaiVanBan,
                 "DuAnID": duAnID,
                 "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                "JsonAI": json.dumps(data_json, ensure_ascii=False),
                 "DataOCR": response_text,
                 "TenFile": "*".join([d['filename'] for d in all_data])
             }
@@ -337,7 +1200,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -356,7 +1219,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -377,7 +1240,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -402,7 +1265,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -430,7 +1293,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -469,7 +1332,7 @@ async def extract_multiple_images(
                     "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data]),
                     "UserID": user_id,
@@ -484,6 +1347,7 @@ async def extract_multiple_images(
                     "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
                     "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
                     "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
@@ -500,7 +1364,7 @@ async def extract_multiple_images(
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
                     "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
-                    "JsonAI": json.dumps(data_json["ThongTinChung"], ensure_ascii=False),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
                     "DataOCR": response_text,
                     "TenFile": "*".join([d['filename'] for d in all_data])
                 }
@@ -622,8 +1486,6 @@ async def extract_multiple_images(
                 return JSONResponse(
                     status_code=500,
                     content={
-
-                        
                         "status": "error",
                         "code": 500,
                         "message": "Lỗi khi upload file lên hệ thống QLDA",
@@ -899,6 +1761,7 @@ async def extract_multiple_images_azure(
 async def standardized_data(
     duAnID: str,
     authorization: str = Header(...)
+
 ):
     # Xác thực token
     try:
@@ -964,199 +1827,244 @@ async def standardized_data(
         order by NgayKy, (select STT from dbo.ChucNangAI cn where cn.ChucNangAIID=TenLoaiVanBan)"""
         #print(query_van_ban)
         dfVanBanAI = lay_du_lieu_tu_sql_server(query_van_ban)
-        # print(query_van_ban)
+        #print(query_van_ban)
         # B3: Lấy dữ liệu từ BangDuLieuChiTietAI
+        query_kmcp = f"select distinct TenKMCP from dbo.BangDuLieuChiTietAI where isnull(TenKMCP, '')<>'' and VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), DuAnID)='{duAnID}' and vb.TenLoaiVanBan IN ('QDPD_CT', 'QDPDDT_CBDT', 'QDPD_DA', 'QDPD_DT_THDT', 'QDPD_KHLCNT_CBDT','QDPD_KHLCNT_THDT'))"
+        df_temp = lay_du_lieu_tu_sql_server(query_kmcp)
         chuoi_markdown_tenkmcp = ""
-        chuoi_markdown_tenkmcp += "| STT | TenKMCP |\n"
-        chuoi_markdown_tenkmcp += "|-----|----------|\n"
-        if not dfVanBanAI.empty:
-            for index, row in dfVanBanAI.iterrows():
-                van_ban_id = row['VanBanAIID']
-                query = f"select STT=convert(int, STT), TenKMCP from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
-                df_temp = lay_du_lieu_tu_sql_server(query)
-                if not df_temp.empty:
-                    for _, row in df_temp.iterrows():
-                        chuoi_markdown_tenkmcp += f"| {row['STT']} | {row['TenKMCP']} |\n"
-        else:
-            dfBangDuLieuChiTietAI = pd.DataFrame()
+        chuoi_markdown_tenkmcp += "| TenKMCP |\n"
+        chuoi_markdown_tenkmcp += "|----------|\n"
+        if not df_temp.empty:
+            if not df_temp.empty:
+                for _, row in df_temp.iterrows():
+                    chuoi_markdown_tenkmcp += f"| {row['TenKMCP']} |\n"
+        # print("="*20)
+        # print(chuoi_markdown_tenkmcp)
+        # print("="*20)
 
-        # Xử lý ghép TenKMCP trong chuoi_markdown_tenkmcp với TenKMCP trong bảng KMCP
-        promt_anh_xa_noi_dung_tuong_dong = """
-### Bạn là một hệ thống phân tích và ánh xạ từ ngữ thông minh. Hãy thực hiện so sánh và ánh xạ ý nghĩa giữa các khoản mục chi phí bảng `DuLieuChiTiet` được liệt kê theo bảng sau với danh mục chi phí chuẩn trong hệ thống bảng `KMCP`
-#### Bảng DuLieuChiTiet 
+
+            promt_anh_xa_noi_dung_tuong_dong = """
+Bạn là chuyên gia AI trong lĩnh vực xây dựng cơ bản. Nhiệm vụ của bạn là ánh xạ từng khoản mục chi phí từ danh sách nhập vào (`DanhSachCanAnhXa`) với danh mục khoản mục chi phí chuẩn (`DanhMucChuan`). Hãy thực hiện theo các quy tắc dưới đây:
+### QUY TẮC ÁNH XẠ
+
+1. **Ánh xạ 1:1**: Mỗi dòng trong danh sách cần ánh xạ chỉ được gán cho một dòng duy nhất trong danh mục chuẩn.
+2. **So khớp từ khóa gần đúng**: Cho phép sai lệch chính tả, viết hoa/thường, từ dư thừa hoặc thiếu, nhưng phải đảm bảo nghĩa gốc tương đương.
+3. **Loại bỏ ký tự nhiễu**: Bỏ dấu chấm cuối câu, dấu cách thừa.
+4. **Tự động phát hiện và hợp nhất các trường hợp viết khác nhau** (ví dụ: "Chi phí lập Báo cáo kinh tế - kỹ thuật" và "Chí phí lập báo cáo Kinh tế - kỹ thuật").
+5. Nếu không tìm được ánh xạ phù hợp, ghi rõ `"KHÔNG TÌM ĐƯỢC"`.
+
+#### Bảng 1 - Danh mục chuẩn chi phí (`DanhSachCanAnhXa`)
 """+chuoi_markdown_tenkmcp+"""
-#### Bảng KMCP 
-MaKMCP  TenKMCP
-CP1 Chi phí bồi thường, hỗ trợ, tái định cư
-CP101   Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác
-CP102   Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất
-CP103   Chi phí tái định cư
-CP104   Chi phí tổ chức bồi thường, hỗ trợ và tái định cư
-CP105   Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng
-CP106   Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng
-CP107   Chi phí đầu tư vào đất
-CP199   Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ và tái định cư
-CP2 Chi phí xây dựng hoặc xây lắp
-CP202   Chi phí xây dựng hoặc xây lắp công trình chính
-CP203   Chi phí xây dựng hoặc xây lắp công trình chính và phụ
-CP204   Chi phí xây dựng hoặc xây lắp điều chỉnh
-CP205   Chi phí xây dựng hoặc xây lắp trước thuế
-CP206   Chi phí xây dựng hoặc xây lắp sau thuế
-CP207   Chi phí xây dựng hoặc xây lắp công trình phụ
-CP250   Chi phí xây dựng hoặc xây lắp khác
-CP3 Chi phí thiết bị
-CP4 Chi phí quản lý dự án
-CP5 Chi phí tư vấn đầu tư xây dựng
-CP501   Chi phí lập báo cáo nghiên cứu tiền khả thi
-CP502   Chi phí lập báo cáo nghiên cứu khả thi
-CP503   Chi phí lập báo cáo kinh tế - kỹ thuật
-CP50301 Chi phí lập dự án đầu tư
-CP504   Chi phí thiết kế xây dựng
-CP5041  Chi phí thiết kế kỹ thuật
-CP505   Chi phí thiết kế bản vẽ thi công
-CP50530 Chi phí lập thiết kế bản vẽ thi công - dự toán
-CP506   Chi phí lập nhiệm vụ khảo sát xây dựng
-CP507   Chi phí thẩm tra báo cáo kinh tế - kỹ thuật
-CP508   Chi phí thẩm tra báo cáo nghiên cứu khả thi
-CP509   Chi phí thẩm tra thiết kế xây dựng
-CP510   Chi phí thẩm tra dự toán xây dựng
-CP511   Chi phí lập hồ sơ mời thầu, đánh giá hồ sơ dự thầu tư vấn
-CP512   Chi phí lập hồ sơ mời thầu tư vấn
-CP513   Chi phí đánh giá hồ sơ dự thầu tư vấn
-CP514   Chi phí lập hồ sơ mời thầu, đánh giá hồ sơ dự thầu thi công xây dựng
-CP515   Chi phí lập hồ sơ mời thầu thi công xây dựng
-CP516   Chi phí đánh giá hồ sơ dự thầu thi công xây dựng
-CP517   Chi phí lập hồ sơ mời thầu, đánh giá hồ sơ dự thầu mua sắm vật tư, thiết bị
-CP518   Chi phí lập hồ sơ mời thầu mua sắm vật tư, thiết bị
-CP519   Chi phí đánh giá hồ sơ dự thầu mua sắm vật tư, thiết bị
-CP520   Chi phí giám sát thi công xây dựng
-CP521   Chi phí giám sát lắp đặt thiết bị
-CP522   Chi phí giám sát công tác khảo sát xây dựng
-CP523   Chi phí quy đổi vốn đầu tư xây dựng
-CP526   Phí thẩm định hồ sơ mời thầu
-CP527   Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi
-CP528   Chi phí khảo sát xây dựng
-CP532   Phí thẩm định hồ sơ mời thầu gói thầu thi công xây dựng
-CP533   Phí thẩm định hồ sơ mời thầu gói thầu lắp đặt thiết bị
-CP534   Phí thẩm định hồ sơ mời thầu gói thầu tư vấn đầu tư xây dựng
-CP535   Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng
-CP536   Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị
-CP537   Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng
-CP538   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu xây lắp
-CP539   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu lắp đặt thiết bị
-CP540   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng
-CP541   Phí thẩm định hồ sơ mời thầu, đánh giá kết quả lựa chọn nhà thầu
-CP551   Chi phí khảo sát, thiết kế BVTC - DT
-CP552   Chi phí nhiệm vụ thử tỉnh cọc
-CP553   Công tác điều tra, đo đạt và thu thập số liệu
-CP554   Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng
-CP556   Chi phí thẩm tra an toàn giao thông
-CP557   Chi phí thử tĩnh
-CP558   Chi phí công bố quy hoạch
-CP559   Chi phí thử tải cừ tràm
-CP560   Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu
-CP561   Chi phí cắm mốc ranh giải phóng mặt bằng
-CP562   Chi phí lập đồ án quy hoạch
-CP56201 Chi phí khảo sát địa chất
-CP563   Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án
-CP56301 Chi phí khảo sát địa hình
-CP564   Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án
-CP56401 Chi phí khảo sát địa, địa hình
-CP565   Chi phí lập kế hoạch bảo vệ môi trường
-CP566   Chi phí lập báo cáo đánh giá tác động môi trường
-CP567   Chi phí thí nghiệm chuyên ngành xây dựng
-CP568   Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1
-CP569   Chi phí chỉ đạo thể hiện phần mỹ thuật
-CP570   Chi phí nội đồng nghệ thuật
-CP571   Chi phí sáng tác mẫu phác thảo tượng đài
-CP572   Chi phí hoạt động của Hội đồng nghệ thuật
-CP57301 Chi phí kiểm định theo yêu cầu chủ đầu tư
-CP574   Chi phí tư vấn thẩm tra dự toán
-CP575   Chi phí thẩm định dự toán giá gói thầu
-CP577   Chi phí lập hồ sơ điều chỉnh dự toán
-CP578   Chi phí chuyển giao công nghệ
-CP579   Chi phí thẩm định giá
-CP580   Chi phí tư vấn giám sát
-CP58001 Chi phí tư vấn giám sát di dời điện
-CP58002 Chi phí tư vấn giám sát di dời cáp quang
-CP58003 Chi phí tư vấn giám sát di dời đường ống nước
-CP58004 Chi phí tư vấn giám sát khảo sát địa chất
-CP58005 Chi phí tư vấn giám sát khảo sát địa hình
-CP58006 Chi phí tư vấn giám sát khảo sát và cắm mốc
-CP58007 Chi phí tư vấn giám sát khoan địa chất
-CP58008 Chi phí tư vấn giám sát rà phá bom mìn, vật nổ
-CP58009 Chi phí tư vấn giám sát, đánh giá đầu tư
-CP581   Chi phí báo cáo giám sát đánh giá đầu tư
-CP582   Chi phí thẩm tra thiết kế BVTC-DT
-CP58220 Chi phí thẩm tra thiết kế BVTC
-CP583   Tư vấn đầu tư xây dựng
-CP584   Chi phí đăng báo đấu thầu
-CP599   Chi phí đo đạc thu hồi đất
-CP6 Chi phí khác
-CP601   Phí thẩm định dự án đầu tư xây dựng
-CP602   Phí thẩm định dự toán xây dựng
-CP603   Chi phí rà phá bom mìn, vật nổ
-CP604   Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy
-CP605   Chi phí thẩm định giá thiết bị
-CP606   Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở
-CP607   Chi phí thẩm tra, phê duyệt quyết toán
-CP608   Chi phí kiểm tra công tác nghiệm thu
-CP609   Chi phí kiểm toán độc lập
-CP60902 Chi phí kiểm toán công trình
-CP610   Chi phí bảo hiểm
-CP611   Chi phí thẩm định báo cáo đánh giá tác động môi trường
-CP612   Chi phí bảo hành, bảo trì
-CP613   Phí bảo vệ môi trường
-CP614   Chi phí di dời điện
-CP61401 Chi phí di dời hệ thống điện chiếu sáng
-CP61402 Chi phí di dời đường dây hạ thế
-CP61403 Chi phí di dời nhà
-CP61404 Chi phí di dời nước
-CP61405 Chi phí di dời trụ điện trong trường
-CP615   Phí thẩm tra di dời điện
-CP617   Chi phí đo đạc địa chính
-CP61701 Chi phí đo đạc bản đồ địa chính
-CP61702 Chi phí đo đạc lập bản đồ địa chính GPMB
-CP61703 Chi phí đo đạc, đền bù GPMB
-CP61704 Chi phí đo đạc thu hồi đất
-CP61820 Chi phí tổ chức kiểm tra công tác nghiệm thu
-CP619   Chi phí lán trại
-CP620   Chi phí đảm bảo giao thông
-CP621   Chi phí điều tiết giao thông
-CP62101 Chi phí điều tiết giao thông khác
-CP622   Chi phí một số công tác không xác định số lượng từ thiết kế
-CP623   Chi phí thẩm định thiết kế bản vẽ thi công
-CP624   Chi phí nhà tạm
-CP62501 Chi phí giám sát đánh giá đầu tư
-CP626   Chi phí thẩm định kết quả lựa chọn nhà thầu
-CP62701 Chi phí khoan địa chất
-CP628   Chi phí thẩm định đồ án quy hoạch
-CP629   Chi phí thẩm định HSMT, HSYC
-CP630   Lệ phí thẩm tra thiết kế
-CP631   Phí thẩm định lựa chọn nhà thầu
-CP632   Chi phí thẩm tra quyết toán
-CP633   Chi phí thẩm định phê duyệt quyết toán
-CP634   Chi phí thẩm định báo cáo nghiên cứu khả thi
-CP699   Chi phí khác
-CP7 Chi phí dự phòng
-CP702   Chi phí dự phòng cho yếu tố trược giá
 
-### Yêu cầu nhiệm vụ:
-1. Tìm kiếm trong danh sách chi phí chuẩn (gồm cả tên nhóm và tên con chi tiết) mục có ý nghĩa tương đồng cao nhất với từng dòng chi phí trên.
-2. Kết quả đầu ra chuỗi json duy nhất với các trường thông tin
-- STT: STT của bảng DuLieuChiTiet
-- TenKMCP: Tên khoản mục gốc trước khi ánh xạ
-- TenKMCP_Moi: Tên khoản mục sau khi ánh xạ
-- MaKMCP: Mã KMCP dược ánh xạ giữa 2 bảng
-- GhiChu: Giải thích vì sao lại ánh xạ như vậy (trong ghi chú không chứa ký tự đặc biệt)
-**ĐIỀU KIỆN BẮT BUỘC:**
-- Chỉ chọn một MaKMCP có ý nghĩa gần nhất và phù hợp nhất cho mỗi khoản mục
-- Không được chọn nhiều hơn một mã KMCP cho một dòng
-- Không được suy diễn vượt quá ý nghĩa của cụm từ gốc
-- Ưu tiên nhóm chính trước, nếu không khớp thì tìm trong nhóm con
-- Các trường thông tin trong json KHÔNG gán ký tự đặc biệt
+#### Bảng 2 - Danh mục chuẩn chi phí (`DanhMucChuan`)
+- Gồm các cột:
+  - `MaKMCP`: mã khoản mục chuẩn
+  - `TenKMCP`: tên khoản mục chi phí chuẩn
+  - `TuKhoaGoiY`: Từ khoá gợi ý
+| MaKMCP  | TenKMCP                                                                                                                     | TuKhoaGoiY                                                                                                                   |
+| ------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| CP101   | Chi phí bồi thường về đất, nhà, công trình trên đất, các tài sản gắn liền với đất, trên mặt nước và chi phí bồi thường khác | mặt, nước, về, chi, đất, liền, bồi, trình, các, gắn, thường, công, sản, Chi, nhà, tài, phí, trên, khác, với, và              |
+| CP102   | Chi phí các khoản hỗ trợ khi nhà nước thu hồi đất                                                                           | khi, phí, Chi, trợ, nước, đất, nhà, các, hồi, thu, hỗ, khoản                                                                 |
+| CP103   | Chi phí tái định cư                                                                                                         | phí, tái, Chi, định, cư                                                                                                      |
+| CP104   | Chi phí tổ chức bồi thường, hỗ trợ, tái định cư                                                                             | thường, phí, tái, Chi, trợ, tổ, bồi, chức, định, cư, hỗ                                                                      |
+| CP105   | Chi phí sử dụng đất, thuê đất tính trong thời gian xây dựng                                                                 | sử, phí, gian, dụng, Chi, xây, đất, tính, thời, thuê, trong, dựng                                                            |
+| CP106   | Chi phí di dời, hoàn trả cho phần hạ tầng kỹ thuật đã được đầu tư xây dựng phục vụ giải phóng mặt bằng                      | mặt, phần, di, bằng, xây, hoàn, cho, hạ, tư, trả, Chi, phóng, giải, được, kỹ, dời, dựng, phí, thuật, tầng, phục, đã, vụ, đầu |
+| CP107   | Chi phí đầu tư vào đất                                                                                                      | phí, Chi, đất, vào, tư, đầu                                                                                                  |
+| CP199   | Chi phí khác có liên quan đến công tác bồi thường, hỗ trợ, tái định cư                                                      | thường, công, phí, tái, Chi, đến, trợ, khác, tác, quan, bồi, định, có, cư, hỗ, liên                                          |
+| CP2     | Chi phí xây dựng                                                                                                            | phí, Chi, xây, dựng                                                                                                          |
+| CP221   | Chi phí xây dựng phát sinh                                                                                                  | phí, Chi, phát, xây, sinh, dựng                                                                                              |
+| CP222   | Chi phí xây dựng trước thuế                                                                                                 | thuế, phí, Chi, xây, dựng, trước                                                                                             |
+| CP223   | Chi phí xây dựng sau thuế                                                                                                   | thuế, phí, Chi, sau, xây, dựng                                                                                               |
+| CP224   | Chi phí xây dựng công trình phụ                                                                                             | công, phí, Chi, xây, phụ, trình, dựng                                                                                        |
+| CP225   | Chi phí xây dựng công trình chính                                                                                           | công, phí, Chi, xây, trình, chính, dựng                                                                                      |
+| CP226   | Chi phí xây dựng điều chỉnh                                                                                                 | phí, Chi, xây, điều, dựng, chỉnh                                                                                             |
+| CP227   | Chi phí xây dựng công trình chính và phụ                                                                                    | công, phí, Chi, xây, phụ, trình, và, chính, dựng                                                                             |
+| CP228   | Chi phí xây dựng khác                                                                                                       | phí, Chi, xây, khác, dựng                                                                                                    |
+| CP3     | Chi phí thiết bị                                                                                                            | phí, bị, Chi, thiết                                                                                                          |
+| CP321   | Chi phí thiết bị phát sinh                                                                                                  | phí, Chi, phát, sinh, bị, thiết                                                                                              |
+| CP4     | Chi phí quản lý dự án                                                                                                       | quản, phí, án, Chi, dự, lý                                                                                                   |
+| CP421   | Chi phí quản lý dự án phát sinh                                                                                             | quản, phí, án, Chi, phát, dự, sinh, lý                                                                                       |
+| CP5     | Chi phí tư vấn đầu tư xây dựng                                                                                              | phí, Chi, xây, vấn, tư, dựng, đầu                                                                                            |
+| CP501   | Chi phí lập báo cáo nghiên cứu tiền khả thi                                                                                 | lập, cáo, phí, Chi, khả, nghiên, tiền, thi, cứu, báo                                                                         |
+| CP502   | Chi phí lập báo cáo nghiên cứu khả thi                                                                                      | lập, cáo, phí, Chi, khả, nghiên, thi, cứu, báo                                                                               |
+| CP503   | Chi phí lập báo cáo kinh tế - kỹ thuật                                                                                      | lập, cáo, phí, Chi, tế, thuật, kinh, kỹ, báo                                                                                 |
+| CP50301 | Chi phí lập dự án đầu tư                                                                                                    | lập, phí, án, Chi, dự, tư, đầu                                                                                               |
+| CP504   | Chi phí thiết kế xây dựng                                                                                                   | phí, Chi, xây, kế, dựng, thiết                                                                                               |
+| CP50411 | Chi phí thiết kế xây dựng (Phát sinh)                                                                                       | phí, Chi, xây, sinh, kế, Phát, dựng, thiết                                                                                   |
+| CP50420 | Chi phí thiết kế kỹ thuật                                                                                                   | phí, Chi, thuật, kế, kỹ, thiết                                                                                               |
+| CP50431 | Chi phí thiết kế kỹ thuật (Phát sinh)                                                                                       | phí, Chi, thuật, Phát, sinh, kế, kỹ, thiết                                                                                   |
+| CP505   | Chi phí thiết kế bản vẽ thi công                                                                                            | bản, phí, công, Chi, kế, vẽ, thi, thiết                                                                                      |
+| CP50511 | Chi phí thiết kế bản vẽ thi công (Phát sinh)                                                                                | bản, phí, công, Chi, Phát, sinh, kế, vẽ, thi, thiết                                                                          |
+| CP50530 | Chi phí lập thiết kế bản vẽ thi công - dự toán                                                                              | lập, bản, phí, công, Chi, toán, dự, kế, vẽ, thi, thiết                                                                       |
+| CP50541 | Chi phí lập thiết kế bản vẽ thi công - dự toán (Phát sinh)                                                                  | lập, bản, phí, công, Chi, toán, Phát, dự, sinh, kế, vẽ, thi, thiết                                                           |
+| CP506   | Chi phí lập nhiệm vụ khảo sát xây dựng                                                                                      | lập, phí, Chi, xây, nhiệm, vụ, khảo, dựng, sát                                                                               |
+| CP50602 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                            | lập, cáo, phí, Chi, nhiệm, khả, nghiên, vụ, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                      |
+| CP50603 | Chi phí lập nhiệm vụ khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                  | lập, cáo, phí, Chi, nhiệm, khả, NCKT, nghiên, vụ, thi, khảo, cứu, Bước, báo, sát                                             |
+| CP50604 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                  | lập, bản, phí, công, Chi, nhiệm, TKBVTC, kế, vẽ, vụ, thi, khảo, Bước, thiết, sát                                             |
+| CP50605 | Chi phí lập nhiệm vụ khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                     | lập, bản, phí, công, Chi, toán, nhiệm, dự, TKBVTCDT, kế, vẽ, vụ, thi, khảo, Bước, thiết, sát                                 |
+| CP507   | Chi phí thẩm tra báo cáo kinh tế - kỹ thuật                                                                                 | cáo, phí, Chi, tế, thuật, thẩm, tra, kinh, kỹ, báo                                                                           |
+| CP508   | Chi phí thẩm tra báo cáo nghiên cứu khả thi                                                                                 | cáo, phí, Chi, thẩm, tra, khả, nghiên, thi, cứu, báo                                                                         |
+| CP509   | Chi phí thẩm tra thiết kế xây dựng                                                                                          | phí, Chi, xây, thẩm, tra, kế, dựng, thiết                                                                                    |
+| CP50911 | Chi phí thẩm tra thiết kế xây dựng (Phát sinh)                                                                              | phí, Chi, xây, thẩm, tra, sinh, kế, Phát, dựng, thiết                                                                        |
+| CP510   | Chi phí thẩm tra dự toán xây dựng                                                                                           | phí, Chi, xây, toán, dự, thẩm, tra, dựng                                                                                     |
+| CP51011 | Chi phí thẩm tra dự toán xây dựng (Phát sinh)                                                                               | phí, Chi, xây, toán, dự, thẩm, tra, sinh, Phát, dựng                                                                         |
+| CP511   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá hồ sơ dự thầu (hồ sơ đề xuât) tư vấn                                   | lập, đề, phí, Chi, sơ, giá, xuât, hồ, thầu, mời, dự, vấn, tư, yêu, đánh, cầu                                                 |
+| CP512   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) tư vấn                                                                           | lập, phí, Chi, sơ, vấn, hồ, thầu, mời, tư, yêu, cầu                                                                          |
+| CP513   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn                                                                       | đề, phí, xuất, Chi, sơ, giá, vấn, hồ, thầu, dự, tư, đánh                                                                     |
+| CP51311 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) tư vấn (Phát sinh)                                                           | đề, phí, xuất, Chi, sơ, giá, vấn, hồ, thầu, dự, sinh, tư, đánh, Phát                                                         |
+| CP514   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng                                                             | lập, công, phí, Chi, xây, giá, HSYC, HSĐX, HSMT, đánh, thi, dựng, HSDT                                                       |
+| CP51411 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) thi công xây dựng (Phát sinh)                                                 | lập, công, phí, Chi, xây, giá, HSYC, Phát, HSĐX, sinh, HSMT, đánh, thi, dựng, HSDT                                           |
+| CP515   | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng                                                                | lập, công, phí, Chi, sơ, xây, hồ, thầu, mời, yêu, thi, cầu, dựng                                                             |
+| CP51511 | Chi phí lập hồ sơ mời thầu (hồ sơ yêu cầu) thi công xây dựng (Phát sinh)                                                    | lập, công, phí, Chi, sơ, xây, hồ, thầu, mời, Phát, sinh, yêu, thi, cầu, dựng                                                 |
+| CP516   | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng                                                            | đề, phí, xuất, Chi, sơ, công, giá, xây, hồ, thầu, dự, đánh, thi, dựng                                                        |
+| CP51611 | Chi phí đánh giá hồ sơ dự thầu (hồ sơ đề xuất) thi công xây dựng (Phát sinh)                                                | đề, phí, xuất, Chi, sơ, công, giá, xây, hồ, thầu, Phát, dự, sinh, đánh, thi, dựng                                            |
+| CP517   | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                      | lập, phí, Chi, giá, HSYC, sắm, vật, mua, HSĐX, HSMT, tư, đánh, bị, HSDT, thiết                                               |
+| CP51711 | Chi phí lập HSMT (HSYC), đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                          | lập, phí, Chi, giá, HSYC, sắm, vật, mua, HSĐX, sinh, HSMT, tư, đánh, Phát, bị, HSDT, thiết                                   |
+| CP518   | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị                                                                            | lập, phí, Chi, sắm, HSYC, vật, mua, HSMT, tư, bị, thiết                                                                      |
+| CP51811 | Chi phí lập HSMT (HSYC) mua sắm vật tư, thiết bị (Phát sinh)                                                                | lập, phí, Chi, sắm, HSYC, vật, mua, sinh, HSMT, tư, Phát, bị, thiết                                                          |
+| CP519   | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị                                                                       | phí, Chi, giá, sắm, vật, mua, HSĐX, tư, đánh, bị, HSDT, thiết                                                                |
+| CP51911 | Chi phí đánh giá HSDT (HSĐX) mua sắm vật tư, thiết bị (Phát sinh)                                                           | phí, Chi, giá, sắm, vật, mua, HSĐX, sinh, tư, đánh, Phát, bị, HSDT, thiết                                                    |
+| CP520   | Chi phí giám sát thi công xây dựng                                                                                          | công, phí, Chi, xây, thi, dựng, giám, sát                                                                                    |
+| CP52099 | Chi phí giám sát thi công xây dựng (Phát sinh)                                                                              | công, phí, Chi, xây, Phát, sinh, thi, dựng, giám, sát                                                                        |
+| CP521   | Chi phí giám sát lắp đặt thiết bị                                                                                           | phí, Chi, lắp, đặt, bị, giám, thiết, sát                                                                                     |
+| CP52111 | Chi phí giám sát lắp đặt thiết bị (Phát sinh)                                                                               | phí, Chi, lắp, đặt, sinh, Phát, bị, giám, thiết, sát                                                                         |
+| CP522   | Chi phí giám sát công tác khảo sát xây dựng                                                                                 | công, phí, Chi, xây, tác, khảo, dựng, giám, sát                                                                              |
+| CP523   | Chi phí quy đổi vốn đầu tư xây dựng                                                                                         | phí, Chi, xây, đổi, quy, tư, vốn, dựng, đầu                                                                                  |
+| CP526   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu)                                                                                | sơ, Phí, hồ, thầu, mời, thẩm, định, yêu, cầu                                                                                 |
+| CP527   | Chi phí thẩm tra báo cáo nghiên cứu tiền khả thi                                                                            | cáo, phí, Chi, thẩm, tra, khả, nghiên, tiền, thi, cứu, báo                                                                   |
+| CP528   | Chi phí khảo sát xây dựng                                                                                                   | phí, Chi, xây, khảo, dựng, sát                                                                                               |
+| CP52802 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                         | lập, cáo, phí, Chi, khả, nghiên, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                                 |
+| CP52803 | Chi phí khảo sát (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                               | lập, cáo, phí, Chi, khả, NCKT, nghiên, thi, khảo, cứu, Bước, báo, sát                                                        |
+| CP52804 | Chi phí khảo sát (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                                 | lập, cáo, phí, Chi, tế, thuật, kinh, kỹ, KTKT, khảo, Bước, báo, sát                                                          |
+| CP52805 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công (TKBVTC))                                                               | lập, bản, phí, công, Chi, TKBVTC, kế, vẽ, thi, khảo, Bước, thiết, sát                                                        |
+| CP52806 | Chi phí khảo sát (Bước lập thiết kế bản vẽ thi công - dự toán (TKBVTC-DT))                                                  | lập, bản, phí, công, Chi, toán, dự, TKBVTCDT, kế, vẽ, thi, khảo, Bước, thiết, sát                                            |
+| CP532   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu thi công xây dựng                                                     | công, sơ, xây, Phí, hồ, thầu, mời, thẩm, định, yêu, thi, cầu, gói, dựng                                                      |
+| CP533   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu lắp đặt thiết bị                                                      | sơ, Phí, hồ, thầu, mời, lắp, đặt, thẩm, định, thiết, yêu, bị, cầu, gói                                                       |
+| CP534   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu) gói thầu tư vấn đầu tư xây dựng                                                | sơ, xây, vấn, Phí, hồ, thầu, mời, thẩm, định, tư, yêu, cầu, đầu, gói, dựng                                                   |
+| CP535   | Phí thẩm định kết quả lựa chọn nhà thầu thi công xây dựng                                                                   | công, lựa, xây, Phí, thầu, nhà, thẩm, định, chọn, kết, thi, quả, dựng                                                        |
+| CP536   | Phí thẩm định kết quả lựa chọn nhà thầu lắp đặt thiết bị                                                                    | lựa, Phí, thầu, nhà, lắp, đặt, thẩm, định, chọn, bị, kết, quả, thiết                                                         |
+| CP537   | Phí thẩm định kết quả lựa chọn nhà thầu tư vấn đầu tư xây dựng                                                              | lựa, xây, vấn, Phí, thầu, nhà, thẩm, định, chọn, tư, kết, quả, dựng, đầu                                                     |
+| CP538   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) xây lắp                    | giá, mời, lắp, xuất, lựa, sơ, xây, định, quả, đề, hồ, nhà, đánh, kết, Phí, thầu, thẩm, chọn, yêu, cầu                        |
+| CP539   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) lắp đặt thiết bị           | giá, mời, lắp, xuất, lựa, sơ, đặt, định, quả, bị, thiết, đề, hồ, nhà, đánh, kết, Phí, thầu, thẩm, chọn, yêu, cầu             |
+| CP540   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất) tư vấn đầu tư xây dựng     | giá, mời, xuất, lựa, sơ, xây, vấn, định, tư, quả, đề, hồ, nhà, đánh, kết, dựng, Phí, thầu, thẩm, chọn, yêu, cầu, đầu         |
+| CP541   | Phí thẩm định hồ sơ mời thầu (hồ sơ yêu cầu), đánh giá kết quả lựa chọn nhà thầu (hồ sơ đề xuất)                            | đề, lựa, xuất, sơ, giá, Phí, hồ, thầu, mời, nhà, thẩm, định, chọn, yêu, đánh, kết, quả, cầu                                  |
+| CP551   | Chi phí khảo sát, thiết kế                                                                                                  | phí, Chi, kế, khảo, thiết, sát                                                                                               |
+| CP552   | Chi phí nhiệm vụ thử tỉnh cọc                                                                                               | tỉnh, phí, Chi, cọc, nhiệm, thử, vụ                                                                                          |
+| CP553   | Công tác điều tra, đo đạt và thu thập số liệu                                                                               | đo, đạt, số, liệu, tác, tra, Công, thập, điều, thu, và                                                                       |
+| CP554   | Chi phí kiểm tra và chứng nhận sự phù hợp về chất lượng công trình xây dựng                                                 | phù, phí, công, Chi, xây, sự, hợp, về, chất, nhận, tra, lượng, trình, kiểm, chứng, và, dựng                                  |
+| CP556   | Chi phí thẩm tra an toàn giao thông                                                                                         | thông, phí, Chi, an, toàn, thẩm, tra, giao                                                                                   |
+| CP557   | Chi phí thử tĩnh                                                                                                            | tĩnh, phí, Chi, thử                                                                                                          |
+| CP558   | Chi phí công bố quy hoạch                                                                                                   | công, phí, bố, Chi, hoạch, quy                                                                                               |
+| CP559   | Chi phí thử tải cừ tràm                                                                                                     | tràm, phí, Chi, cừ, thử, tải                                                                                                 |
+| CP560   | Chi phí kiểm định chất lượng phục vụ công tác nghiệm thu                                                                    | công, phí, nghiệm, Chi, chất, tác, lượng, định, phục, vụ, thu, kiểm                                                          |
+| CP561   | Chi phí cắm mốc ranh giải phóng mặt bằng                                                                                    | mặt, phí, mốc, Chi, ranh, giải, phóng, bằng, cắm                                                                             |
+| CP56111 | Chi phí lập đồ án quy hoạch                                                                                                 | lập, phí, án, Chi, hoạch, đồ, quy                                                                                            |
+| CP56201 | Chi phí khảo sát địa chất                                                                                                   | phí, Chi, chất, địa, khảo, sát                                                                                               |
+| CP56202 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                | lập, cáo, phí, Chi, chất, khả, địa, nghiên, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                      |
+| CP56203 | Chi phí khảo sát địa chất (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      | lập, cáo, phí, Chi, chất, khả, NCKT, địa, nghiên, thi, khảo, cứu, Bước, báo, sát                                             |
+| CP56204 | Chi phí khảo sát địa chất (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        | lập, cáo, phí, Chi, tế, chất, thuật, địa, kinh, kỹ, KTKT, khảo, Bước, báo, sát                                               |
+| CP56205 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        | lập, bản, phí, công, Chi, chất, BVTC, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                               |
+| CP56206 | Chi phí khảo sát địa chất (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           | lập, bản, phí, công, Chi, chất, toán, dự, BVTCDT, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                   |
+| CP563   | Chi phí thẩm tra tính hiệu quả, tính khả thi của dự án                                                                      | phí, án, Chi, dự, tính, thẩm, tra, khả, hiệu, thi, quả, của                                                                  |
+| CP56301 | Chi phí khảo sát địa hình                                                                                                   | phí, Chi, hình, địa, khảo, sát                                                                                               |
+| CP56302 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu tiền khả thi (NCTKT))                                                | lập, cáo, phí, Chi, hình, khả, địa, nghiên, tiền, thi, NCTKT, khảo, cứu, Bước, báo, sát                                      |
+| CP56303 | Chi phí khảo sát địa hình (Bước lập báo cáo nghiên cứu khả thi (NCKT))                                                      | lập, cáo, phí, Chi, hình, khả, NCKT, địa, nghiên, thi, khảo, cứu, Bước, báo, sát                                             |
+| CP56304 | Chi phí khảo sát địa hình (Bước lập báo cáo kinh tế kỹ thuật (KTKT))                                                        | lập, cáo, phí, Chi, hình, tế, thuật, địa, kinh, kỹ, KTKT, khảo, Bước, báo, sát                                               |
+| CP56305 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công (BVTC))                                                        | lập, bản, phí, công, Chi, hình, BVTC, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                               |
+| CP56306 | Chi phí khảo sát địa hình (Bước lập thiết kế bản vẽ thi công - dự toán (BVTC-DT))                                           | lập, bản, phí, công, Chi, hình, toán, dự, BVTCDT, địa, kế, vẽ, thi, khảo, Bước, thiết, sát                                   |
+| CP564   | Tư vấn lập văn kiện dự án và các báo cáo thành phần của dự án                                                               | lập, cáo, án, kiện, vấn, phần, văn, Tư, dự, các, của, thành, và, báo                                                         |
+| CP56401 | Chi phí khảo sát địa hình, địa hình                                                                                         | phí, Chi, hình, địa, khảo, sát                                                                                               |
+| CP565   | Chi phí lập kế hoạch bảo vệ môi trường                                                                                      | lập, phí, bảo, Chi, hoạch, môi, kế, trường, vệ                                                                               |
+| CP566   | Chi phí lập báo cáo đánh giá tác động môi trường                                                                            | lập, cáo, phí, Chi, giá, tác, động, môi, đánh, trường, báo                                                                   |
+| CP567   | Chi phí thí nghiệm đối chứng, kiểm định xây dựng, thử nghiệm khả năng chịu lực của công trình                               | công, phí, nghiệm, Chi, thí, xây, năng, chịu, lực, đối, thử, định, khả, trình, kiểm, chứng, dựng, của                        |
+| CP568   | Chi phí chuẩn bị đầu tư ban đầu sáng tác thi tuyển mẫu phác thảo bước 1                                                     | phí, Chi, mẫu, phác, bước, tác, sáng, thảo, 1, tư, ban, thi, tuyển, chuẩn, bị, đầu                                           |
+| CP569   | Chi phí chỉ đạo thể hiện phần mỹ thuật                                                                                      | mỹ, phí, đạo, Chi, thuật, hiện, phần, thể, chỉ                                                                               |
+| CP570   | Chi phí nội đồng nghệ thuật                                                                                                 | phí, Chi, thuật, đồng, nội, nghệ                                                                                             |
+| CP571   | Chi phí sáng tác mẫu phác thảo tượng đài                                                                                    | phí, Chi, mẫu, phác, đài, tác, sáng, thảo, tượng                                                                             |
+| CP572   | Chi phí hoạt động của Hội đồng nghệ thuật                                                                                   | phí, Chi, thuật, đồng, động, Hội, hoạt, nghệ, của                                                                            |
+| CP573   | Chi phí giám sát thi công xây dựng phát sinh                                                                                | công, phí, Chi, xây, phát, sinh, thi, dựng, giám, sát                                                                        |
+| CP57301 | Chi phí kiểm định theo yêu cầu chủ đầu tư                                                                                   | theo, phí, Chi, định, tư, yêu, kiểm, cầu, đầu, chủ                                                                           |
+| CP574   | Chi phí tư vấn thẩm tra dự toán                                                                                             | phí, Chi, vấn, toán, dự, thẩm, tra, tư                                                                                       |
+| CP57401 | Chi phí thẩm tra dự toán phát sinh                                                                                          | phí, Chi, phát, toán, dự, thẩm, tra, sinh                                                                                    |
+| CP575   | Chi phí thẩm định dự toán giá gói thầu                                                                                      | phí, Chi, giá, toán, thầu, dự, thẩm, định, gói                                                                               |
+| CP577   | Chi phí lập hồ sơ điều chỉnh dự toán                                                                                        | lập, phí, Chi, sơ, toán, hồ, dự, điều, chỉnh                                                                                 |
+| CP578   | Chi phí chuyển giao công nghệ                                                                                               | công, phí, Chi, chuyển, nghệ, giao                                                                                           |
+| CP579   | Chi phí thẩm định giá                                                                                                       | phí, Chi, giá, thẩm, định                                                                                                    |
+| CP580   | Chi phí tư vấn giám sát                                                                                                     | phí, Chi, vấn, tư, giám, sát                                                                                                 |
+| CP581   | Chi phí báo cáo giám sát đánh giá đầu tư                                                                                    | cáo, phí, Chi, đầu, giá, tư, đánh, giám, báo, sát                                                                            |
+| CP582   | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT)                                                               | bản, phí, công, Chi, toán, dự, thẩm, tra, BVTCDT, kế, vẽ, thi, thiết                                                         |
+| CP58211 | Chi phí thẩm tra thiết kế bản vẽ thi công - dự toán (BVTC-DT) (Phát sinh)                                                   | bản, phí, công, Chi, toán, Phát, dự, thẩm, tra, sinh, BVTCDT, kế, vẽ, thi, thiết                                             |
+| CP58220 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC)                                                                            | bản, phí, công, Chi, thẩm, tra, BVTC, kế, vẽ, thi, thiết                                                                     |
+| CP58231 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC) (Phát sinh)                                                                | bản, phí, công, Chi, Phát, thẩm, tra, BVTC, sinh, kế, vẽ, thi, thiết                                                         |
+| CP583   | Tư vấn đầu tư xây dựng                                                                                                      | xây, vấn, Tư, tư, dựng, đầu                                                                                                  |
+| CP584   | Chi phí đăng báo đấu thầu                                                                                                   | phí, Chi, thầu, đăng, đấu, báo                                                                                               |
+| CP599   | Chi phí đo đạc thu hồi đất                                                                                                  | đo, phí, Chi, đất, thu, hồi, đạc                                                                                             |
+| CP6     | Chi phí khác                                                                                                                | khác, phí, Chi                                                                                                               |
+| CP601   | Phí thẩm định dự án đầu tư xây dựng                                                                                         | án, xây, Phí, dự, thẩm, định, tư, dựng, đầu                                                                                  |
+| CP602   | Phí thẩm định dự toán xây dựng                                                                                              | xây, Phí, toán, dự, thẩm, định, dựng                                                                                         |
+| CP603   | Chi phí rà phá bom mìn, vật nổ                                                                                              | phí, phá, rà, Chi, vật, mìn, nổ, bom                                                                                         |
+| CP604   | Phí thẩm định phê duyệt thiết kế về phòng cháy và chữa cháy                                                                 | về, Phí, chữa, phòng, thẩm, phê, định, cháy, kế, duyệt, và, thiết                                                            |
+| CP605   | Chi phí thẩm định giá thiết bị                                                                                              | phí, Chi, giá, thẩm, định, bị, thiết                                                                                         |
+| CP606   | Phí thẩm định thiết kế xây dựng triển khai sau thiết kế cơ sở                                                               | khai, xây, sau, Phí, sở, thẩm, triển, định, kế, cơ, dựng, thiết                                                              |
+| CP607   | Chi phí thẩm tra, phê duyệt quyết toán                                                                                      | phí, Chi, toán, quyết, thẩm, phê, tra, duyệt                                                                                 |
+| CP608   | Chi phí kiểm tra công tác nghiệm thu                                                                                        | công, phí, nghiệm, Chi, tác, tra, thu, kiểm                                                                                  |
+| CP609   | Chi phí kiểm toán độc lập                                                                                                   | lập, phí, Chi, toán, độc, kiểm                                                                                               |
+| CP60902 | Chi phí kiểm toán công trình                                                                                                | công, phí, Chi, toán, trình, kiểm                                                                                            |
+| CP60999 | Chi phí kiểm toán độc lập (Phát sinh)                                                                                       | lập, phí, Chi, toán, sinh, Phát, độc, kiểm                                                                                   |
+| CP610   | Chi phí bảo hiểm                                                                                                            | hiểm, phí, Chi, bảo                                                                                                          |
+| CP61099 | Chi phí bảo hiểm (Phát sinh)                                                                                                | phí, bảo, Chi, Phát, sinh, hiểm                                                                                              |
+| CP611   | Chi phí thẩm định báo cáo đánh giá tác động môi trường                                                                      | cáo, phí, Chi, giá, tác, thẩm, động, định, môi, đánh, trường, báo                                                            |
+| CP612   | Chi phí bảo hành, bảo trì                                                                                                   | trì, phí, hành, Chi, bảo                                                                                                     |
+| CP613   | Phí bảo vệ môi trường                                                                                                       | bảo, Phí, môi, trường, vệ                                                                                                    |
+| CP614   | Chi phí di dời điện                                                                                                         | phí, Chi, dời, điện, di                                                                                                      |
+| CP61401 | Chi phí di dời hệ thống điện chiếu sáng                                                                                     | phí, thống, Chi, sáng, hệ, chiếu, dời, điện, di                                                                              |
+| CP61402 | Chi phí di dời đường dây hạ thế                                                                                             | phí, Chi, đường, thế, dây, hạ, dời, di                                                                                       |
+| CP61403 | Chi phí di dời nhà                                                                                                          | phí, Chi, nhà, dời, di                                                                                                       |
+| CP61404 | Chi phí di dời nước                                                                                                         | phí, Chi, nước, dời, di                                                                                                      |
+| CP61405 | Chi phí di dời trụ điện trong trường                                                                                        | phí, Chi, trụ, trường, dời, điện, di, trong                                                                                  |
+| CP615   | Phí thẩm tra di dời điện                                                                                                    | Phí, thẩm, tra, dời, điện, di                                                                                                |
+| CP616   | Chi phí hạng mục chung                                                                                                      | mục, phí, Chi, hạng, chung                                                                                                   |
+| CP617   | Chi phí đo đạc địa chính                                                                                                    | đo, phí, Chi, địa, chính, đạc                                                                                                |
+| CP61701 | Chi phí đo đạc bản đồ địa chính                                                                                        | đo, đô, Chi, chinh, ban, phi, đạc, đia                                                                                       |
+| CP61702 | Chi phí đo đạc lập bản đồ địa chính giải phóng mặt bằng (GPMB)                                                              | đo, lập, phí, bản, Chi, phóng, giải, mặt, bằng, GPMB, đồ, địa, chính, đạc                                                    |
+| CP61703 | Chi phí đo đạc, đền bù giải phóng mặt bằng (GPMB)                                                                           | đo, mặt, phí, GPMB, Chi, bù, giải, phóng, bằng, đền, đạc                                                                     |
+| CP61704 | Chi phí đo đạc thu hồi đất                                                                                                  | đo, phí, Chi, đất, thu, hồi, đạc                                                                                             |
+| CP61820 | Chi phí tổ chức kiểm tra công tác nghiệm thu                                                                                | công, phí, nghiệm, Chi, tác, tổ, chức, tra, thu, kiểm                                                                        |
+| CP619   | Chi phí lán trại                                                                                                            | lán, phí, trại, Chi                                                                                                          |
+| CP620   | Chi phí đảm bảo giao thông                                                                                                  | thông, phí, bảo, Chi, đảm, giao                                                                                              |
+| CP621   | Chi phí điều tiết giao thông                                                                                                | thông, phí, Chi, điều, giao, tiết                                                                                            |
+| CP62101 | Chi phí điều tiết giao thông khác                                                                                           | thông, phí, Chi, khác, điều, giao, tiết                                                                                      |
+| CP622   | Chi phí một số công tác không xác định số lượng từ thiết kế                                                                 | công, phí, số, Chi, tác, từ, lượng, định, xác, kế, một, không, thiết                                                         |
+| CP623   | Chi phí thẩm định thiết kế bản vẽ thi công, lệ phí thẩm định báo cáo kinh tế kỹ thuật (KTKT)                                | bản, phí, công, Chi, cáo, tế, kỹ, thuật, thẩm, định, báo, kế, vẽ, kinh, thi, KTKT, lệ, thiết                                 |
+| CP624   | Chi phí nhà tạm                                                                                                             | phí, Chi, nhà, tạm                                                                                                           |
+| CP62501 | Chi phí giám sát đánh giá đầu tư                                                                                            | phí, Chi, đầu, giá, tư, đánh, giám, sát                                                                                      |
+| CP626   | Chi phí thẩm định kết quả lựa chọn nhà thầu                                                                                 | phí, lựa, Chi, thầu, nhà, thẩm, định, chọn, kết, quả                                                                         |
+| CP62701 | Chi phí khoan địa chất                                                                                                      | phí, Chi, chất, địa, khoan                                                                                                   |
+| CP628   | Chi phí thẩm định đồ án quy hoạch                                                                                           | phí, án, Chi, hoạch, đồ, thẩm, quy, định                                                                                     |
+| CP629   | Chi phí thẩm định HSMT (HSYC)                                                                                               | phí, Chi, HSYC, thẩm, HSMT, định                                                                                             |
+| CP630   | Lệ phí thẩm tra thiết kế                                                                                                    | phí, Lệ, thẩm, tra, kế, thiết                                                                                                |
+| CP631   | Phí thẩm định lựa chọn nhà thầu                                                                                             | lựa, Phí, thầu, nhà, thẩm, định, chọn                                                                                        |
+| CP632   | Chi phí thẩm tra quyết toán                                                                                                 | phí, Chi, toán, quyết, thẩm, tra                                                                                             |
+| CP633   | Chi phí thẩm định phê duyệt quyết toán                                                                                      | phí, Chi, toán, quyết, thẩm, phê, định, duyệt                                                                                |
+| CP634   | Chi phí thẩm định báo cáo nghiên cứu khả thi                                                                                | cáo, phí, Chi, thẩm, định, khả, nghiên, thi, cứu, báo                                                                        |
+| CP699   | Chi phí khác                                                                                                                | khác, phí, Chi                                                                                                               |
+| CP7     | Chi phí dự phòng                                                                                                            | dự, phí, Chi, phòng                                                                                                          |
+| CP701   | Chi phí dự phòng cho khối lượng, công việc phát sinh                                                                        | việc, công, phí, Chi, phát, cho, dự, phòng, sinh, lượng, khối                                                                |
+| CP702   | Chi phí dự phòng cho yếu tố trược giá                                                                                       | phí, Chi, giá, cho, dự, phòng, tố, yếu, trược                                                                                |
+| CP703   | Chi phí dự phòng phát sinh khối lượng (cho yếu tố khối lượng phát sinh (KLPS))                                              | phí, Chi, KLPS, phát, cho, dự, phòng, sinh, lượng, khối, tố, yếu                                                             |
+
+### Kết quả trả về:
+Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các trường sau:
+```json
+{
+  "TenKMCP": "<tên khoản mục thực tế>",
+  "TenKMCP_Moi": "<tên khoản mục chuẩn>",
+  "MaKMCP": "<mã khoản mục chuẩn>",
+  "GhiChu": "<tỷ lệ tương đồng hoặc ghi chú ánh xạ thủ công theo nghiệp vụ>"
+}
+```
+
 """
-        
         # Gọi OpenAI API để xử lý
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         response = client.chat.completions.create(
@@ -1164,8 +2072,7 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
             messages=[
                 {
                     "role": "system",
-                    "content": """Bạn là một trợ lý AI chuyên nghiệp trong việc ánh xạ và phân loại thông tin.
-                    Kết quả trả về PHẢI là một JSON"""
+                    "content": """Bạn là một chuyên gia về lĩnh vực Đầu tư xây dựng cơ bản. Bạn chuyên ánh xạ tương đồng nội dung (từ ngữ tương đồng, ý nghĩa tương đồng)"""
                 },
                 {
                     "role": "user",
@@ -1173,13 +2080,17 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 }
             ],
             temperature=0,
-            #response_format={"type": "json_object"},
-            seed=42  # Thêm seed để đảm bảo tính nhất quán
+            max_completion_tokens=5000
         )
-        #print(promt_anh_xa_noi_dung_tuong_dong)
+        print("+"*20+"promt_anh_xa_noi_dung_tuong_dong")
+        print(promt_anh_xa_noi_dung_tuong_dong)
+        print("+"*20)
         try:
             # Xử lý response từ OpenAI
             response_text = response.choices[0].message.content
+            print("===response_text anh_xa_noi_dung===")
+            print(response_text)
+            print("===end response_text anh_xa_noi_dung===")
             if response_text.strip().startswith("```json"):
                 response_text = response_text.strip()[7:-3].strip()
             elif response_text.strip().startswith("```"):
@@ -1190,32 +2101,200 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
 
             # Lấy ra list từ key "results"
             result_list = dataJson
-            # print("result_list>>>>>>>>")
-            # print(result_list)
             # Chuyển đổi list trở lại thành chuỗi JSON
             new_response_text = json.dumps(result_list, indent=4, ensure_ascii=False)
-            #print(new_response_text)
             # Chuyển đổi response thành DataFrame
-            dfBangDuLieuChiTietAI = pd.read_json(new_response_text)
-            # print("\nDữ liệu BangDuLieuChiTietAI:")
-            # print("=" * 80)
+            dfBangGhepKMCP = pd.read_json(new_response_text)
+            # Thực hiện cập nhật dữ liệu vào database
+            # Sắp xếp DataFrame theo cột TenKMCP_Moi tăng dần
+            dfBangGhepKMCP = dfBangGhepKMCP.sort_values(by='TenKMCP_Moi', ascending=True)
+            
+            #print(dfBangGhepKMCP)
+
+            # Duyệt qua từng dòng trong DataFrame để xử lý trường hợp GhiChu='Không có thông tin'
+            for index, row in dfBangGhepKMCP.iterrows():
+                if row['GhiChu'] == 'KHÔNG TÌM ĐƯỢC':
+                    dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
+                    dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
+            
+            #print(dfBangGhepKMCP)
+
+            query_van_ban = f"""
+            select 
+            BangDuLieuChiTietAIID = convert(nvarchar(36), BangDuLieuChiTietAIID)
+            , VanBanAIID = convert(nvarchar(36), VanBanAIID)
+            , TenKMCP, TenKMCP_AI, MaKMCP='', GhiChuAI='', 
+            HinhThucLCNT=isnull(HinhThucLCNT, ''),
+            PhuongThucLCNT=isnull(PhuongThucLCNT, ''),
+            LoaiHopDong=isnull(LoaiHopDong, ''),
+            HinhThucDThID = convert(nvarchar(36), HinhThucDThID), 
+            PhuongThucDThID = convert(nvarchar(36), PhuongThucDThID), 
+            LoaiHopDongID = convert(nvarchar(36), LoaiHopDongID)
+            from dbo.BangDuLieuChiTietAI ct 
+            where VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), DuAnID)='{duAnID}' and vb.TenLoaiVanBan IN ('QDPD_CT', 'QDPDDT_CBDT', 'QDPD_DA', 'QDPD_DT_THDT', 'QDPD_KHLCNT_CBDT','QDPD_KHLCNT_THDT')
+                and isnull(TrangThai, 0) = 0)  -- các văn bản chưa insert vào csdl
+            """
+            #print(query_van_ban)
+            dfBangDuLieuChiTietAI = lay_du_lieu_tu_sql_server(query_van_ban)
+
+            # Duyệt qua từng dòng trong dfBangDuLieuChiTietAI
+            for index, row in dfBangDuLieuChiTietAI.iterrows():
+                # Tìm dòng tương ứng trong dfBangGhepKMCP có TenKMCP trùng khớp
+                matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'].str.lower() == row['TenKMCP'].lower()]
+                # Nếu tìm thấy dòng tương ứng
+                if not matching_row.empty:
+                    # Cập nhật TenKMCP_AI trong dfBangDuLieuChiTietAI
+                    dfBangDuLieuChiTietAI.at[index, 'TenKMCP_AI'] = matching_row.iloc[0]['TenKMCP_Moi']
+
+            # print("-0"*20)
+            # print(dfBangDuLieuChiTietAI)
+            # print("-0"*20)
+
+            # Lọc ra danh sách distinct theo VanBanAIID
+            dfDistinctVanBanAIID = dfBangDuLieuChiTietAI.drop_duplicates(subset=['VanBanAIID'])
+            chuoi_kmcp_khong_ghep_duoc = []
+            kmcp_ghep_duoc = []
+            # Duyệt qua từng phần tử trong dfDistinctVanBanAIID
+            for _, row in dfDistinctVanBanAIID.iterrows():
+                van_ban_id = row['VanBanAIID']
+                # Lọc dữ liệu từ dfBangDuLieuChiTietAI theo VanBanAIID
+                df_filtered = dfBangDuLieuChiTietAI[dfBangDuLieuChiTietAI['VanBanAIID'] == van_ban_id]
+                # print(f"\nDữ liệu cho VanBanAIID: {van_ban_id}")
+                # print(df_filtered)
+                # Duyệt qua từng dòng trong df_filtered
+                for idx, filtered_row in df_filtered.iterrows():
+                    # Tìm dòng tương ứng trong dfBangGhepKMCP có TenKMCP trùng khớp
+                    matching_row = dfBangGhepKMCP[dfBangGhepKMCP['TenKMCP'].str.lower() == filtered_row['TenKMCP'].lower()]
+                    # Nếu tìm thấy dòng tương ứng
+                    if not matching_row.empty:
+                        # Cập nhật TenKMCP_AI trong df_filtered
+                        df_filtered.at[idx, 'TenKMCP_AI'] = matching_row.iloc[0]['TenKMCP_Moi']
+                        df_filtered.at[idx, 'MaKMCP'] = matching_row.iloc[0]['MaKMCP']
+                        df_filtered.at[idx, 'GhiChuAI'] = matching_row.iloc[0]['GhiChu']
+                
+                # Cập nhật lại dfBangDuLieuChiTietAI với dữ liệu đã được xử lý
+                dfBangDuLieuChiTietAI.update(df_filtered)
+                # Duyệt qua từng dòng trong df_filtered
+                for idx, row in df_filtered.iterrows():
+                    # Kiểm tra xem có nhiều hơn 1 dòng có cùng TenKMCP_Moi không
+                    if df_filtered[df_filtered['TenKMCP_AI'] == row['TenKMCP_AI']].shape[0] > 1:
+                        # Lưu lại BangDuLieuChiTietAIID của dòng hiện tại
+                        bang_du_lieu_id = row['BangDuLieuChiTietAIID']
+                        if str(row['MaKMCP']).strip() == "":
+                            continue
+                        # Truy vấn CSDL để tìm các KMCP khác có tên bắt đầu bằng TenKMCP_AI hiện tại
+                        query_kmcp = f"""
+                        SELECT MaKMCP, TenKMCP 
+                        FROM dbo.KMCP 
+                        WHERE TenKMCP LIKE N'{row['TenKMCP_AI']}%' 
+                        AND TenKMCP <> N'{row['TenKMCP_AI']}'
+                        ORDER BY LEN(TenKMCP), TenKMCP
+                        """
+                        df_kmcp = lay_du_lieu_tu_sql_server(query_kmcp)
+                        
+                        if not df_kmcp.empty:
+                            # Lấy tất cả các dòng có cùng TenKMCP_AI
+                            duplicate_rows = df_filtered[df_filtered['TenKMCP_AI'].str.lower() == row['TenKMCP_AI'].lower()]
+                            
+                            # Duyệt qua từng dòng trùng lặp và gán KMCP khác nhau
+                            for i, (_, duplicate_row) in enumerate(duplicate_rows.iterrows()):
+                                if i < len(df_kmcp):
+                                    # Cập nhật dòng trùng lặp với tên KMCP mới từ CSDL
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'TenKMCP_AI'] = df_kmcp.iloc[i]['TenKMCP']
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'MaKMCP'] = df_kmcp.iloc[i]['MaKMCP']
+                                else:
+                                    # Nếu hết KMCP để gán, thêm số thứ tự vào tên
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'TenKMCP_AI'] = f"{row['TenKMCP_AI']} ({i+1})"
+                                    df_filtered.loc[df_filtered['BangDuLieuChiTietAIID'] == duplicate_row['BangDuLieuChiTietAIID'], 'MaKMCP'] = f"{row['MaKMCP']}_{i+1}"
+
+                #print(f"\nDữ liệu cho VanBanAIID: {van_ban_id}")
+                #print(df_filtered)
+                
+                for index, row in df_filtered.iterrows():
+                    #print(row)
+                    if str(row['MaKMCP']).strip() == "":
+                        chuoi_kmcp_khong_ghep_duoc.append({'TenKMCP': str(row['TenKMCP']).strip()})
+                    else:
+                        kmcp_ghep_duoc.append(row)
+                    query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), CoCauVonID=(select top 1 CoCauVonID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), GhiChuAI=N'{}' where BangDuLieuChiTietAIID=N'{}'".format(
+                        row['TenKMCP_AI'],
+                        row['MaKMCP'].replace("'", ""),
+                        row['MaKMCP'].replace("'", ""),
+                        row['GhiChuAI'].replace("'", ""),
+                        row['BangDuLieuChiTietAIID']
+                    )
+
+                    # print(f"Executing SQL query: {query_insert}")
+                    thuc_thi_truy_van(query_insert)
+
+            # Duyệt từng dòng trong dfBangDuLieuChiTietAI
+            # print("\n=== Chi tiết dữ liệu trong dfBangDuLieuChiTietAI ===")
             # for index, row in dfBangDuLieuChiTietAI.iterrows():
             #     print(f"\nDòng {index + 1}:")
             #     for column in dfBangDuLieuChiTietAI.columns:
             #         print(f"{column}: {row[column]}")
-            #     print("-" * 40)
-            # print("=" * 80)
-            # Thực hiện cập nhật dữ liệu vào database
+            #     print("-" * 50)
+            # print("\n=== Kết thúc chi tiết dữ liệu ===\n")
             for index, row in dfBangDuLieuChiTietAI.iterrows():
-                query_insert = "Update dbo.BangDuLieuChiTietAi set TenKMCP_AI=N'{}', KMCPID=(select top 1 KMCPID from dbo.KMCP Km where replace(Km.MaKMCP, '.', '')=replace(N'{}', '.', '')), GhiChuAI=N'{}' where STT=N'{}'".format(
-                    row['TenKMCP_Moi'],
-                    row['MaKMCP'].replace("'", ""),
-                    row['GhiChu'].replace("'", ""),
-                    row['STT']
-                )
+                # print(f"Row data: {row}")
+                # Xử lý PhuongThucLCNT
+                if str(row['PhuongThucLCNT']).strip() != "":
+                    result_pt = await find_content_similarity(loaiDuLieu='phuongthucdth', duLieuCanTim=row['PhuongThucLCNT'])
+                    # Chuyển đổi JSONResponse thành dict trước khi serialize
+                    if isinstance(result_pt, JSONResponse):
+                        result_pt = result_pt.body.decode('utf-8')
+                        result_pt = json.loads(result_pt)
+                    if result_pt.get('status') == 'success' and result_pt['data']['success'] == 1:
+                        phuong_thuc_id = result_pt['data']['results'][0]['PhuongThucDThID']
+                        query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET PhuongThucDThID = '{phuong_thuc_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
+                        # print(f"Executing SQL query: {query_update}")
+                        thuc_thi_truy_van(query_update)
 
-                print(f"Executing SQL query: {query_insert}")
-                thuc_thi_truy_van(query_insert)
+                # Xử lý LoaiHopDong
+                if str(row['LoaiHopDong']).strip() != "":
+                    result_lhd = await find_content_similarity(loaiDuLieu='loaihopdong', duLieuCanTim=row['LoaiHopDong'])
+                    # Chuyển đổi JSONResponse thành dict trước khi serialize
+                    if isinstance(result_lhd, JSONResponse):
+                        result_lhd = result_lhd.body.decode('utf-8')
+                        result_lhd = json.loads(result_lhd)
+                    if result_lhd.get('status') == 'success' and result_lhd['data']['success'] == 1:
+                        loai_hop_dong_id = result_lhd['data']['results'][0]['LoaiHopDongID']
+                        query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET LoaiHopDongID = '{loai_hop_dong_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
+                        # print(f"Executing SQL query: {query_update}")
+                        thuc_thi_truy_van(query_update)
+
+                # Xử lý HinhThucLCNT
+                if str(row['HinhThucLCNT']).strip() != "":
+                    result_ht = await find_content_similarity(loaiDuLieu='hinhthucdth', duLieuCanTim=row['HinhThucLCNT'])
+                    # Chuyển đổi JSONResponse thành dict trước khi serialize
+                    if isinstance(result_ht, JSONResponse):
+                        result_ht = result_ht.body.decode('utf-8')
+                        result_ht = json.loads(result_ht)
+                    if result_ht.get('status') == 'success' and result_ht['data']['success'] == 1:
+                        hinh_thuc_id = result_ht['data']['results'][0]['HinhThucDThID']
+                        query_update = f"UPDATE dbo.BangDuLieuChiTietAI SET HinhThucDThID = '{hinh_thuc_id}' WHERE BangDuLieuChiTietAIID = '{row['BangDuLieuChiTietAIID']}'"
+                        # print(f"Executing SQL query: {query_update}")
+                        thuc_thi_truy_van(query_update)
+            # print("=== Danh sách KMCP đã ghép được ===")
+            dataKMCP = []
+            for item in kmcp_ghep_duoc:
+                dataKMCP.append({
+                    'BangDuLieuChiTietAIID': str(item['BangDuLieuChiTietAIID']),
+                    'TenKMCP': item['TenKMCP'],
+                    'TenKMCP_AI': item['TenKMCP_AI'],
+                    'GhiChuAI': item['GhiChuAI']
+                })
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success", 
+                    "code": 200,
+                    "message": "Xử lý kết quả ánh xạ từ AI thành công",
+                    "data": dataKMCP,
+                    "not_standardized": chuoi_kmcp_khong_ghep_duoc
+                }
+            )
                 
         except Exception as e:
             return JSONResponse(
@@ -1224,167 +2303,10 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                     "status": "error",
                     "code": 500,
                     "message": "Lỗi khi xử lý kết quả ánh xạ từ AI",
-                    "detail": str(e)
+                    "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\nDòng bị lỗi: {traceback.format_exc()}"
                 }
             )
-        # print("\nDữ liệu VanBanAI:")
-        # print("=" * 80)
-        # for index, row in dfVanBanAI.iterrows():
-        #     print(f"\nDòng {index + 1}:")
-        #     for column in dfVanBanAI.columns:
-        #         print(f"{column}: {row[column]}")
-        #     print("-" * 40)
-        # print("=" * 80)
-        if not dfVanBanAI.empty:
-            for index, row in dfVanBanAI.iterrows():
-                van_ban_id = row['VanBanAIID']
-                ten_loai_van_ban = row['TenLoaiVanBan']
-                query_bangct = f"select BangDuLieuChiTietAIID=convert(nvarchar(36), BangDuLieuChiTietAIID), KMCPID=convert(nvarchar(36), KMCPID), TenKMCP_AI from dbo.BangDuLieuChiTietAI where VanBanAIID='{van_ban_id}'"
-                df_bang_ct = lay_du_lieu_tu_sql_server(query_bangct)
-                # Xử lý thêm dữ liệu vào NTsoftDocumentAI
-                # print("=================ten_loai_van_ban===============")
-                # print(ten_loai_van_ban)
 
-                # Xử lý LayMaDoiTuong -> Cho Cơ quan ban hành
-                ten_toi_tuong = row['CoQuanBanHanh']
-                la_ca_nhan = "0"
-                doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
-                try:
-                    query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_ToChuc=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
-                    thuc_thi_truy_van(query_update_doi_tuong)
-                except Exception as e:
-                    print(f"Lỗi khi cập nhật DoiTuongID_ToChuc: {str(e)}")
-                # Xử lý LayMaDoiTuong -> Cho Người ký
-                ten_toi_tuong = row['NguoiKy']
-                la_ca_nhan = "1"
-                doi_tuong_id = LayMaDoiTuong(don_vi_id, user_id, ten_toi_tuong, la_ca_nhan)
-                try:
-                    query_update_doi_tuong = f"update dbo.VanBanAI set DoiTuongID_CaNhan=N'{doi_tuong_id}' where VanBanAIID=N'{van_ban_id}'"
-                    thuc_thi_truy_van(query_update_doi_tuong)
-                except Exception as e:
-                    print(f"Lỗi khi cập nhật DoiTuongID_CaNhan: {str(e)}")
-
-                if f"[{ten_loai_van_ban}]" in "[QDPD_CT];[QDPD_DA]":    
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, TongMucDauTuKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriTMDTKMCP,GiaTriTMDTKMCP_DC,GiaTriTMDTKMCPTang,GiaTriTMDTKMCPGiam,TongMucDauTuKMCPID_goc)
-                            select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', TongMucDauTuKMCPID=newid()
-                            , KMCPID=N'{row2['KMCPID']}'
-                            , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            , N'{van_ban_id}'
-                            , TenKMCP=N'{row2['TenKMCP_AI']}'
-                            , GiaTriTMDTKMCP=(select GiaTriTMDTKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriTMDTKMCP_DC=(select GiaTriTMDTKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriTMDTKMCPTang=(select GiaTriTMDTKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriTMDTKMCPGiam=(select GiaTriTMDTKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
-                            ---------- Cập nhật giá trị văn bản
-                            update dbo.VanBanAI 
-                            set 
-                            GiaTri = (select GiaTriTMDTKMCP=isnull(sum(GiaTriTMDTKMCP), 0) from dbo.BangDuLieuChiTietAI ai where ai.VanBanAIID='{van_ban_id}') 
-                            where VanBanAIID='{van_ban_id}'
-                            """
-                            #print(f"Executing SQL query: {query_insert}")
-                            if thuc_thi_truy_van(query_insert) == False:
-                                print(f"Executing SQL query: {query_insert}")
-                if f"[{ten_loai_van_ban}]" in "[QDPDDT_CBDT];[QDPD_DT_THDT]":    
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI (BangDuLieuChiTietAIID, DuToanKMCPID, KMCPID,CoCauVonID,VanBanAIID,TenKMCP,GiaTriDuToanKMCP,GiaTriDuToanKMCP_DC,GiaTriDuToanKMCPTang,GiaTriDuToanKMCPGiam,TongMucDauTuKMCPID_goc)
-                            select 
-                              BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', DuToanKMCPID=newid()
-                            , KMCPID=N'{row2['KMCPID']}'
-                            , CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            , N'{van_ban_id}'
-                            , TenKMCP=N'{row2['TenKMCP_AI']}'
-                            , GiaTriDuToanKMCP=(select GiaTriDuToanKMCP from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCP_DC=(select GiaTriDuToanKMCP_DC from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCPTang=(select GiaTriDuToanKMCPTang from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , GiaTriDuToanKMCPGiam=(select GiaTriDuToanKMCPGiam from dbo.BangDuLieuChiTietAI ai where ai.BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}')
-                            , TongMucDauTuKMCPID_goc='00000000-0000-0000-0000-000000000000'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-
-                if f"[{ten_loai_van_ban}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID, TenKMCP, DauThauID, DauThauCTID,TenDauThau, GiaTriGoiThau, TenNguonVon, CoCauVonID
-                                ,LoaiGoiThauID,HinhThucDThID,PhuongThucDThID,LoaiHopDongID,ThoiGianToChuc,KeHoachThoiGianHopDong)
-                            SELECT
-                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}', DauThauID=newid(),
-                            DauThauCTID=newid(),
-                            TenDauThau,
-                            GiaTriGoiThau,
-                            TenNguonVon,
-                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
-                            LoaiGoiThauID=NULL, -- chưa xử lý
-                            HinhThucDThID=NULL, -- chưa xử lý
-                            PhuongThucDThID=NULL, -- chưa xử lý
-                            LoaiHopDongID=NULL, -- chưa xử lý
-                            ThoiGianToChuc=ThoiGianTCLCNT, -- chưa xử lý
-                            KeHoachThoiGianHopDong=ThoiGianTHHopDong
-                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-                if f"[{ten_loai_van_ban}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]": # sử dụng cho 2 giai đoạn CB và TH
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID,VanBanAIID,TenKMCP,TenDauThau,KeHoachThoiGianHopDong,LoaiHopDongID,GiaTrungThau, CoCauVonID)
-                            SELECT
-                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',TenDauThau,
-                            KeHoachThoiGianHopDong=ThoiGianTHHopDong,
-                            LoaiHopDongID=NULL, -- chưa xử lý
-                            GiaTrungThau, 
-                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}')
-                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-                if f"[{ten_loai_van_ban}]" in "[HOP_DONG]": # Hợp đồng mặc định là giai đoạn thực hiện
-                    if not df_bang_ct.empty:
-                        for _, row2 in df_bang_ct.iterrows():
-                            query_insert = f"""
-                            delete from dbo.NTSoftDocumentAI where BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}'
-                            ----------
-                            insert into dbo.NTSoftDocumentAI(BangDuLieuChiTietAIID, VanBanAIID, TenKMCP, HopDongCTID, DauThauCTID,GiaTriHopDong,CoCauVonID
-                                ,GiaTriHopDongTang,GiaTriHopDongGiam,DuToanKMCPID,KMCPID)
-                            SELECT
-                            BangDuLieuChiTietAIID=N'{row2['BangDuLieuChiTietAIID']}', N'{van_ban_id}', TenKMCP=N'{row2['TenKMCP_AI']}',HopDongCTID=newid(),
-                            DauThauCTID=NULL, -- khoá ngoại chưa xử lý
-                            GiaTriHopDong,
-                            CoCauVonID=(select CoCauVonID from dbo.KMCP km where km.KMCPID=N'{row2['KMCPID']}'),
-                            GiaTriHopDongTang, -- khoá ngoại chưa xử lý
-                            GiaTriHopDongGiam, -- khoá ngoại chưa xử lý
-                            DuToanKMCPID=NULL, -- khoá ngoại chưa xử lý
-                            KMCPID -- chưa xử lý
-                            FROM BangDuLieuChiTietAI ai where BangDuLieuChiTietAIID='{row2['BangDuLieuChiTietAIID']}'
-                            """
-                            print(f"Executing SQL query: {query_insert}")
-                            thuc_thi_truy_van(query_insert)
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "success",
-                "code": 200,
-                "message": "Đã làm đẹp dữ liệu văn bản",
-                "detail": ""
-            }
-        )
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -1392,287 +2314,70 @@ CP702   Chi phí dự phòng cho yếu tố trược giá
                 "status": "error",
                 "code": 500,
                 "message": "Lỗi hệ thống",
-                "detail": str(e)
+                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
             }
         )
 
-@router.post("/image_extract_multi_azure_gemini")
-async def extract_multiple_images_azure_gemini(
-    files: List[UploadFile] = File(...)
-):
-    # Load require_fields from JSON file
-    try:
-        with open('data/require_fields.json', 'r', encoding='utf-8') as f:
-            require_fields = json.load(f)
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "code": 500,
-                "message": "Lỗi đọc file require_fields.json",
-                "detail": str(e)
-            }
-        )
-
-    # Print raw file data
-    print("\n=== Raw File Data ===")
-    for file in files:
-        print(f"\nFile: {file.filename}")
-        print(f"Content Type: {file.content_type}")
-        content = await file.read()
-        print(f"Size: {len(content)} bytes")
-        await file.seek(0)  # Reset file pointer
-    print("\n=== End Raw File Data ===\n")
-
-    # Initialize combined data
-    combined_data = {}
-        
-    # Process each file
-    for file in files:
-        try:
-            # Create a temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
-                content = await file.read()
-                temp_file.write(content)
-                temp_file.flush()
-
-                # Initialize the client
-                endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
-                key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
-                document_analysis_client = DocumentAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
-
-                # Start the document analysis
-                with open(temp_file.name, "rb") as f:
-                    poller = document_analysis_client.begin_analyze_document(
-                        "prebuilt-layout", document=f
-                    )
-                result = poller.result()
-
-                # Print OCR text content
-                print("\n=== Azure Form Recognizer OCR Text ===")
-                print(f"\nDocument: {temp_file.name}")
-                
-                # Collect all text content
-                full_text = ""
-                for page in result.pages:
-                    full_text += f"\nPage {page.page_number}:\n"
-                    for line in page.lines:
-                        full_text += line.content + "\n"
-                
-                print(full_text)
-                print("\n=== End OCR Text ===\n")
-
-                # Use Gemini to map text to required fields
-                try:
-                    # Prepare the prompt for Gemini
-                    prompt = f"""
-                    Extract and map information from the following OCR text to the specified fields.
-                    Return ONLY a JSON object with the following structure:
-                    {{
-                        "docId": "string or null",
-                        "arcDocCode": "string or null",
-                        "maintenance": "string or null",
-                        "typeName": "string or null",
-                        "codeNumber": "string or null",
-                        "codeNotation": "string or null",
-                        "issuedDate": "string or null",
-                        "organName": "string or null",
-                        "subject": "string or null",
-                        "language": "string or null",
-                        "numberOfPage": "string or null",
-                        "inforSign": "string or null",
-                        "keyword": "string or null",
-                        "mode": "string or null",
-                        "confidenceLevel": "string or null",
-                        "autograph": "string or null",
-                        "format": "string or null",
-                        "process": "string or null",
-                        "riskRecovery": "string or null",
-                        "riskRecoveryStatus": "string or null",
-                        "description": "string or null",
-                        "SignerTitle": "string or null",
-                        "SignerName": "string or null"
-                    }}
-
-                    Field definitions and extraction rules:
-                    {json.dumps(require_fields, ensure_ascii=False, indent=2)}
-
-                    General rules:
-                    1. Look for information based on the extraction rules specified in the field definition
-                    2. Pay attention to the location hints in the rules
-                    3. Use the provided keywords to identify relevant information
-                    4. Follow the specified format requirements
-                    5. Use the mapping tables when provided
-                    6. Use default values when specified
-                    7. Set to null if information cannot be found
-                    8. For dates, use DD/MM/YYYY format
-                    9. For numbers, remove thousand separators
-
-                    OCR Text:
-                    {full_text}
-
-                    Remember: Return ONLY the JSON object, no other text or explanation.
-                    """
-
-                    # Call Gemini API
-                    response = model.generate_content(prompt)
-                    response_text = response.text.strip()
-
-                    print("\n=== Mapped Fields ===")
-                    print(response_text)
-                    print("=== End Mapped Fields ===\n")
-
-                    try:
-                        # Clean up response text
-                        if response_text.strip().startswith("```json"):
-                            response_text = response_text.strip()[7:-3].strip()
-                        elif response_text.strip().startswith("```"):
-                            response_text = response_text.strip()[3:-3].strip()
-
-                        # Parse the response
-                        mapped_data = json.loads(response_text)
-                        
-                        # Validate required fields
-                        required_fields_list = [field["tenTruong"] for field in require_fields]
-                        for field in required_fields_list:
-                            if field not in mapped_data:
-                                mapped_data[field] = None
-                        
-                        # Update combined data with mapped fields
-                        for field, value in mapped_data.items():
-                            if field not in combined_data or combined_data[field] is None:
-                                combined_data[field] = value
-                            elif value is not None:
-                                combined_data[field] = value
-
-                    except json.JSONDecodeError as e:
-                        print(f"Error parsing JSON response: {str(e)}")
-                        print(f"Raw response: {response_text}")
-                        raise Exception("Invalid JSON response from Gemini")
-
-                except Exception as e:
-                    print(f"Error in Gemini mapping: {str(e)}")
-
-        except Exception as e:
-            print(f"Error processing file {file.filename}: {str(e)}")
-
-    # Return combined data
-    return {
-        "status": "success",
-        "data": combined_data
-    }
-
-@router.post("/document_extract")
-async def extract_document(
+# MÔ HÌNH AZURE
+@router.post("/image_extract_multi_azure")
+async def image_extract_multi_azure(
     files: List[UploadFile] = File(...),
-    file_type: str = Form(...),  # 'image' or 'pdf'
-    pages: Optional[str] = Form(None)  # Comma-separated list of page numbers for PDF
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
+    authorization: str = Header(...),
+    db: Session = Depends(get_db)
 ):
-    # Load require_fields from Markdown file
+    # Xác thực token
     try:
-        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
-            content = f.read()
+        #Kiểm tra header Authorization
+        if not authorization.startswith("Bearer "):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": 401,
+                    "message": "Token không hợp lệ",
+                    "detail": "Token phải bắt đầu bằng 'Bearer '"
+                }
+            )
             
-        # Parse markdown content to extract field information
-        require_fields = []
-        current_field = None
-        in_mapping_table = False
+        #Lấy token từ header
+        token = authorization.split(" ")[1]
+        # Giải mã token để lấy userID và donViID
+        token_data = decode_jwt_token(token)
+        user_id = token_data["userID"]
+        don_vi_id = token_data["donViID"]
         
-        for line in content.split('\n'):
-            line = line.strip()
-            if not line:  # Skip empty lines
-                continue
-                
-            # Check for field headers (## number. fieldName)
-            if line.startswith('## '):
-                if current_field:
-                    require_fields.append(current_field)
-                parts = line.split('. ', 1)  # Split only on first occurrence
-                if len(parts) == 2:
-                    field_name = parts[1].strip()
-                    current_field = {
-                        "tenTruong": field_name,
-                        "moTa": "",
-                        "extractionRules": {}
-                    }
-                    in_mapping_table = False
-                continue
-
-            # Check for description
-            if line.startswith('**Mô tả:**'):
-                if current_field:
-                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
-                continue
-
-            # Check for extraction rules section
-            if line.startswith('**Quy tắc trích xuất:**'):
-                continue
-
-            # Check for rule items
-            if line.startswith('- **'):
-                if current_field:
-                    parts = line.split(':**', 1)  # Split only on first occurrence
-                    if len(parts) == 2:
-                        key = parts[0].replace('- **', '').strip()
-                        value = parts[1].strip()
-                        current_field["extractionRules"][key] = value
-                continue
-
-            # Check for mapping table header
-            if '| Mã | Giá trị |' in line:
-                if current_field and 'mapping' not in current_field["extractionRules"]:
-                    current_field["extractionRules"]["mapping"] = {}
-                in_mapping_table = True
-                continue
-
-            # Check for mapping table rows
-            if in_mapping_table and line.startswith('|'):
-                if current_field:
-                    parts = [p.strip() for p in line.split('|')]
-                    if len(parts) >= 3:  # Ensure we have enough parts
-                        code = parts[1].strip()
-                        value = parts[2].strip()
-                        if code and value:  # Only add if both code and value exist
-                            current_field["extractionRules"]["mapping"][code] = value
-                continue
-
-            # Reset mapping table flag if we encounter a non-table line
-            if in_mapping_table and not line.startswith('|'):
-                in_mapping_table = False
-
-        # Add the last field if exists
-        if current_field:
-            require_fields.append(current_field)
-
-        if not require_fields:
-            raise ValueError("No fields were parsed from require_fields.md")
-            
+        #Thêm thông tin user vào request
+        request_data = {
+            "userID": user_id,
+            "donViID": don_vi_id
+        }
+        print(request_data)
     except Exception as e:
         return JSONResponse(
-            status_code=500,
+            status_code=401,
             content={
                 "status": "error",
-                "code": 500,
-                "message": "Lỗi đọc file require_fields.md",
-                "detail": f"Error parsing file: {str(e)}"
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
             }
         )
 
-    # Validate file type
-    if file_type not in ['image', 'pdf']:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "status": "error",
-                "code": 400,
-                "message": "Invalid file type",
-                "detail": "file_type must be either 'image' or 'pdf'"
-            }
-        )
-
-    # Validate files based on type
-    if file_type == 'image':
+    temp_files = []
+    all_data = []
+    try:
+        # Generate UUID only once and use it consistently
+        van_ban_id = str(uuid.uuid4())
+        bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
+        prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
+        print("======================prompt==================")
+        print(prompt)
+        print("======================end prompt==================")
+        #return
+        # Process each file
+        temp_files = []
         for file in files:
             if file.content_type not in ALLOWED_IMAGE_TYPES:
                 return JSONResponse(
@@ -1680,330 +2385,23 @@ async def extract_document(
                     content={
                         "status": "error",
                         "code": 400,
-                        "message": f"Invalid file type for {file.filename}",
-                        "detail": f"Expected image file, got {file.content_type}"
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
                     }
                 )
-    else:  # PDF
-        if len(files) > 1:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "code": 400,
-                    "message": "Only one PDF file can be uploaded at a time",
-                    "detail": "Multiple files are only allowed for images"
-                }
-            )
-        if files[0].content_type != ALLOWED_PDF_TYPE:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "code": 400,
-                    "message": "Invalid file type",
-                    "detail": "Expected PDF file"
-                }
-            )
+            # Tạo tên file tạm thời với timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Chuyển đổi tên file sang tiếng Việt không dấu
+            filename_no_accent = unidecode(file.filename)
+            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{filename_no_accent}")
+            temp_files.append(temp_file_path)
+            print(temp_file_path)
+            # Lưu file tạm thời
+            with open(temp_file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
 
-    # Parse pages parameter for PDF
-    selected_pages = None
-    if file_type == 'pdf' and pages:
-        try:
-            selected_pages = [int(p.strip()) for p in pages.split(',')]
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "code": 400,
-                    "message": "Invalid pages parameter",
-                    "detail": "Pages must be comma-separated numbers"
-                }
-            )
-
-    # Initialize combined data
-    combined_data = {}
-
-    try:
-        if file_type == 'image':
-            # Process each image file
-            for file in files:
-                await process_image_file(file, require_fields, combined_data)
-        else:
-            # Process PDF file
-            await process_pdf_file(files[0], selected_pages, require_fields, combined_data)
-
-        return {
-            "status": "success",
-            "data": combined_data
-        }
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "code": 500,
-                "message": "Error processing document",
-                "detail": str(e)
-            }
-        )
-
-def get_code_from_mapping(value: str, mapping_table: Dict[str, str]) -> str:
-    """Convert a value to its corresponding code from a mapping table"""
-    # Normalize the input value
-    value = value.strip().lower()
-    
-    # Try direct mapping
-    for code, mapped_value in mapping_table.items():
-        if mapped_value.lower() == value:
-            return code
-            
-    # If no direct match, return the original value
-    return value
-
-async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict):
-    """Process a single image file"""
-    try:
-        # Read file content
-        content = await file.read()
-        
-        # Convert image to base64
-        image_base64 = base64.b64encode(content).decode('utf-8')
-        
-        # Process with OpenAI
-        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an AI assistant that extracts information from documents according to the provided field definitions and rules. You MUST return a valid JSON object."
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Extract information from the following image according to these field definitions and rules:\n{json.dumps(require_fields, ensure_ascii=False, indent=2)}"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=4000,
-            temperature=0,
-            response_format={"type": "json_object"}
-        )
-
-        # Parse response
-        response_text = response.choices[0].message.content
-        
-        # Clean up response text
-        if response_text.strip().startswith("```json"):
-            response_text = response_text.strip()[7:-3].strip()
-        elif response_text.strip().startswith("```"):
-            response_text = response_text.strip()[3:-3].strip()
-
-        # Parse JSON response
-        data = json.loads(response_text)
-        
-        # Post-process fields with mapping tables
-        for field in require_fields:
-            field_name = field["tenTruong"]
-            if "extractionRules" in field and "mapping" in field["extractionRules"]:
-                if field_name in data and data[field_name]:
-                    data[field_name] = get_code_from_mapping(
-                        data[field_name], 
-                        field["extractionRules"]["mapping"]
-                    )
-        
-        # Update combined data
-        for key, value in data.items():
-            if key not in combined_data or not combined_data[key]:
-                combined_data[key] = value
-
-    except Exception as e:
-        raise Exception(f"Error processing image file {file.filename}: {str(e)}")
-
-async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], require_fields: List[Dict], combined_data: Dict):
-    """Process a PDF file"""
-    temp_file_path = None
-    doc = None
-    try:
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_file.flush()
-            temp_file_path = temp_file.name
-
-        # Read PDF pages
-        doc = fitz.open(temp_file_path)
-        total_pages = len(doc)
-
-        if selected_pages is None:
-            selected_pages = list(range(1, total_pages + 1))
-
-        # Process each selected page
-        for page_num in selected_pages:
-            if 1 <= page_num <= total_pages:
-                page = doc.load_page(page_num - 1)
-                
-                # Convert page to image
-                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
-                img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
-                
-                # Convert image to base64
-                buffered = BytesIO()
-                img.save(buffered, format="PNG")
-                image_base64 = base64.b64encode(buffered.getvalue()).decode()
-
-                # Process with OpenAI
-                client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": """You are an AI assistant that extracts information from documents. 
-                            For fields with mapping tables, you MUST return the CODE (not the value).
-                            For example, if the language is 'Tiếng Việt', return '01' instead.
-                            You MUST return a valid JSON object containing the mapped fields. 
-                            Do not include any other text or explanation in your response."""
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": f"""
-                                    Extract and map information from the following PDF page to the specified fields.
-                                    Return ONLY a JSON object with the following structure:
-                                    {{
-                                        "docId": "string or null",
-                                        "arcDocCode": "string or null",
-                                        "maintenance": "string or null",
-                                        "typeName": "string or null",
-                                        "codeNumber": "string or null",
-                                        "codeNotation": "string or null",
-                                        "issuedDate": "string or null",
-                                        "organName": "string or null",
-                                        "subject": "string or null",
-                                        "language": "string or null",
-                                        "numberOfPage": "string or null",
-                                        "inforSign": "string or null",
-                                        "keyword": "string or null",
-                                        "mode": "string or null",
-                                        "confidenceLevel": "string or null",
-                                        "autograph": "string or null",
-                                        "format": "string or null",
-                                        "process": "string or null",
-                                        "riskRecovery": "string or null",
-                                        "riskRecoveryStatus": "string or null",
-                                        "description": "string or null",
-                                        "SignerTitle": "string or null",
-                                        "SignerName": "string or null"
-                                    }}
-
-                                    Field definitions and extraction rules:
-                                    {json.dumps(require_fields, ensure_ascii=False, indent=2)}
-
-                                    IMPORTANT: For fields with mapping tables, return the CODE (not the value).
-                                    For example:
-                                    - For language: return '01' for 'Tiếng Việt', '02' for 'Tiếng Anh'
-                                    - For maintenance: return '01' for 'Vĩnh viễn', '02' for '70 năm'
-                                    - For typeName: return '01' for 'Nghị quyết', '02' for 'Quyết định'
-                                    - For mode: return '01' for 'Công khai', '02' for 'Sử dụng có điều kiện'
-                                    - For confidenceLevel: return '01' for 'Gốc điện tử', '02' for 'Số hóa'
-                                    - For format: return '01' for 'Tốt', '02' for 'Bình thường'
-                                    - For process: return '0' for 'Không có quy trình xử lý đi kèm', '1' for 'Có quy trình xử lý đi kèm'
-                                    - For riskRecovery: return '0' for 'Không', '1' for 'Có'
-                                    - For riskRecoveryStatus: return '01' for 'Đã dự phòng', '02' for 'Chưa dự phòng'
-                                    """
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/png;base64,{image_base64}"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=4000,
-                    temperature=0,
-                    response_format={"type": "json_object"}
-                )
-
-                # Parse response
-                response_text = response.choices[0].message.content
-                
-                # Clean up response text
-                if response_text.strip().startswith("```json"):
-                    response_text = response_text.strip()[7:-3].strip()
-                elif response_text.strip().startswith("```"):
-                    response_text = response_text.strip()[3:-3].strip()
-
-                # Parse JSON response
-                data = json.loads(response_text)
-                
-                # Post-process fields with mapping tables
-                for field in require_fields:
-                    field_name = field["tenTruong"]
-                    if "extractionRules" in field and "mapping" in field["extractionRules"]:
-                        if field_name in data and data[field_name]:
-                            data[field_name] = get_code_from_mapping(
-                                data[field_name], 
-                                field["extractionRules"]["mapping"]
-                            )
-                
-                # Update combined data
-                for key, value in data.items():
-                    if key not in combined_data or not combined_data[key]:
-                        combined_data[key] = value
-
-    except Exception as e:
-        raise Exception(f"Error processing PDF file {file.filename}: {str(e)}")
-    finally:
-        # Close the PDF document if it's open
-        if doc:
-            doc.close()
-        
-        # Delete the temporary file if it exists
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception as e:
-                print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
-
-@router.post("/image_extract_azure_mapping")
-async def extract_multiple_images_azure_mapping(
-    files: List[UploadFile] = File(...),
-    loaiVanBan: Optional[str] = None,
-    duAnID: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    temp_files = []
-    try:
-        # Get prompt from prompt service
-        prompt = prompt_service.get_prompt(loaiVanBan)
-        if not prompt:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "code": 400,
-                    "message": "Không tìm thấy prompt cho loại văn bản",
-                    "detail": f"Loại văn bản '{loaiVanBan}' không tồn tại trong hệ thống"
-                }
-            )
+        content_parts = [{"type": "text", "text": prompt}]
 
         # Process each file
         for file in files:
@@ -2039,17 +2437,21 @@ async def extract_multiple_images_azure_mapping(
                     for line in page.lines:
                         combined_text += line.content + "\n"
 
+
                 # Process tables if any
-                for table in result.tables:
-                    combined_text += "\nBảng:\n"
-                    for row_index in range(table.row_count):
-                        row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
-                        combined_text += " | ".join(row_cells) + "\n"
+                # for table in result.tables:
+                #     combined_text += "\nBảng:\n"
+                #     for row_index in range(table.row_count):
+                #         row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
+                #         combined_text += " | ".join(row_cells) + "\n"
 
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
                 continue
-
+        
+        print("&"*30)
+        print(combined_text)
+        print("&"*30)
         # Process extracted text with OpenAI
         try:
             # Prepare messages for OpenAI
@@ -2070,7 +2472,7 @@ async def extract_multiple_images_azure_mapping(
                     """
                 }
             ]
-
+            print(messages)
             # Call OpenAI API
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             response = client.chat.completions.create(
@@ -2090,30 +2492,438 @@ async def extract_multiple_images_azure_mapping(
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
 
-            # Parse JSON response
-            data = json.loads(response_text)
 
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "code": 200,
-                    "message": "Xử lý văn bản thành công",
-                    "data": data
+            print("+"*20)
+            print(response_text)
+            print("+"*20)
+
+            # Xử lý response
+            if "error" in response_text.lower() or "không thể" in response_text.lower():
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": "AI không thể nhận diện văn bản từ ảnh",
+                        "detail": response_text
+                    }
+                )
+            try:
+                data_json = json.loads(response_text)
+                #data_json = data_json["results"]
+                #print(data_json)
+            except json.JSONDecodeError as e:
+                if response_text.strip().startswith("<"):
+                    msg = "AI trả về HTML hoặc file không phải là ảnh văn bản."
+                elif len(response_text.strip()) < 30:
+                    msg = "Ảnh không chứa đủ thông tin văn bản hoặc quá mờ."
+                else:
+                    msg = "Kết quả trả về không đúng định dạng."
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": msg,
+                        "detail": str(e),
+                        "raw_response": response_text
+                    }
+                )
+            # Validate required fields in the response
+            query = """select NghiepVuID=ChucNangAIID, ThongTinChung from ChucNangAI where ChucNangAIID='"""+loaiVanBan+"""' order by STT"""
+            dfChucNang = lay_du_lieu_tu_sql_server(query)
+            # Lấy động các cột của bảng Thông tin chung cần lưu vào bản VanBanAI
+            required_fields = []
+            for _, row in dfChucNang.iterrows():
+                bang_du_lieu = row['ThongTinChung']
+                required_fields = bang_du_lieu.split(';')
+
+            # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
+            missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
+            if missing_fields:
+                print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
+                print(f"Thiếu các trường: {', '.join(missing_fields)}")
+
+            # Set UUIDs in the response data
+            data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+            data_json["VanBanID"] = van_ban_id
+
+            # Kiểm tra và chuyển đổi các giá trị tiền tệ trong ThongTinChung
+            for col in data_json["ThongTinChung"]:
+                #print("ThongTinChung: cột >>> ", col)
+                if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                    try:
+                        data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi chuyển đổi giá trị tiền tệ cho cột {col}:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Giá trị gốc: {data_json['ThongTinChung'][col]}\033[0m")
+            
+            #print("ThongTinChung >>> ", col)
+            #print(data_json["ThongTinChung"]);
+            # Convert currency values in the response
+
+            print("all_data")
+            print(all_data)
+            if "BangDuLieu" in data_json:
+                for item in data_json["BangDuLieu"]:
+                    try:
+                        # print("Kiểm tra van_ban_id: ", van_ban_id)
+                        item["VanBanID"] = van_ban_id
+                        # Convert all numeric values based on required columns
+                        for col in required_columns:
+                            # print("Cột kiểm tra:", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                item[col] = convert_currency_to_int(str(item[col]))
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                        print(f"\033[31m- Item gây lỗi: {json.dumps(item, ensure_ascii=False, indent=2)}\033[0m")
+            
+            # dữ liệu mặc định
+            van_ban_data = {
+                "VanBanAIID": van_ban_id,
+                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "TenLoaiVanBan": loaiVanBan,
+                "DuAnID": duAnID,
+                "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                "DataOCR": combined_text,
+                "TenFile": "*".join([d['filename'] for d in all_data])
+            }
+            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPDDT_CBDT];[QDPD_DT_THDT];[QDPD_DA]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
                 }
-            )
+            elif  f"[{loaiVanBan}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[HOP_DONG]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[PL_HOP_DONG]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""), # Tương đương Số phụ lục hợp đồng
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""), # Tương đương Số hợp đồng (gốc)
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[KLCVHT_THD]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "LanThanhToan": data_json["ThongTinChung"].get("LanThanhToan", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTriHopDong": data_json["ThongTinChung"].get("GiaTriHopDong", "0"),
+                    "TamUngChuaThuaHoi": data_json["ThongTinChung"].get("TamUngChuaThuaHoi", "0"),
+                    "ThanhToanDenCuoiKyTruoc": data_json["ThongTinChung"].get("ThanhToanDenCuoiKyTruoc", "0"),
+                    "LuyKeDenCuoiKy": data_json["ThongTinChung"].get("LuyKeDenCuoiKy", "0"),
+                    "ThanhToanThuHoiTamUng": data_json["ThongTinChung"].get("ThanhToanThuHoiTamUng", "0"),
+                    "GiaiNganKyNay": data_json["ThongTinChung"].get("GiaiNganKyNay", "0"),
+                    "TamUngGiaiNganKyNayKyTruoc": data_json["ThongTinChung"].get("TamUngGiaiNganKyNayKyTruoc", "0"),
+                    "ThanhToanKLHTKyTruoc": data_json["ThongTinChung"].get("ThanhToanKLHTKyTruoc", "0"),
+                    "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
+                    "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
+                    "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+            
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            van_ban_data["UserID"] = user_id
+            van_ban_data["DonViID"] = don_vi_id
+
+            
+
+            db_service = DatabaseService()
+            result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
+            
+            if not result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi lưu dữ liệu vào database",
+                        "detail": result.get("error", "Unknown error")
+                    }
+                )
+
+            # Insert BangDuLieu data if it exists
+            if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
+                bang_du_lieu_data = []
+                for item in data_json["BangDuLieu"]:
+                    bang_du_lieu_data.append({
+                        "VanBanAIID": van_ban_id,
+                        **{col: item.get(col, 0) for col in required_columns}
+                    })
+                bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
+                    db, 
+                    bang_du_lieu_data,
+                    required_columns
+                )
+                if not bang_du_lieu_result.get("success", False):
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "status": "error",
+                            "code": 500,
+                            "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
+                            "detail": bang_du_lieu_result.get("error", "Unknown error")
+                        }
+                    )
+            else:
+                print("Văn bản này không có chi tiết bảng dữ liệu")
+            # After successful processing and database operations
+            try:
+                # Get QLDA upload URL from environment
+                qlda_upload_url = os.getenv("API_URL_UPLOAD_QLDA")
+                if not qlda_upload_url:
+                    raise ValueError("Không tìm thấy API_URL_UPLOAD_QLDA trong file .env")
+
+                # Prepare files for upload to QLDA
+                files_data = []
+                for file in files:
+                    # Reset file pointer to beginning
+                    await file.seek(0)
+                    files_data.append(
+                        ("files", (file.filename, file.file, file.content_type))
+                    )
+
+                # Upload files to QLDA system
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{qlda_upload_url}/api/v1/Uploads/uploadMultipleFiles",
+                        files=files_data,
+                        headers={"Authorization": authorization}
+                    )
+                    
+                    if response.status_code != 200:
+                        return JSONResponse(
+                            status_code=500,
+                            content={
+                                "status": "error",
+                                "code": 500,
+                                "message": "Lỗi khi upload file lên hệ thống QLDA",
+                                "detail": response.text
+                            }
+                        )
+                    
+                    # Lấy response JSON từ API QLDA
+                    qlda_response = response.json()
+                    
+                    try:
+                        # Nối các đường dẫn file trong data thành 1 chuỗi, phân cách bằng dấu *
+                        string_url_qlda_response = '*'.join(qlda_response['data'])
+                        # Thực thi câu lệnh SQL để cập nhật tên file trong bảng VanBanAI
+                        update_query = text(f"""
+                            UPDATE dbo.VanBanAI 
+                            SET tenFile = N'{string_url_qlda_response}'
+                            WHERE VanBanAIID = N'{van_ban_id}'
+                        """)
+                        db.execute(update_query)
+                        db.commit()
+                    except Exception as e:
+                        db.rollback()
+                        raise Exception(f"Lỗi khi cập nhật tên file trong bảng VanBanAI: {str(e)}")
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success",
+                        "code": 200,
+                        "message": "Upload và xử lý nhiều file ảnh thành công",
+                        "data": {
+                            "files_processed": [{"filename": d['filename']} for d in all_data],
+                            "van_ban": data_json,
+                            "db_status": result.get("success", False),
+                            "db_message": result.get("message", ""),
+                            "qlda_upload_status": "success",
+                            "qlda_response": qlda_response
+                        }
+                    }
+                )
+
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi upload file lên hệ thống QLDA",
+                        "detail": str(e)
+                    }
+                )
 
         except Exception as e:
             return JSONResponse(
-                status_code=500,
+                status_code=400,
                 content={
                     "status": "error",
-                    "code": 500,
-                    "message": "Lỗi khi xử lý văn bản",
-                    "detail": str(e)
+                    "code": 400,
+                    "message": "Lỗi khi xử lý ảnh",
+                    "detail": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
                 }
             )
-
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -2125,11 +2935,287 @@ async def extract_multiple_images_azure_mapping(
             }
         )
     finally:
-        # Clean up temporary files
         for temp_file in temp_files:
             if os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
+                os.remove(temp_file)
 
+@router.get("/find_content_similarity")
+async def find_content_similarity(
+    loaiDuLieu: Optional[str] = None, # KMCP; NguonVon; HinhThucDTh; LoaiHopDong
+    duLieuCanTim: Optional[str] = None
+):
+    # print("loaiDuLieu:", loaiDuLieu)
+    # print("duLieuCanTim:", duLieuCanTim)
+    if loaiDuLieu.lower() == "kmcp":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select KMCPID, TenKMCP 
+            from dbo.KMCP 
+            order by TenKMCP
+            """
+
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "nguonvon":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select NguonVonID, TenNguonVon 
+            from dbo.NguonVon 
+            order by TenNguonVon
+            """
+            
+            # Thực thi truy vấn
+            nguonvon_data = lay_du_lieu_tu_sql_server(query)
+            
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, nguonvon_data, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+        
+    if loaiDuLieu.lower() == "phuongthucdth":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select PhuongThucDThID=convert(nvarchar(36), PhuongThucDThID), TenPhuongThucDTh from PhuongThucDTh
+            order by MaPhuongThucDTh
+            """
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            # VIET_TAT = {
+            #     "xskt": "Xổ số kiến thiết",
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                print("KẾT QUẢ TÌM KIẾM:  ", duLieuCanTim)
+                print(ket_qua_tim)
+                print("END KẾT QUẢ TÌM KIẾM")
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "loaigoithau":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select LoaiGoiThauID=convert(nvarchar(36), LoaiGoiThauID), TenLoaiGoiThau from LoaiGoiThau
+            order by MaLoaiGoiThau
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "hinhthucdth":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select HinhThucDThID=convert(nvarchar(36), HinhThucDThID), TenHinhThucDTh from HinhThucDTh
+            order by TenHinhThucDTh
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            
+            
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+    if loaiDuLieu.lower() == "loaihopdong":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = """
+            select LoaiHopDongID=convert(nvarchar(36), LoaiHopDongID), TenLoaiHopDong from LoaiHopDong order by TenLoaiHopDong
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            
+            # VIET_TAT = {
+            #     "xskt": "Xổ số kiến thiết",
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
