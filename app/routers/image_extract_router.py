@@ -36,6 +36,10 @@ import openpyxl
 from fastapi import UploadFile, File, HTTPException, Query, Depends, Form, Header
 import logging
 from tempfile import SpooledTemporaryFile
+from google.cloud import vision
+import io
+from pdf2image import convert_from_path
+import tempfile
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -3219,3 +3223,232 @@ async def find_content_similarity(
                     "detail": str(e)
                 }
             )
+
+@router.post("/document_extract_google_vision")
+async def document_extract_google_vision(
+    files: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Xác thực token
+    # try:
+    #     if not authorization.startswith("Bearer "):
+    #         return JSONResponse(
+    #             status_code=401,
+    #             content={
+    #                 "status": "error",
+    #                 "code": 401,
+    #                 "message": "Token không hợp lệ",
+    #                 "detail": "Token phải bắt đầu bằng 'Bearer '"
+    #             }
+    #         )
+    #     token = authorization.split(" ")[1]
+    #     token_data = decode_jwt_token(token)
+    #     user_id = token_data["userID"]
+    #     don_vi_id = token_data["donViID"]
+    #     print(f"Token validated for userID: {user_id}, donViID: {don_vi_id}")
+    # except Exception as e:
+    #     return JSONResponse(
+    #         status_code=401,
+    #         content={
+    #             "status": "error",
+    #             "code": 401,
+    #             "message": "Lỗi xác thực",
+    #             "detail": str(e)
+    #         }
+    #     )
+
+    # 2. Kiểm tra đường dẫn
+    if not os.path.exists(thuMuc):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": 400,
+                "message": "Đường dẫn không tồn tại",
+                "detail": f"Không tìm thấy đường dẫn: {thuMuc}"
+            }
+        )
+
+    # 3. Khởi tạo Google Cloud Vision client
+    try:
+        client = vision.ImageAnnotatorClient()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi khởi tạo Google Cloud Vision client",
+                "detail": str(e)
+            }
+        )
+
+    # 4. Xử lý các file trong thư mục
+    results = []
+    for root, dirs, files in os.walk(thuMuc):
+        for file in files:
+            if file.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png')):
+                file_path = os.path.join(root, file)
+                try:
+                    # Xử lý file PDF
+                    if file.lower().endswith('.pdf'):
+                        images = convert_from_path(file_path)
+                        full_text = []
+                        for image in images:
+                            # Lưu ảnh tạm thời
+                            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+                                image.save(temp_file.name, 'JPEG')
+                                
+                                # Đọc file ảnh
+                                with io.open(temp_file.name, 'rb') as image_file:
+                                    content = image_file.read()
+                                
+                                # Tạo request cho Vision API
+                                image = vision.Image(content=content)
+                                
+                                # Thực hiện nhận dạng văn bản
+                                response = client.document_text_detection(image=image)
+                                
+                                if response.error.message:
+                                    raise Exception(
+                                        '{}\nFor more info on error messages, check: '
+                                        'https://cloud.google.com/apis/design/errors'.format(
+                                            response.error.message))
+                                
+                                # Lấy kết quả văn bản
+                                if response.full_text_annotation:
+                                    full_text.append(response.full_text_annotation.text)
+                                
+                                # Xóa file tạm
+                                os.unlink(temp_file.name)
+                        
+                        combined_text = '\n'.join(full_text)
+                    else:
+                        # Xử lý file ảnh
+                        with io.open(file_path, 'rb') as image_file:
+                            content = image_file.read()
+                        
+                        image = vision.Image(content=content)
+                        response = client.document_text_detection(image=image)
+                        
+                        if response.error.message:
+                            raise Exception(
+                                '{}\nFor more info on error messages, check: '
+                                'https://cloud.google.com/apis/design/errors'.format(
+                                    response.error.message))
+                        
+                        combined_text = response.full_text_annotation.text if response.full_text_annotation else ""
+
+                    # 5. Xử lý kết quả với OpenAI
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""
+                            Extract and map information from the following OCR text to the specified fields.
+                            Return ONLY a JSON object with the following structure:
+                            {{
+                                "docId": "string or null",
+                                "arcDocCode": "string or null",
+                                "maintenance": "string or null",
+                                "typeName": "string or null",
+                                "codeNumber": "string or null",
+                                "codeNotation": "string or null",
+                                "issuedDate": "string or null",
+                                "organName": "string or null",
+                                "subject": "string or null",
+                                "language": "string or null",
+                                "numberOfPage": "string or null",
+                                "inforSign": "string or null",
+                                "keyword": "string or null",
+                                "mode": "string or null",
+                                "confidenceLevel": "string or null",
+                                "autograph": "string or null",
+                                "format": "string or null",
+                                "process": "string or null",
+                                "riskRecovery": "string or null",
+                                "riskRecoveryStatus": "string or null",
+                                "description": "string or null",
+                                "SignerTitle": "string or null",
+                                "SignerName": "string or null"
+                            }}
+
+                            Field definitions and extraction rules:
+                            {json.dumps(require_fields, ensure_ascii=False, indent=2)}
+
+                            General rules:
+                            1. Look for information based on the extraction rules specified in the field definition
+                            2. Pay attention to the location hints in the rules
+                            3. Use the provided keywords to identify relevant information
+                            4. Follow the specified format requirements
+                            5. Use the mapping tables when provided
+                            6. Use default values when specified
+                            7. Set to null if information cannot be found
+                            8. For dates, use DD/MM/YYYY format
+                            9. For numbers, remove thousand separators
+
+                            OCR Text:
+                            {combined_text}
+
+                            Remember: Return ONLY the JSON object, no other text or explanation.
+                            """
+                        }
+                    ]
+
+                    # Call OpenAI API
+                    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=messages,
+                        max_tokens=4096,
+                        temperature=0,
+                        response_format={"type": "json_object"}
+                    )
+
+                    # Process response
+                    response_text = response.choices[0].message.content.strip()
+                    
+                    # Clean up response text
+                    if response_text.strip().startswith("```json"):
+                        response_text = response_text.strip()[7:-3].strip()
+                    elif response_text.strip().startswith("```"):
+                        response_text = response_text.strip()[3:-3].strip()
+
+                    try:
+                        data_json = json.loads(response_text)
+                    except json.JSONDecodeError as e:
+                        results.append({
+                            "filename": file,
+                            "status": "error",
+                            "message": f"Không thể phân tích kết quả từ AI: {str(e)}",
+                            "raw_response": response_text
+                        })
+                        continue
+
+                    # Add result to list
+                    results.append({
+                        "filename": file,
+                        "status": "success",
+                        "data": data_json,
+                        "ocr_text": combined_text
+                    })
+
+                except Exception as e:
+                    results.append({
+                        "filename": file,
+                        "status": "error",
+                        "message": str(e)
+                    })
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "success",
+            "code": 200,
+            "message": "Xử lý tài liệu thành công",
+            "data": results
+        }
+    )
