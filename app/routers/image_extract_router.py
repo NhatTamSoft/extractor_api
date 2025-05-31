@@ -1569,14 +1569,96 @@ async def extract_document(
     file_type: str = Form(...),  # 'image' or 'pdf'
     pages: Optional[str] = Form(None)  # Comma-separated list of page numbers for PDF
 ):
-    """
-    Extract information from documents (images or PDFs) using OpenAI
-    
-    Parameters:
-    - files: List of uploaded files (images or a single PDF)
-    - file_type: Type of document ('image' or 'pdf')
-    - pages: For PDF files, specify which pages to process (comma-separated numbers)
-    """
+    # Load require_fields from Markdown file
+    try:
+        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Parse markdown content to extract field information
+        require_fields = []
+        current_field = None
+        in_mapping_table = False
+        
+        for line in content.split('\n'):
+            line = line.strip()
+            if not line:  # Skip empty lines
+                continue
+                
+            # Check for field headers (## number. fieldName)
+            if line.startswith('## '):
+                if current_field:
+                    require_fields.append(current_field)
+                parts = line.split('. ', 1)  # Split only on first occurrence
+                if len(parts) == 2:
+                    field_name = parts[1].strip()
+                    current_field = {
+                        "tenTruong": field_name,
+                        "moTa": "",
+                        "extractionRules": {}
+                    }
+                    in_mapping_table = False
+                continue
+
+            # Check for description
+            if line.startswith('**Mô tả:**'):
+                if current_field:
+                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
+                continue
+
+            # Check for extraction rules section
+            if line.startswith('**Quy tắc trích xuất:**'):
+                continue
+
+            # Check for rule items
+            if line.startswith('- **'):
+                if current_field:
+                    parts = line.split(':**', 1)  # Split only on first occurrence
+                    if len(parts) == 2:
+                        key = parts[0].replace('- **', '').strip()
+                        value = parts[1].strip()
+                        current_field["extractionRules"][key] = value
+                continue
+
+            # Check for mapping table header
+            if '| Mã | Giá trị |' in line:
+                if current_field and 'mapping' not in current_field["extractionRules"]:
+                    current_field["extractionRules"]["mapping"] = {}
+                in_mapping_table = True
+                continue
+
+            # Check for mapping table rows
+            if in_mapping_table and line.startswith('|'):
+                if current_field:
+                    parts = [p.strip() for p in line.split('|')]
+                    if len(parts) >= 3:  # Ensure we have enough parts
+                        code = parts[1].strip()
+                        value = parts[2].strip()
+                        if code and value:  # Only add if both code and value exist
+                            current_field["extractionRules"]["mapping"][code] = value
+                continue
+
+            # Reset mapping table flag if we encounter a non-table line
+            if in_mapping_table and not line.startswith('|'):
+                in_mapping_table = False
+
+        # Add the last field if exists
+        if current_field:
+            require_fields.append(current_field)
+
+        if not require_fields:
+            raise ValueError("No fields were parsed from require_fields.md")
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi đọc file require_fields.md",
+                "detail": f"Error parsing file: {str(e)}"
+            }
+        )
+
     # Validate file type
     if file_type not in ['image', 'pdf']:
         return JSONResponse(
@@ -1640,62 +1722,6 @@ async def extract_document(
                 }
             )
 
-    # Load require_fields from Markdown file
-    try:
-        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        # Parse markdown content to extract field information
-        require_fields = []
-        current_field = None
-        
-        for line in content.split('\n'):
-            if line.startswith('## '):
-                if current_field:
-                    require_fields.append(current_field)
-                field_name = line.split('. ')[1].strip()
-                current_field = {
-                    "tenTruong": field_name,
-                    "moTa": "",
-                    "extractionRules": {}
-                }
-            elif line.startswith('**Mô tả:**'):
-                if current_field:
-                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
-            elif line.startswith('**Quy tắc trích xuất:**'):
-                continue
-            elif line.startswith('- **'):
-                if current_field:
-                    key = line.split('**')[1].replace(':**', '').strip()
-                    value = line.split(':**')[1].strip()
-                    current_field["extractionRules"][key] = value
-            elif '| Mã | Giá trị |' in line:
-                if current_field:
-                    mapping = {}
-                    continue
-            elif line.startswith('  | '):
-                if current_field and 'mapping' not in current_field["extractionRules"]:
-                    current_field["extractionRules"]["mapping"] = {}
-                parts = line.strip().split('|')
-                if len(parts) >= 3:
-                    code = parts[1].strip()
-                    value = parts[2].strip()
-                    current_field["extractionRules"]["mapping"][code] = value
-                    
-        if current_field:
-            require_fields.append(current_field)
-            
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "code": 500,
-                "message": "Lỗi đọc file require_fields.md",
-                "detail": str(e)
-            }
-        )
-
     # Initialize combined data
     combined_data = {}
 
@@ -1753,61 +1779,14 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
             messages=[
                 {
                     "role": "system",
-                    "content": """You are an AI assistant that extracts information from documents. 
-                    For fields with mapping tables, you MUST return the CODE (not the value).
-                    For example, if the language is 'Tiếng Việt', return '01' instead.
-                    You MUST return a valid JSON object containing the mapped fields. 
-                    Do not include any other text or explanation in your response."""
+                    "content": "You are an AI assistant that extracts information from documents according to the provided field definitions and rules. You MUST return a valid JSON object."
                 },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": f"""
-                            Extract and map information from the following image to the specified fields.
-                            Return ONLY a JSON object with the following structure:
-                            {{
-                                "docId": "string or null",
-                                "arcDocCode": "string or null",
-                                "maintenance": "string or null",
-                                "typeName": "string or null",
-                                "codeNumber": "string or null",
-                                "codeNotation": "string or null",
-                                "issuedDate": "string or null",
-                                "organName": "string or null",
-                                "subject": "string or null",
-                                "language": "string or null",
-                                "numberOfPage": "string or null",
-                                "inforSign": "string or null",
-                                "keyword": "string or null",
-                                "mode": "string or null",
-                                "confidenceLevel": "string or null",
-                                "autograph": "string or null",
-                                "format": "string or null",
-                                "process": "string or null",
-                                "riskRecovery": "string or null",
-                                "riskRecoveryStatus": "string or null",
-                                "description": "string or null",
-                                "SignerTitle": "string or null",
-                                "SignerName": "string or null"
-                            }}
-
-                            Field definitions and extraction rules:
-                            {json.dumps(require_fields, ensure_ascii=False, indent=2)}
-
-                            IMPORTANT: For fields with mapping tables, return the CODE (not the value).
-                            For example:
-                            - For language: return '01' for 'Tiếng Việt', '02' for 'Tiếng Anh'
-                            - For maintenance: return '01' for 'Vĩnh viễn', '02' for '70 năm'
-                            - For typeName: return '01' for 'Nghị quyết', '02' for 'Quyết định'
-                            - For mode: return '01' for 'Công khai', '02' for 'Sử dụng có điều kiện'
-                            - For confidenceLevel: return '01' for 'Gốc điện tử', '02' for 'Số hóa'
-                            - For format: return '01' for 'Tốt', '02' for 'Bình thường'
-                            - For process: return '0' for 'Không có quy trình xử lý đi kèm', '1' for 'Có quy trình xử lý đi kèm'
-                            - For riskRecovery: return '0' for 'Không', '1' for 'Có'
-                            - For riskRecoveryStatus: return '01' for 'Đã dự phòng', '02' for 'Chưa dự phòng'
-                            """
+                            "text": f"Extract information from the following image according to these field definitions and rules:\n{json.dumps(require_fields, ensure_ascii=False, indent=2)}"
                         },
                         {
                             "type": "image_url",
