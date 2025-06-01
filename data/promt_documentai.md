@@ -12,7 +12,7 @@
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về chủ trương...".
 `TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "tổng mức đầu tư", thường bắt đầu bằng "tổng mức đầu tư..." hoặc "... kinh phí" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+`DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
 `GiaTriTMDTKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
@@ -44,8 +44,43 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 
 
 {{CHUCNANG03}} Chức năng `Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư`
-### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn chuẩn bị đầu tư, quyết định điều chỉnh dự toán giai đoạn chuẩn bị đầu tư"
+Bạn phải thực hiện theo các bước sau và trả về **duy nhất một chuỗi JSON hợp lệ** với cấu trúc:
+{
+  "ThongTinChung": {
+    "KyHieu": "...",
+    "SoVanBan": "...",
+    "NgayKy": "...",
+    "SoVanBanCanCu": "...",
+    "NgayKyCanCu": "...",
+    "NguoiKy": "...",
+    "ChucDanhNguoiKy": "...",
+    "CoQuanBanHanh": "...",
+    "TrichYeu": "...",
+    "TenNguonVon": "...",
+    "GiaTri": ...,
+    "DieuChinh": 0 hoặc 1
+  },
+  "BangDuLieu": [
+    {
+      "TenKMCP": "...",
+      "GiaTriDuToanKMCP": ...,
+      "GiaTriDuToanKMCPTang": ...,
+      "GiaTriDuToanKMCPGiam": ...
+    }
+  ]
+}
+## 🔹 BƯỚC 1: Trích ThongTinChung từ nội dung dưới đây
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+Quy tắc bắt buộc:
+- Chỉ lấy các dòng là khoản mục chi phí con, có số tiền ở cột "Sau thuế" hoặc cột giá trị. Nếu không có chi phí con thì lấy chi phí cha
+- Không lấy dòng cha (trường hợp có dòng con), dòng nhóm, dòng mô tả, dòng tổng, dòng tiêu đề, dòng trống
+- Tuyệt đối không được bỏ sót bất kỳ dòng khoản mục con nào nếu có số tiền
+- Không được gộp, không tự suy diễn, không sửa tên khoản mục hay số tiền
+- Duyệt từng dòng, kiểm tra kỹ cột số tiền
+- Đối với "Bảng tổng hợp chi phí"
++ Chỉ lấy các khoản mục nếu chưa xuất hiện trong bảng chi tiết ở trên và thêm vào cuối bảng chi tiết.
++ Không lấy dòng mô tả, chỉ lấy dòng có giá trị tiền.
+- Chỉ trả về danh sách các khoản mục hợp lệ dạng JSON (không thêm text giải thích).
 `KyHieu`: "QDPDDT_CBDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
@@ -58,34 +93,56 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá trị dự toán", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
-### Bảng số liệu dự toán, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
-`GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-### QUY TẮC LOẠI BỎ
-❌ Không trích các dòng sau nếu là loại công trình:
-Ví dụ: "Chi phí… – Công trình dân dụng", "Công trình giao thông", "Công trình hạ tầng kỹ thuật"…
-❌ Nếu có cả dòng cha và dòng con, thì:
-✅ Chỉ giữ dòng con nếu dòng con không thuộc loại công trình
-❌ Nếu dòng con thuộc loại công trình → bị loại
-✅ Nếu tất cả các dòng con bị loại do là loại công trình → giữ lại dòng cha
-📌 Ví dụ:
-Có "Chi phí quản lý dự án" (cha) và "Chi phí quản lý dự án – Công trình dân dụng" (con)
-Dòng con là loại công trình → loại
-⇒ ✅ Giữ lại dòng cha "Chi phí quản lý dự án"
-❌ Nếu có dòng con và dòng cháu, trùng tên và trùng số tiền:
-Nếu cháu không thuộc loại công trình → giữ cháu, loại con
-Nếu cháu thuộc loại công trình → giữ con, loại cháu
-❌ Nếu đã có đầy đủ các dòng con của một dòng cha (VD: "Chi phí khác" gồm đủ các mục con), thì loại dòng cha
-### Yêu cầu xử lý:
-🚫 **Không lấy giá trị trong cột "Trước thuế"**
-✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Gộp toàn bộ bảng trong nội dung OCR thành một danh sách duy nhất, đúng thứ tự
-- Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
-- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
-- Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
+## 🔷 BƯỚC 2: Trích `BangDuLieu`
+Bạn PHẢI xử lý theo đúng trình tự sau:
+### ▶️ 1. Phần `START_BANG_CHI_TIET`:
+Đây là **bảng chi tiết**, gồm nhiều dòng chi phí con. Dạng bảng gồm các cột:
+**STT | Tên khoản mục chi phí | Cách tính | Trước thuế | Sau thuế | Ký hiệu**
+**Yêu cầu xử lý:**
+- Chỉ lấy các dòng có **giá trị ở cột "Sau thuế"**.
+- **KHÔNG lấy dòng mô tả hoặc nhóm**, cụ thể như: "Công trình dân dụng", "Công trình công nghiệp", "Công trình giao thông", "Công trình nông nghiệp và phát triển nông thôn", "Công trình hạ tầng kỹ thuật".
+- Nếu khoản mục là dòng con thuộc nhóm lớn (vd: “Chi phí lập báo cáo…” nằm trong “Chi phí tư vấn đầu tư xây dựng”) → vẫn PHẢI lấy dòng con, **KHÔNG lấy dòng cha**.
+**Trường dữ liệu cần trích từ mỗi dòng:**
+- `TenKMCP`: tên khoản mục chi phí (giữ nguyên)
+- `GiaTriDuToanKMCP`: lấy cột “Sau thuế”
+- `GiaTriDuToanKMCPTang`: nếu "DieuChinh" = 1 → lấy “Giá trị tăng”, nếu không thì = 0
+- `GiaTriDuToanKMCPGiam`: nếu "DieuChinh" = 1 → lấy “Giá trị giảm”, nếu không thì = 0
+
+### ▶️ 2. Phần `START_BANG_TONG_HOP`:
+Đây là **bảng tổng hợp chi phí**.
+
+**Yêu cầu xử lý:**
+- Chỉ lấy các khoản mục nếu **chưa xuất hiện trong bảng chi tiết** ở trên.
+- Không lấy dòng mô tả, chỉ lấy dòng có giá trị tiền.
+
+### ▶️ 3. ĐẶC BIỆT: Trường hợp ngắt dòng do OCR không có Phần `START_BANG_TONG_HOP`:
+Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở dòng kế tiếp, ví dụ:
+- Chi phí giải phóng mặt bằng  
+:  
+9.999 đồng
+
+→ Vẫn phải gộp lại và trích như sau:
+{
+  "TenKMCP": "Chi phí giải phóng mặt bằng",
+  "GiaTriDuToanKMCP": 9999,
+  "GiaTriDuToanKMCPTang": 0,
+  "GiaTriDuToanKMCPGiam": 0
+}
+
+## ⚠️ CHỈ TRẢ VỀ MỘT ĐỐI TƯỢNG JSON DUY NHẤT
+- Không trả lời thêm giải thích
+- Không ghi chữ “Dưới đây là kết quả” hay mô tả nào khác
+
+## 🔁 Ví dụ mẫu (để API học đúng format):
+
+```json
+{
+  "TenKMCP": "Chi phí lập báo cáo kinh tế kỹ thuật",
+  "GiaTriDuToanKMCP": 888,
+  "GiaTriDuToanKMCPTang": 0,
+  "GiaTriDuToanKMCPGiam": 0
+}
+
 
 
 
@@ -101,7 +158,7 @@ Nếu cháu thuộc loại công trình → giữ con, loại cháu
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+`DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenDauThau`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu)
 `TenKMCP`: Trích tên gói thầu (không lấy thông tin tại cột tóm tắt, mô tả công việc của gói thầu), loại bỏ các cụm từ ("Gói thầu số xx:", "Gói số xx:", "Gói xx:", "Tên gói thầu số xx:")
@@ -133,7 +190,7 @@ Nếu cháu thuộc loại công trình → giữ con, loại cháu
 `TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng "QUYẾT ĐỊNH" (thường bắt đầu bằng "Về việc...")
 `TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+`DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
 `TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
@@ -161,7 +218,7 @@ Nếu cháu thuộc loại công trình → giữ con, loại cháu
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt...".
 `TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "tổng mức đầu tư", thường bắt đầu bằng "tổng mức đầu tư..." hoặc "... kinh phí" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
+`DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
 `GiaTriTMDTKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
@@ -191,11 +248,44 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
 - Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
 
-
-
 {{CHUCNANG07}} Chức năng `Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư`
-### Văn bản để nhận dạng thông tin là: "Quyết định phê duyệt dự toán giai đoạn thực hiện đầu tư, quyết định điều chỉnh dự toán giai đoạn thực hiện đầu tư"
+Bạn phải thực hiện theo các bước sau và trả về **duy nhất một chuỗi JSON hợp lệ** với cấu trúc:
+{
+  "ThongTinChung": {
+    "KyHieu": "...",
+    "SoVanBan": "...",
+    "NgayKy": "...",
+    "SoVanBanCanCu": "...",
+    "NgayKyCanCu": "...",
+    "NguoiKy": "...",
+    "ChucDanhNguoiKy": "...",
+    "CoQuanBanHanh": "...",
+    "TrichYeu": "...",
+    "TenNguonVon": "...",
+    "GiaTri": ...,
+    "DieuChinh": 0 hoặc 1
+  },
+  "BangDuLieu": [
+    {
+      "TenKMCP": "...",
+      "GiaTriDuToanKMCP": ...,
+      "GiaTriDuToanKMCPTang": ...,
+      "GiaTriDuToanKMCPGiam": ...
+    }
+  ]
+}
+## 🔹 BƯỚC 1: Trích ThongTinChung từ nội dung dưới đây
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
+Quy tắc bắt buộc:
+- Chỉ lấy các dòng là khoản mục chi phí con, có số tiền ở cột "Sau thuế" hoặc cột giá trị. Nếu không có chi phí con thì lấy chi phí cha
+- Không lấy dòng cha (trường hợp có dòng con), dòng nhóm, dòng mô tả, dòng tổng, dòng tiêu đề, dòng trống
+- Tuyệt đối không được bỏ sót bất kỳ dòng khoản mục con nào nếu có số tiền
+- Không được gộp, không tự suy diễn, không sửa tên khoản mục hay số tiền
+- Duyệt từng dòng, kiểm tra kỹ cột số tiền
+- Đối với "Bảng tổng hợp chi phí"
++ Chỉ lấy các khoản mục nếu chưa xuất hiện trong bảng chi tiết ở trên và thêm vào cuối bảng chi tiết.
++ Không lấy dòng mô tả, chỉ lấy dòng có giá trị tiền.
+- Chỉ trả về danh sách các khoản mục hợp lệ dạng JSON (không thêm text giải thích).
 `KyHieu`: "QDPD_DT_THDT"
 `SoVanBan`: Trích số hiệu văn bản ghi ở đầu văn bản, sau chữ "Số:"
 `NgayKy`: Trích thông tin ngày ký ở đầu văn bản, sau dòng địa danh "..., ngày ...", định dạng (dd/MM/yyyy)
@@ -208,34 +298,55 @@ Nếu một dòng **thuộc "Danh sách khoản mục chi phí"** dưới đây 
 `TenNguonVon`: Trích tên nguồn vốn sau cụm từ "nguồn vốn: ...", nếu không có để ""
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá trị dự toán", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`
-### Bảng số liệu tổng mức đầu tư, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
-`TenKMCP`: Tên khoản mục chi phí, giữ nguyên tên khoản mục chi phí theo văn bản
-`GiaTriDuToanKMCP`: Giá trị thành tiền hoặc giá trị cột **"Sau thuế"**, không lấy cột "Trước thuế" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPTang`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán tăng" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaTriDuToanKMCPGiam`: Nếu `DieuChinh` bằng `1` thì trích "Giá trị dự toán giảm" ngược lại gán `0` (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-### QUY TẮC LOẠI BỎ
-❌ Không trích các dòng sau nếu là loại công trình:
-Ví dụ: "Chi phí… – Công trình dân dụng", "Công trình giao thông", "Công trình hạ tầng kỹ thuật"…
-❌ Nếu có cả dòng cha và dòng con, thì:
-✅ Chỉ giữ dòng con nếu dòng con không thuộc loại công trình
-❌ Nếu dòng con thuộc loại công trình → bị loại
-✅ Nếu tất cả các dòng con bị loại do là loại công trình → giữ lại dòng cha
-📌 Ví dụ:
-Có "Chi phí quản lý dự án" (cha) và "Chi phí quản lý dự án – Công trình dân dụng" (con)
-Dòng con là loại công trình → loại
-⇒ ✅ Giữ lại dòng cha "Chi phí quản lý dự án"
-❌ Nếu có dòng con và dòng cháu, trùng tên và trùng số tiền:
-Nếu cháu không thuộc loại công trình → giữ cháu, loại con
-Nếu cháu thuộc loại công trình → giữ con, loại cháu
-❌ Nếu đã có đầy đủ các dòng con của một dòng cha (VD: "Chi phí khác" gồm đủ các mục con), thì loại dòng cha
-### Yêu cầu xử lý:
-🚫 **Không lấy giá trị trong cột "Trước thuế"**
-✅ Chỉ lấy giá trị tại đúng cột có tiêu đề "Sau thuế"
-- Gộp toàn bộ bảng trong nội dung OCR thành một danh sách duy nhất, đúng thứ tự
-- Giữ nguyên tên gọi và định dạng số tiền như trong ảnh, không tự ý chuẩn hóa
-- Không suy diễn hoặc bổ sung thông tin không có trong văn bản
-- Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
-- Hãy trích xuất chính xác chuỗi ký tự trước chữ ‘đồng’, bao gồm cả dấu chấm như trong bản gốc.
+## 🔷 BƯỚC 2: Trích `BangDuLieu`
+Bạn PHẢI xử lý theo đúng trình tự sau:
+### ▶️ 1. Phần `START_BANG_CHI_TIET`:
+Đây là **bảng chi tiết**, gồm nhiều dòng chi phí con. Dạng bảng gồm các cột:
+**STT | Tên khoản mục chi phí | Cách tính | Trước thuế | Sau thuế | Ký hiệu**
+**Yêu cầu xử lý:**
+- Chỉ lấy các dòng có **giá trị ở cột "Sau thuế"**.
+- **KHÔNG lấy dòng mô tả hoặc nhóm**, cụ thể như: "Công trình dân dụng", "Công trình công nghiệp", "Công trình giao thông", "Công trình nông nghiệp và phát triển nông thôn", "Công trình hạ tầng kỹ thuật".
+- Nếu khoản mục là dòng con thuộc nhóm lớn (vd: “Chi phí lập báo cáo…” nằm trong “Chi phí tư vấn đầu tư xây dựng”) → vẫn PHẢI lấy dòng con, **KHÔNG lấy dòng cha**.
+**Trường dữ liệu cần trích từ mỗi dòng:**
+- `TenKMCP`: tên khoản mục chi phí (giữ nguyên)
+- `GiaTriDuToanKMCP`: lấy cột “Sau thuế”
+- `GiaTriDuToanKMCPTang`: nếu "DieuChinh" = 1 → lấy “Giá trị tăng”, nếu không thì = 0
+- `GiaTriDuToanKMCPGiam`: nếu "DieuChinh" = 1 → lấy “Giá trị giảm”, nếu không thì = 0
+
+### ▶️ 2. Phần `START_BANG_TONG_HOP`:
+Đây là **bảng tổng hợp chi phí**.
+
+**Yêu cầu xử lý:**
+- Chỉ lấy các khoản mục nếu **chưa xuất hiện trong bảng chi tiết** ở trên.
+- Không lấy dòng mô tả, chỉ lấy dòng có giá trị tiền.
+
+### ▶️ 3. ĐẶC BIỆT: Trường hợp ngắt dòng do OCR không có Phần `START_BANG_TONG_HOP`:
+Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở dòng kế tiếp, ví dụ:
+- Chi phí giải phóng mặt bằng  
+:  
+9.999 đồng
+
+→ Vẫn phải gộp lại và trích như sau:
+{
+  "TenKMCP": "Chi phí giải phóng mặt bằng",
+  "GiaTriDuToanKMCP": 9999,
+  "GiaTriDuToanKMCPTang": 0,
+  "GiaTriDuToanKMCPGiam": 0
+}
+
+## ⚠️ CHỈ TRẢ VỀ MỘT ĐỐI TƯỢNG JSON DUY NHẤT
+- Không trả lời thêm giải thích
+- Không ghi chữ “Dưới đây là kết quả” hay mô tả nào khác
+
+## 🔁 Ví dụ mẫu (để API học đúng format):
+
+```json
+{
+  "TenKMCP": "Chi phí lập báo cáo kinh tế kỹ thuật",
+  "GiaTriDuToanKMCP": 888,
+  "GiaTriDuToanKMCPTang": 0,
+  "GiaTriDuToanKMCPGiam": 0
+}
 
 
 {{CHUCNANG08}} Chức năng "Quyết định phê duyệt kế hoạch lựa chọn nhà thầu (viết tắt: "KHLCNT") giai đoạn chuẩn bị đầu tư"
@@ -282,7 +393,7 @@ Nếu cháu thuộc loại công trình → giữ con, loại cháu
 `TrichYeu`: Trích nguyên văn tiêu đề ngay dưới dòng "QUYẾT ĐỊNH" (thường bắt đầu bằng "Về việc...")
 `TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
 `GiaTri`: Trích thông tin số tiền ngay sau cụm từ "giá chỉ định thầu" hoặc "giá trị trúng thầu", thường tại dòng "Bằng chữ: ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`DieuChinh`: Gán `1` nếu "trích yếu văn bản" có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
+`DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
 `TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
