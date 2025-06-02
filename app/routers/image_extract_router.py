@@ -4084,13 +4084,15 @@ async def xu_ly_dau_thau(
             select 
             BangDuLieuChiTietAIID = convert(nvarchar(36), BangDuLieuChiTietAIID)
             , VanBanAIID = convert(nvarchar(36), ai.VanBanAIID)
-            , TenLoaiVanBan=isnull(TenLoaiVanBan, ''),
-            TenDauThau=isnull(TenDauThau, ''),
-            TenKMCP=isnull(TenKMCP, ''),
-            KMCPID = convert(nvarchar(36), KMCPID), 
-            DauThauID = convert(nvarchar(36), ai.DauThauID), 
-            DauThauCTID = convert(nvarchar(36), DauThauCTID)
-            from dbo.BangDuLieuChiTietAI ct 
+            , TenLoaiVanBan=isnull(TenLoaiVanBan, '')
+            , TenDauThau=isnull(TenDauThau, '')
+            , TenKMCP=isnull(TenKMCP, '')
+            , SoVanBanCanCu=isnull(SoVanBanCanCu, '')
+            , KMCPID = convert(nvarchar(36), KMCPID)
+            , DauThauID = convert(nvarchar(36), ai.DauThauID)
+            , DauThauCTID = convert(nvarchar(36), ct.DauThauCTID)
+            ,ai.tenFile
+            from dbo.BangDuLieuChiTietAI ct
             left join dbo.VanBanAI ai on ai.VanBanAIID = ct.VanBanAIID
             where ct.VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), vb.DuAnID)='{duAnID}' and vb.TenLoaiVanBan IN ('QDPD_KHLCNT_CBDT','QDPD_KHLCNT_THDT', 'QDPD_KQLCNT_CBDT','QDPD_KQLCNT_THDT')
                 and isnull(TrangThai, 0) = 0) order by ct.stt
@@ -4103,22 +4105,42 @@ async def xu_ly_dau_thau(
         # Lọc các dòng có TenLoaiVanBan là QDPD_KHLCNT_CBDT hoặc QDPD_KHLCNT_THDT
         filtered_data = data[data['TenLoaiVanBan'].isin(['QDPD_KHLCNT_CBDT', 'QDPD_KHLCNT_THDT'])]
         # Nhóm theo VanBanAIID và tạo UUID mới cho mỗi nhóm
-        for van_ban_id, group in filtered_data.groupby('VanBanAIID'):
-            print(f"\n=== Xử lý nhóm với VanBanAIID: {van_ban_id} ===")
-            print(f"Số lượng bản ghi trong nhóm: {len(group)}")
-            
+        # Lấy tất cả các VanBanAIID duy nhất từ filtered_data
+        unique_van_ban_ids = filtered_data['VanBanAIID'].unique()
+        
+        for van_ban_id in unique_van_ban_ids:
+            # Lọc dữ liệu cho VanBanAIID hiện tại
+            group = filtered_data[filtered_data['VanBanAIID'] == van_ban_id]
+            # print(f"\n=== Xử lý nhóm với VanBanAIID: {van_ban_id} ===")
+            # print(f"Số lượng bản ghi trong nhóm: {len(group)}")
             if len(group) > 1:
                 new_uuid = str(uuid.uuid4())
-                print(f"Tạo UUID mới: {new_uuid}")
+                #print(f"Tạo UUID mới: {new_uuid}")
                 
                 # Cập nhật DauThauID cho tất cả các dòng trong nhóm
                 data.loc[data['VanBanAIID'] == van_ban_id, 'DauThauID'] = new_uuid
-                print(f"Đã cập nhật DauThauID thành {new_uuid} cho {len(group)} bản ghi")
-            else:
-                print("Nhóm chỉ có 1 bản ghi, không cần cập nhật DauThauID")
+                #print(f"Đã cập nhật DauThauID thành {new_uuid} cho {len(group)} bản ghi")
+            #else:
+                #print("Nhóm chỉ có 1 bản ghi, không cần cập nhật DauThauID")
                 
-            print("=== Kết thúc xử lý nhóm ===\n")
-
+            #print("=== Kết thúc xử lý nhóm ===\n")
+        # Lọc các dòng có TenLoaiVanBan là QDPD_KQLCNT_CBDT hoặc QDPD_KQLCNT_THDT
+        filtered_data_kqlcnt = data[data['TenLoaiVanBan'].isin(['QDPD_KQLCNT_CBDT', 'QDPD_KQLCNT_THDT'])]
+        
+        # Duyệt qua từng dòng trong filtered_data_kqlcnt
+        for index, row in filtered_data_kqlcnt.iterrows():
+            # Lấy giá trị SoVanBanCanCu
+            soVanBanCanCu = row['SoVanBanCanCu']
+            
+            # Tìm dòng trong data có SoVanBan = soVanBanCanCu
+            matching_row = data[data['SoVanBan'] == soVanBanCanCu]
+            
+            if not matching_row.empty:
+                # Lấy DauThauID từ dòng tìm được
+                dau_thau_id = matching_row.iloc[0]['DauThauID']
+                
+                # Cập nhật DauThauID cho dòng hiện tại
+                data.at[index, 'DauThauID'] = dau_thau_id
         return JSONResponse(
             status_code=200,
             content={
