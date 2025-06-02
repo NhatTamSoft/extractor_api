@@ -37,6 +37,8 @@ from fastapi import UploadFile, File, HTTPException, Query, Depends, Form, Heade
 import logging
 from tempfile import SpooledTemporaryFile
 import requests
+from google.cloud import vision
+from google.api_core.client_options import ClientOptions
 
 # Load biến môi trường từ file .env
 load_dotenv()
@@ -50,6 +52,7 @@ prompt_service = PromptService()
 
 # Định nghĩa IMAGE_STORAGE_PATH
 IMAGE_STORAGE_PATH = os.getenv('IMAGE_STORAGE_PATH', 'image_storage')
+ALLOWED_PDF_TYPE = 'application/pdf'
 os.makedirs(IMAGE_STORAGE_PATH, exist_ok=True)
 
 # Định nghĩa các định dạng ảnh được chấp nhận
@@ -3610,6 +3613,10 @@ async def image_extract_multi_cloud(
         print(prompt)
         print("======================end prompt==================")
 
+        # Initialize Cloud Vision client with API key
+        client_options = ClientOptions(api_key=os.getenv('GOOGLE_API_KEY'))
+        client = vision.ImageAnnotatorClient(client_options=client_options)
+
         # Process each file
         temp_files = []
         for file in files:
@@ -3637,52 +3644,48 @@ async def image_extract_multi_cloud(
 
         content_parts = [{"type": "text", "text": prompt}]
 
-        # Process each file with Cloud AI API
+        # Process each file with Cloud Vision API
         combined_text = ""
         for temp_file in temp_files:
             try:
+                print(f"Processing file: {temp_file}")
                 # Read the image file
                 with open(temp_file, "rb") as f:
-                    image_data = f.read()
-                
-                # Convert image to base64
-                base64_image = base64.b64encode(image_data).decode('utf-8')
-                
-                # Prepare the request to Cloud AI API
-                cloud_ai_request = {
-                    "requests": [{
-                        "image": {
-                            "content": base64_image
-                        },
-                        "features": [{
-                            "type": "TEXT_DETECTION",
-                            "maxResults": 50
-                        }]
-                    }]
-                }
+                    content = f.read()
+                print(f"File size: {len(content)} bytes")
 
-                # Call Cloud AI API
-                cloud_ai_response = requests.post(
-                    f"https://vision.googleapis.com/v1/images:annotate?key={os.getenv('GOOGLE_API_KEY')}",
-                    json=cloud_ai_request
-                )
-                
-                if cloud_ai_response.status_code != 200:
-                    raise Exception(f"Cloud AI API error: {cloud_ai_response.text}")
+                # Create image object
+                image = vision.Image(content=content)
 
-                # Extract text from response
-                response_data = cloud_ai_response.json()
-                if 'responses' in response_data and len(response_data['responses']) > 0:
-                    if 'textAnnotations' in response_data['responses'][0]:
-                        text_annotations = response_data['responses'][0]['textAnnotations']
-                        if text_annotations:
-                            combined_text += text_annotations[0]['description'] + "\n"
+                # Perform text detection
+                print("Calling Cloud Vision API...")
+                response = client.text_detection(image=image)
+                texts = response.text_annotations
+                print(f"Number of text annotations: {len(texts) if texts else 0}")
+
+                if texts:
+                    # Get the full text (first annotation contains the entire text)
+                    text_content = texts[0].description
+                    print(f"Extracted text: {text_content[:200]}...")  # Print first 200 chars
+                    combined_text += text_content + "\n"
+                else:
+                    print("No text detected in the image")
+
+                if response.error.message:
+                    print(f"Cloud Vision API error: {response.error.message}")
+                    raise Exception(
+                        '{}\nFor more info on error messages, check: '
+                        'https://cloud.google.com/apis/design/errors'.format(
+                            response.error.message))
 
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
+                print(f"Error type: {type(e)}")
+                print(f"Error details: {traceback.format_exc()}")
                 continue
         
         print("&"*30)
+        print("Final combined text:")
         print(combined_text)
         print("&"*30)
 
@@ -3710,11 +3713,10 @@ async def image_extract_multi_cloud(
             # Call OpenAI API
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=4096,
-                temperature=0,
-                response_format={"type": "json_object"}
+                temperature=0
             )
 
             # Process response
