@@ -20,6 +20,11 @@ import jwt
 from sentence_transformers import SentenceTransformer, util
 import unidecode
 from app.services.tesseract import image_to_text_pytesseract_from_image
+from typing import List
+from azure.ai.formrecognizer import DocumentAnalysisClient
+from azure.core.credentials import AzureKeyCredential
+import google.cloud.vision as vision
+import traceback
 # %%
 # --- 2. Tải và cấu hình API Keys từ file .env ---
 # Tải các biến môi trường từ file .env trong cùng thư mục
@@ -914,3 +919,102 @@ def parse_page_string(page_string):
     
     # Loại bỏ các số trùng lặp và sắp xếp lại
     return sorted(list(set(result)))
+
+# Azure credentials
+azure_endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
+azure_key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+# Initialize Azure client
+azure_client = DocumentAnalysisClient(azure_endpoint, AzureKeyCredential(azure_key))
+def extract_text_from_images_azure(image_files: List[str]) -> str:
+    """
+    Extract text and table data from images using Azure Form Recognizer.
+
+    Args:
+        image_files (List[str]): List of image file paths.
+
+    Returns:
+        str: Extracted content including text and tables.
+    """
+    combined_text = ""
+
+    for file_path in image_files:
+        print(f"\n=== Processing file: {file_path} ===")
+        try:
+            with open(file_path, "rb") as f:
+                poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
+                result = poller.result()
+
+            # Text extraction
+            text_lines = []
+            for page in result.pages:
+                for line in page.lines:
+                    text_lines.append(line.content)
+            if text_lines:
+                combined_text += f"\n--- Text from {file_path} ---\n"
+                combined_text += "\n".join(text_lines) + "\n"
+            else:
+                combined_text += f"\n--- No text found in {file_path} ---\n"
+
+            # Table extraction
+            if result.tables:
+                combined_text += f"\n--- Tables from {file_path} ---\n"
+                for i, table in enumerate(result.tables, 1):
+                    combined_text += f"\nTable {i} (Rows: {table.row_count}, Columns: {table.column_count}):\n"
+                    for row_index in range(table.row_count):
+                        row = [cell.content or "" for cell in table.cells if cell.row_index == row_index]
+                        combined_text += " | ".join(row) + "\n"
+            else:
+                combined_text += f"\n--- No tables found in {file_path} ---\n"
+
+        except Exception as e:
+            combined_text += f"\n[Error processing {file_path}]: {str(e)}\n"
+
+    return combined_text
+
+def extract_text_from_images_google_cloud(image_files: List[str]) -> str:
+    """
+    Extract text from images using Google Cloud Vision API.
+    
+    Args:
+        image_files (List[str]): List of paths to image files
+        
+    Returns:
+        str: Combined text extracted from all images
+    """
+    combined_text = ""
+    client = vision.ImageAnnotatorClient()
+    
+    for temp_file in image_files:
+        try:
+            # Read the image file
+            with open(temp_file, "rb") as f:
+                content = f.read()
+
+            # Create image object
+            image = vision.Image(content=content)
+
+            # Perform text detection
+            response = client.document_text_detection(image=image)
+            texts = response.text_annotations
+
+            if texts:
+                # Get the full text (first annotation contains the entire text)
+                text_content = texts[0].description
+                combined_text += text_content + "\n"
+            else:
+                print("No text detected in the image")
+
+            if response.error.message:
+                print(f"Cloud Vision API error: {response.error.message}")
+                raise Exception(
+                    '{}\nFor more info on error messages, check: '
+                    'https://cloud.google.com/apis/design/errors'.format(
+                        response.error.message))
+
+        except Exception as e:
+            print(f"Error processing file {temp_file}: {str(e)}")
+            print(f"Error type: {type(e)}")
+            print(f"Error details: {traceback.format_exc()}")
+            continue
+            
+    return combined_text

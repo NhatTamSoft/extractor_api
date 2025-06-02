@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.core.database import get_db
 import shutil
 from fastapi.responses import JSONResponse
-from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token, LayMaDoiTuong, pdf_to_images
+from app.services.DungChung import convert_currency_to_int, lay_du_lieu_tu_sql_server, thuc_thi_truy_van, decode_jwt_token, LayMaDoiTuong, pdf_to_images, extract_text_from_images_azure, extract_text_from_images_google_cloud
 from app.services.anh_xa_tuong_dong import tim_kiem_tuong_dong
 from app.core.auth import get_current_user
 from app.schemas.user import User
@@ -2260,17 +2260,6 @@ async def image_extract_multi_azure(
                         "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
                     }
                 )
-            # Tạo tên file tạm thời với timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # Chuyển đổi tên file sang tiếng Việt không dấu
-            filename_no_accent = unidecode(file.filename)
-            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{filename_no_accent}")
-            temp_files.append(temp_file_path)
-            print(temp_file_path)
-            # Lưu file tạm thời
-            with open(temp_file_path, "wb") as buffer:
-                content = await file.read()
-                buffer.write(content)
 
         content_parts = [{"type": "text", "text": prompt}]
 
@@ -2299,22 +2288,9 @@ async def image_extract_multi_azure(
         for temp_file in temp_files:
             try:
                 # Extract data with Azure Form Recognizer
-                combined_text += process_multiple_documents([temp_file])
-                with open(temp_file, "rb") as f:
-                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
-                    result = poller.result()
+                # Extract text from all files using Azure OCR
+                combined_text = extract_text_from_images_azure(temp_files)
 
-                # Collect text and tables
-                for page in result.pages:
-                    for line in page.lines:
-                        combined_text += line.content + "\n"
-
-                # Process tables if any
-                # for table in result.tables:
-                #     combined_text += "\nBảng:\n"
-                #     for row_index in range(table.row_count):
-                #         row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
-                #         combined_text += " | ".join(row_cells) + "\n"
 
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
