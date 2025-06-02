@@ -3640,158 +3640,9 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
             except Exception as e:
                 print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
 
-@router.post("/image_extract_azure_mapping")
-async def extract_multiple_images_azure_mapping(
-    files: List[UploadFile] = File(...),
-    loaiVanBan: Optional[str] = None,
-    duAnID: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    temp_files = []
-    try:
-        # Get prompt from prompt service
-        prompt = prompt_service.get_prompt(loaiVanBan)
-        if not prompt:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "code": 400,
-                    "message": "Không tìm thấy prompt cho loại văn bản",
-                    "detail": f"Loại văn bản '{loaiVanBan}' không tồn tại trong hệ thống"
-                }
-            )
-
-        # Process each file
-        for file in files:
-            if file.content_type not in ALLOWED_IMAGE_TYPES:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "code": 400,
-                        "message": f"File {file.filename} không đúng định dạng ảnh",
-                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
-                    }
-                )
-
-            # Create temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
-                content = await file.read()
-                temp_file.write(content)
-                temp_file.flush()
-                temp_files.append(temp_file.name)
-
-        # Process each file with Azure Form Recognizer
-        combined_text = ""
-        for temp_file in temp_files:
-            try:
-                # Extract data with Azure Form Recognizer
-                with open(temp_file, "rb") as f:
-                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
-                    result = poller.result()
-
-                # Collect text and tables
-                for page in result.pages:
-                    for line in page.lines:
-                        combined_text += line.content + "\n"
-
-                # Process tables if any
-                for table in result.tables:
-                    combined_text += "\nBảng:\n"
-                    for row_index in range(table.row_count):
-                        row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
-                        combined_text += " | ".join(row_cells) + "\n"
-
-            except Exception as e:
-                print(f"Error processing file {temp_file}: {str(e)}")
-                continue
-
-        # Process extracted text with OpenAI
-        try:
-            # Prepare messages for OpenAI
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
-                },
-                {
-                    "role": "user",
-                    "content": f"""
-                    {prompt}
-
-                    Data extracted from images:
-                    {combined_text}
-
-                    Remember: Return ONLY the JSON object, no other text or explanation.
-                    """
-                }
-            ]
-
-            # Call OpenAI API
-            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                max_tokens=4096,
-                temperature=0,
-                response_format={"type": "json_object"}
-            )
-
-            # Process response
-            response_text = response.choices[0].message.content.strip()
-            
-            # Clean up response text
-            if response_text.strip().startswith("```json"):
-                response_text = response_text.strip()[7:-3].strip()
-            elif response_text.strip().startswith("```"):
-                response_text = response_text.strip()[3:-3].strip()
-
-            # Parse JSON response
-            data = json.loads(response_text)
-
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "code": 200,
-                    "message": "Xử lý văn bản thành công",
-                    "data": data
-                }
-            )
-
-        except Exception as e:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "code": 500,
-                    "message": "Lỗi khi xử lý văn bản",
-                    "detail": str(e)
-                }
-            )
-
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "code": 500,
-                "message": "Lỗi hệ thống",
-                "detail": str(e)
-            }
-        )
-    finally:
-        # Clean up temporary files
-        for temp_file in temp_files:
-            if os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
-
-@router.post("/image_extract_multi_cloud")
-async def image_extract_multi_cloud(
+# MÔ HÌNH Cloud Vision
+@router.post("/image_extract_multi_cloud_vision")
+async def image_extract_multi_cloud_vision(
     files: List[UploadFile] = File(...),
     loaiVanBan: Optional[str] = None,
     duAnID: Optional[str] = None,
@@ -3846,34 +3697,7 @@ async def image_extract_multi_cloud(
         print("======================prompt==================")
         print(prompt)
         print("======================end prompt==================")
-
-        # Initialize Cloud Vision client with API key
-        # Initialize Cloud Vision client with service account
-        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        if not credentials_path:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "code": 500,
-                    "message": "Lỗi cấu hình",
-                    "detail": "Không tìm thấy đường dẫn đến file credentials trong biến môi trường GOOGLE_APPLICATION_CREDENTIALS"
-                }
-            )
-
-        if not os.path.exists(credentials_path):
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "status": "error",
-                    "code": 500,
-                    "message": "Lỗi cấu hình",
-                    "detail": f"Không tìm thấy file credentials tại đường dẫn: {credentials_path}"
-                }
-            )
-
-        client = vision.ImageAnnotatorClient()
-
+        #return
         # Process each file
         temp_files = []
         for file in files:
@@ -3887,82 +3711,63 @@ async def image_extract_multi_cloud(
                         "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
                     }
                 )
-            # Tạo tên file tạm thời với timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # Chuyển đổi tên file sang tiếng Việt không dấu
-            filename_no_accent = unidecode(file.filename)
-            temp_file_path = os.path.join(IMAGE_STORAGE_PATH, f"temp_{timestamp}_{filename_no_accent}")
-            temp_files.append(temp_file_path)
-            print(temp_file_path)
-            # Lưu file tạm thời
-            with open(temp_file_path, "wb") as buffer:
-                content = await file.read()
-                buffer.write(content)
 
         content_parts = [{"type": "text", "text": prompt}]
 
-        # Process each file with Cloud Vision API
+        # Process each file
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
+
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_file.flush()
+                temp_files.append(temp_file.name)
+
+        # Process each file with Azure Form Recognizer
         combined_text = ""
         for temp_file in temp_files:
             try:
-                print(f"Processing file: {temp_file}")
-                # Read the image file
-                with open(temp_file, "rb") as f:
-                    content = f.read()
-                print(f"File size: {len(content)} bytes")
+                # Extract data with Azure Form Recognizer
+                # Extract text from all files using Azure OCR
+                combined_text = extract_text_from_images_google_cloud(temp_files)
 
-                # Create image object
-                image = vision.Image(content=content)
-
-                # Perform text detection
-                print("Calling Cloud Vision API...")
-                response = client.document_text_detection(image=image)
-                texts = response.text_annotations
-                print(f"Number of text annotations: {len(texts) if texts else 0}")
-
-                if texts:
-                    # Get the full text (first annotation contains the entire text)
-                    text_content = texts[0].description
-                    print(f"Extracted text: {text_content[:200]}...")  # Print first 200 chars
-                    combined_text += text_content + "\n"
-                else:
-                    print("No text detected in the image")
-
-                if response.error.message:
-                    print(f"Cloud Vision API error: {response.error.message}")
-                    raise Exception(
-                        '{}\nFor more info on error messages, check: '
-                        'https://cloud.google.com/apis/design/errors'.format(
-                            response.error.message))
 
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
-                print(f"Error type: {type(e)}")
-                print(f"Error details: {traceback.format_exc()}")
                 continue
-        
-        print("&"*30)
-        print("Final combined text:")
-        print(combined_text)
-        print("&"*30)
-
+        pattern = r"===\s*END_BANG_CHI_TIET===\s*?[\s\n]+?===\s*START_BANG_CHI_TIET==="
+        # Thay thế bằng chuỗi rỗng để nối các bảng lại
+        combined_text = re.sub(pattern, "", combined_text, flags=re.DOTALL)
+        # print("&"*30)
+        # print(combined_text)
+        # print("&"*30)
+        #return
         # Process extracted text with OpenAI
         try:
             # Prepare messages for OpenAI
             messages = [
                 {
                     "role": "system",
-                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                    "content": """Bạn là một AI kiểm duyệt dữ liệu bảng chi tiết chi phí trong văn bản hành chính đầu tư xây dựng. """
                 },
                 {
                     "role": "user",
                     "content": f"""
                     {prompt}
-
-                    Data extracted from images:
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     {combined_text}
-
-                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     """
                 }
             ]
@@ -3973,7 +3778,8 @@ async def image_extract_multi_cloud(
                 model="gpt-4o",
                 messages=messages,
                 max_tokens=4096,
-                temperature=0
+                temperature=0,
+                response_format={"type": "json_object"}
             )
 
             # Process response
@@ -3985,10 +3791,11 @@ async def image_extract_multi_cloud(
             elif response_text.strip().startswith("```"):
                 response_text = response_text.strip()[3:-3].strip()
 
+
             print("+"*20)
             print(response_text)
             print("+"*20)
-
+            # return
             # Xử lý response
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -4002,6 +3809,8 @@ async def image_extract_multi_cloud(
                 )
             try:
                 data_json = json.loads(response_text)
+                #data_json = data_json["results"]
+                #print(data_json)
             except json.JSONDecodeError as e:
                 if response_text.strip().startswith("<"):
                     msg = "AI trả về HTML hoặc file không phải là ảnh văn bản."
@@ -4015,62 +3824,422 @@ async def image_extract_multi_cloud(
                         "status": "error",
                         "code": 400,
                         "message": msg,
+                        "detail": str(e),
+                        "raw_response": response_text
+                    }
+                )
+            # Validate required fields in the response
+            query = """select NghiepVuID=ChucNangAIID, ThongTinChung from ChucNangAI where ChucNangAIID='"""+loaiVanBan+"""' order by STT"""
+            dfChucNang = lay_du_lieu_tu_sql_server(query)
+            # Lấy động các cột của bảng Thông tin chung cần lưu vào bản VanBanAI
+            required_fields = []
+            for _, row in dfChucNang.iterrows():
+                bang_du_lieu = row['ThongTinChung']
+                required_fields = bang_du_lieu.split(';')
+
+            # Kiểm tra trong json có đầy đủ các cột cần lưu hay chưa
+            missing_fields = [field for field in required_fields if field not in data_json["ThongTinChung"]]
+            if missing_fields:
+                print("\033[31mKhông thể trích xuất đầy đủ thông tin từ ảnh\033[0m")
+                print(f"Thiếu các trường: {', '.join(missing_fields)}")
+
+            # Set UUIDs in the response data
+            data_json["BangDuLieuID"] = bang_du_lieu_chi_tiet_id
+            data_json["VanBanID"] = van_ban_id
+
+            # Kiểm tra và chuyển đổi các giá trị tiền tệ trong ThongTinChung
+            for col in data_json["ThongTinChung"]:
+                #print("ThongTinChung: cột >>> ", col)
+                if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                    try:
+                        data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi chuyển đổi giá trị tiền tệ cho cột {col}:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Giá trị gốc: {data_json['ThongTinChung'][col]}\033[0m")
+            
+            #print("ThongTinChung >>> ", col)
+            #print(data_json["ThongTinChung"]);
+            # Convert currency values in the response
+
+            print("all_data")
+            print(all_data)
+            if "BangDuLieu" in data_json:
+                for item in data_json["BangDuLieu"]:
+                    try:
+                        # print("Kiểm tra van_ban_id: ", van_ban_id)
+                        item["VanBanID"] = van_ban_id
+                        # Convert all numeric values based on required columns
+                        for col in required_columns:
+                            # print("Cột kiểm tra:", col)
+                            if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
+                                or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
+                                or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                item[col] = convert_currency_to_int(str(item[col]))
+                    except Exception as e:
+                        print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
+                        print(f"\033[31m- Chi tiết lỗi: {str(e)}\033[0m")
+                        print(f"\033[31m- Loại lỗi: {type(e).__name__}\033[0m")
+                        print(f"\033[31m- Item gây lỗi: {json.dumps(item, ensure_ascii=False, indent=2)}\033[0m")
+            
+            # dữ liệu mặc định
+            van_ban_data = {
+                "VanBanAIID": van_ban_id,
+                "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "TenLoaiVanBan": loaiVanBan,
+                "DuAnID": duAnID,
+                "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                "DataOCR": combined_text,
+                "TenFile": "*".join([d['filename'] for d in all_data])
+            }
+            if  f"[{loaiVanBan}]" in "[BCDX_CT];[QDPD_CT];[QDPDDT_CBDT];[QDPD_DT_THDT];[QDPD_DA]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[QDPD_KHLCNT_CBDT];[QDPD_KHLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[QDPD_KQLCNT_CBDT];[QDPD_KQLCNT_THDT]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            elif  f"[{loaiVanBan}]" in "[HOP_DONG]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[PL_HOP_DONG]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""), # Tương đương Số phụ lục hợp đồng
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NgayHieuLuc": data_json["ThongTinChung"].get("NgayHieuLuc", ""),
+                    "NgayKetThuc": data_json["ThongTinChung"].get("NgayKetThuc", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""), # Tương đương Số hợp đồng (gốc)
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[KLCVHT_THD]":
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "LanThanhToan": data_json["ThongTinChung"].get("LanThanhToan", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "NguoiKy_NhaThau": data_json["ThongTinChung"].get("NguoiKy_NhaThau", ""),
+                    "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTriHopDong": data_json["ThongTinChung"].get("GiaTriHopDong", "0"),
+                    "TamUngChuaThuaHoi": data_json["ThongTinChung"].get("TamUngChuaThuaHoi", "0"),
+                    "ThanhToanDenCuoiKyTruoc": data_json["ThongTinChung"].get("ThanhToanDenCuoiKyTruoc", "0"),
+                    "LuyKeDenCuoiKy": data_json["ThongTinChung"].get("LuyKeDenCuoiKy", "0"),
+                    "ThanhToanThuHoiTamUng": data_json["ThongTinChung"].get("ThanhToanThuHoiTamUng", "0"),
+                    "GiaiNganKyNay": data_json["ThongTinChung"].get("GiaiNganKyNay", "0"),
+                    "TamUngGiaiNganKyNayKyTruoc": data_json["ThongTinChung"].get("TamUngGiaiNganKyNayKyTruoc", "0"),
+                    "ThanhToanKLHTKyTruoc": data_json["ThongTinChung"].get("ThanhToanKLHTKyTruoc", "0"),
+                    "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
+                    "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
+                    "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "GiaiDoanID": "",
+                    "DuAnID": duAnID,
+                    "DieuChinh": "0",
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data]),
+                    "UserID": user_id,
+                    "DonViID": don_vi_id
+                }
+            elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+            
+                van_ban_data = {
+                    "VanBanAIID": van_ban_id,
+                    "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
+                    "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
+                    "SoHopDong": data_json["ThongTinChung"].get("SoHopDong", ""),
+                    "SoPLHopDong": data_json["ThongTinChung"].get("SoPLHopDong", ""),
+                    "SoVanBanCanCu": data_json["ThongTinChung"].get("SoVanBanCanCu", ""),
+                    "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
+                    "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
+                    "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
+                    "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
+                    "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
+                    "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
+                    "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "TenLoaiVanBan": loaiVanBan,
+                    "DuAnID": duAnID,
+                    "DieuChinh": data_json["ThongTinChung"].get("DieuChinh", "0"),
+                    "JsonAI": json.dumps(data_json, ensure_ascii=False),
+                    "DataOCR": combined_text,
+                    "TenFile": "*".join([d['filename'] for d in all_data])
+                }
+            van_ban_data["UserID"] = user_id
+            van_ban_data["DonViID"] = don_vi_id
+
+            
+
+            db_service = DatabaseService()
+            result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
+            
+            if not result.get("success", False):
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi lưu dữ liệu vào database",
+                        "detail": result.get("error", "Unknown error")
+                    }
+                )
+
+            # Insert BangDuLieu data if it exists
+            if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
+                bang_du_lieu_data = []
+                for item in data_json["BangDuLieu"]:
+                    bang_du_lieu_data.append({
+                        "VanBanAIID": van_ban_id,
+                        **{col: item.get(col, 0) for col in required_columns}
+                    })
+                bang_du_lieu_result = await db_service.insert_bang_du_lieu_chi_tiet_ai(
+                    db, 
+                    bang_du_lieu_data,
+                    required_columns
+                )
+                if not bang_du_lieu_result.get("success", False):
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "status": "error",
+                            "code": 500,
+                            "message": "Lỗi khi lưu chi tiết bảng dữ liệu",
+                            "detail": bang_du_lieu_result.get("error", "Unknown error")
+                        }
+                    )
+            else:
+                print("Văn bản này không có chi tiết bảng dữ liệu")
+            # After successful processing and database operations
+            try:
+                # Get QLDA upload URL from environment
+                qlda_upload_url = os.getenv("API_URL_UPLOAD_QLDA")
+                if not qlda_upload_url:
+                    raise ValueError("Không tìm thấy API_URL_UPLOAD_QLDA trong file .env")
+
+                # Prepare files for upload to QLDA
+                files_data = []
+                for file in files:
+                    # Reset file pointer to beginning
+                    await file.seek(0)
+                    files_data.append(
+                        ("files", (file.filename, file.file, file.content_type))
+                    )
+
+                # Upload files to QLDA system
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{qlda_upload_url}/api/v1/Uploads/uploadMultipleFiles",
+                        files=files_data,
+                        headers={"Authorization": authorization}
+                    )
+                    
+                    if response.status_code != 200:
+                        return JSONResponse(
+                            status_code=500,
+                            content={
+                                "status": "error",
+                                "code": 500,
+                                "message": "Lỗi khi upload file lên hệ thống QLDA",
+                                "detail": response.text
+                            }
+                        )
+                    
+                    # Lấy response JSON từ API QLDA
+                    qlda_response = response.json()
+                    
+                    try:
+                        # Nối các đường dẫn file trong data thành 1 chuỗi, phân cách bằng dấu *
+                        string_url_qlda_response = '*'.join(qlda_response['data'])
+                        # Thực thi câu lệnh SQL để cập nhật tên file trong bảng VanBanAI
+                        update_query = text(f"""
+                            UPDATE dbo.VanBanAI 
+                            SET tenFile = N'{string_url_qlda_response}'
+                            WHERE VanBanAIID = N'{van_ban_id}'
+                        """)
+                        db.execute(update_query)
+                        db.commit()
+                    except Exception as e:
+                        db.rollback()
+                        raise Exception(f"Lỗi khi cập nhật tên file trong bảng VanBanAI: {str(e)}")
+
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success",
+                        "code": 200,
+                        "message": "Upload và xử lý nhiều file ảnh thành công",
+                        "data": {
+                            "files_processed": [{"filename": d['filename']} for d in all_data],
+                            "van_ban": data_json,
+                            "db_status": result.get("success", False),
+                            "db_message": result.get("message", ""),
+                            "qlda_upload_status": "success",
+                            "qlda_response": qlda_response
+                        }
+                    }
+                )
+
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi upload file lên hệ thống QLDA",
                         "detail": str(e)
                     }
                 )
 
-            # Clean up temporary files
-            for temp_file in temp_files:
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    print(f"Error removing temporary file {temp_file}: {str(e)}")
-
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "code": 200,
-                    "message": "Xử lý ảnh thành công",
-                    "data": data_json
-                }
-            )
-
         except Exception as e:
-            # Clean up temporary files in case of error
-            for temp_file in temp_files:
-                try:
-                    os.remove(temp_file)
-                except Exception as cleanup_error:
-                    print(f"Error removing temporary file {temp_file}: {str(cleanup_error)}")
-            
             return JSONResponse(
-                status_code=500,
+                status_code=400,
                 content={
                     "status": "error",
-                    "code": 500,
-                    "message": "Lỗi xử lý ảnh",
-                    "detail": str(e)
+                    "code": 400,
+                    "message": "Lỗi khi xử lý ảnh",
+                    "detail": f"Chi tiết lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nTraceback: {traceback.format_exc()}"
                 }
             )
-
     except Exception as e:
-        # Clean up temporary files in case of error
-        for temp_file in temp_files:
-            try:
-                os.remove(temp_file)
-            except Exception as cleanup_error:
-                print(f"Error removing temporary file {temp_file}: {str(cleanup_error)}")
-        
         return JSONResponse(
             status_code=500,
             content={
                 "status": "error",
                 "code": 500,
-                "message": "Lỗi xử lý ảnh",
+                "message": "Lỗi hệ thống",
                 "detail": str(e)
             }
         )
+    finally:
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
 
 
 @router.get("/xu_ly_dau_thau")
