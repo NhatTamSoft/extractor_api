@@ -77,6 +77,29 @@ class MultiImageExtractRequest(BaseModel):
 class DocumentExtractRequest(BaseModel):
     file_type: str  # 'image' or 'pdf'
     pages: Optional[List[int]] = None  # For PDF, specify which pages to process
+
+def custom_sort_key(path):
+    try:
+        # Trích xuất phần cuối cùng của đường dẫn (tên thư mục/tập tin)
+        base_name = path.split('\\')[-1]
+
+        # Tìm kiếm số ở đầu chuỗi (nếu có)
+        match = re.match(r'(\d+)\. (.*)', base_name)
+        if match:
+            number = int(match.group(1))
+            text_part = match.group(2)
+            return (number, text_part)
+        else:
+            # Nếu không có số, coi như số rất lớn để nó xuống cuối
+            # hoặc có thể xử lý đặc biệt nếu có nhiều trường hợp không có số
+            return (float('inf'), base_name)
+    except Exception as e:
+        print(f"Lỗi khi xử lý đường dẫn: {str(e)}")
+        # Trả về giá trị mặc định nếu có lỗi
+        return (float('inf'), path)
+    
+
+
 @router.post("/document_extract")
 async def document_extract(
     thuMuc: str = Form(...),
@@ -159,6 +182,7 @@ async def document_extract(
             }
         )
     listFinalPath = [] #Danh sách file pdf đã xử lý
+    error_pdf = []
     try: 
         for item in listThuMuc:
             ma_du_an = item['maDuAn']
@@ -192,7 +216,7 @@ async def document_extract(
                 listPDF = []
                 listIndexTxt = []
                 try:
-                    print("Đang xử lý path: ", path)
+                    #print("Đang xử lý path: ", path)
                     for item_path in os.listdir(path):
                         full_path = os.path.join(path, item_path)
                         if os.path.isdir(full_path):
@@ -205,82 +229,104 @@ async def document_extract(
                     print(f"Lỗi khi đọc thư mục {path}: {str(e)}")
                     print(f"Chi tiết lỗi: {type(e).__name__}")
                     print(f"Stack trace: {traceback.format_exc()}")
+                listThuMucCon_sorted = sorted(listThuMucCon, key=custom_sort_key)
+                listThuMucCon = listThuMucCon_sorted
                 print("================================")
                 print("Danh sách thư mục con:", listThuMucCon)
                 print("Danh sách file PDF:", listPDF) 
                 print("Danh sách file txt:", listIndexTxt)
                 print("================================")
                 listKichBanXuLy = []
-                if listIndexTxt:
-                    # Đọc tất cả các file txt và lấy danh sách các file cần xử lý
-                    # Tạo một tập hợp rỗng để lưu trữ danh sách các file cần xử lý
-                    files_to_process = set()
-                    listFileIndex = []
-                    for txt_file in listIndexTxt:
-                        try:
-                            df_temp = pd.read_csv(txt_file, sep='\t')
-                            # for itemT in df_temp:
-                            #     print("Path:", df_temp['Path'])
-                            #     print("RangePage:", df_temp['RangePage'])
-                            for itemT in df_temp.itertuples():
-                                if not itemT.Path or pd.isna(itemT.Path):
-                                    continue
-                                # Lấy giá trị Path và tách thành mảng các file PDF
-                                pdf_files = itemT.Path.split(';')
-                                # Lấy giá trị RangePage tương ứng
-                                range_pages = itemT.RangePage
-                                
-                                # Tạo danh sách đường dẫn đầy đủ cho các file PDF
-                                full_pdf_paths = []
-                                for pdf_file in pdf_files:
-                                    # Lấy tên file từ đường dẫn
-                                    pdf_name = os.path.basename(pdf_file)
-                                    # Loại bỏ đuôi .pdf nếu có
-                                    while pdf_name.endswith('.pdf'):
-                                        pdf_name = pdf_name.replace('.pdf', '')
-                                    
-                                    # Tìm file PDF trong listPDF
+                # C1: Xử lý file PDF
+                dfRangPage = pd.DataFrame(columns=['Path', 'RangePage'])
+                
+                # Đọc các file txt
+                for txt_file in listIndexTxt:
+                    try:
+                        df_temp = pd.read_csv(txt_file, sep='\t')
+                        dfRangPage = pd.concat([dfRangPage, df_temp], ignore_index=True)
+                    except Exception as e:
+                        print(f"Lỗi đọc file {txt_file}: {str(e)}")
+
+                for pdf_path in listPDF:
+                    listKichBanXuLy.append({
+                        'Path': pdf_path,
+                        'RangePage': ''
+                    })
+                    # print("=======ĐI TÌM PDF")
+                    # print(pdf_path)
+                # Duyệt qua từng dòng trong listKichBanXuLy
+                for item in listKichBanXuLy:
+                    # Lấy tên file từ đường dẫn đầy đủ
+                    pdf_name = os.path.basename(item['Path'])
+                    # Loại bỏ đuôi .pdf nếu có
+                    while pdf_name.endswith('.pdf'):
+                        pdf_name = pdf_name.replace('.pdf', '')
+                    
+                    # Duyệt qua từng dòng trong dfRangPage
+                    for _, row in dfRangPage.iterrows():
+                        # Lấy danh sách các file từ cột Path
+                        path_files = row['Path'].split(';')
+                        # Lấy file đầu tiên để so sánh
+                        first_file = path_files[0]
+                        
+                        # Nếu tìm thấy file trong dfRangPage
+                        if pdf_name == first_file:
+                            # Gán RangePage từ dfRangPage
+                            item['RangePage'] = row['RangePage']
+                            # Nếu có nhiều file trong Path của dfRangPage
+                            if len(path_files) > 1:
+                                # Tạo đường dẫn đầy đủ cho tất cả các file
+                                full_paths = []
+                                for path_file in path_files:
+                                    # Tìm đường dẫn đầy đủ trong listPDF
                                     for full_pdf_path in listPDF:
-                                        # Lấy tên file từ đường dẫn đầy đủ
                                         full_pdf_name = os.path.basename(full_pdf_path)
                                         while full_pdf_name.endswith('.pdf'):
                                             full_pdf_name = full_pdf_name.replace('.pdf', '')
-                                        
-                                        # Nếu tìm thấy file PDF trong listPDF
-                                        if pdf_name == full_pdf_name:
-                                            full_pdf_paths.append(full_pdf_path)
+                                        if path_file == full_pdf_name:
+                                            full_paths.append(full_pdf_path)
                                             break
-                                
-                                # Thêm vào listKichBanXuLy với đường dẫn đầy đủ của tất cả các file PDF
-                                if full_pdf_paths:
-                                    listKichBanXuLy.append({
-                                        'Path': ';'.join(full_pdf_paths),
-                                        'RangePage': range_pages
-                                    })
-                        except Exception as e:
-                            print(f"Lỗi đọc file {txt_file}: {str(e)}")
-                else:
-                    for pdf_path in listPDF:
-                        listKichBanXuLy.append({
-                            'Path': pdf_path,
-                            'RangePage': ''
-                        })
-
-                print("\n" + "═" * 80)
-                print(" " * 25 + "CHI TIẾT LIST KỊCH BẢN XỬ LÝ" + " " * 25)
-                print("═" * 80 + "\n")
-
+                                # Gán lại Path với đường dẫn đầy đủ
+                                if full_paths:
+                                    item['Path'] = ';'.join(full_paths)
+                            break
+                # Tạo danh sách tạm để lưu các phần tử cần xóa
+                items_to_remove = []
+                
+                # Duyệt qua từng phần tử trong listKichBanXuLy
+                for i, item in enumerate(listKichBanXuLy):
+                    # Kiểm tra nếu Path có chứa dấu ';' (nhiều đường dẫn)
+                    if ';' in item['Path']:
+                        # Tách các đường dẫn
+                        paths = item['Path'].split(';')
+                        
+                        # Lấy các đường dẫn từ phần tử thứ 1 trở đi
+                        additional_paths = paths[1:]
+                        
+                        # Duyệt qua các phần tử còn lại trong listKichBanXuLy
+                        for j, other_item in enumerate(listKichBanXuLy):
+                            # Bỏ qua phần tử hiện tại
+                            if i != j:
+                                # Kiểm tra nếu Path của other_item không chứa dấu ';' (chỉ có 1 đường dẫn)
+                                if ';' not in other_item['Path']:
+                                    # Kiểm tra nếu đường dẫn của other_item trùng với một trong các đường dẫn bổ sung
+                                    if other_item['Path'] in additional_paths:
+                                        # Thêm vào danh sách cần xóa
+                                        items_to_remove.append(j)
+                
+                # Xóa các phần tử theo thứ tự giảm dần để tránh ảnh hưởng đến chỉ số
+                for index in sorted(items_to_remove, reverse=True):
+                    listKichBanXuLy.pop(index)
+                print("=" * 10 + "CHI TIẾT LIST KỊCH BẢN XỬ LÝ" + "=" * 10)
+                print(listKichBanXuLy)
                 for idx, item in enumerate(listKichBanXuLy, 1):
-                    print("─" * 80)
                     print(f"\033[1mKỊCH BẢN {idx}\033[0m")
                     print(f"Path: {item['Path']}")
                     print(f"RangePage: {item['RangePage']}")
-                    print("─" * 80 + "\n")
-
-                print("═" * 80)
-                print(" " * 30 + "KẾT THÚC DANH SÁCH" + " " * 30)
-                print("═" * 80 + "\n")
-                         
+                print("=" * 10 + "KẾT THÚC DANH SÁCH" + "=" * 10)
+                
+                # return
                 # Xử lý từng file PDF
                 for itemKichBan in listKichBanXuLy:
                     pathPDF = str(itemKichBan['Path']).strip().split(';')[0] # Lấy file đầu tiên để dành lưu trữ // Các file ở phần tử 1 trở đi chỉ để ghép lấy số liệu
@@ -307,6 +353,7 @@ async def document_extract(
                         else:
                             # Chuyển PDF thành ảnh với các trang được chỉ định
                             images = pdf_to_images(pdf_path, 2.0, page_range)
+                        
                         # print("\n=== Thông tin chi tiết biến images ===")
                         # print(f"Số lượng ảnh: {len(images)}")
                         # print("\nChi tiết từng ảnh:")
@@ -319,6 +366,14 @@ async def document_extract(
                         # Thêm các ảnh vào danh sách kết quả
                         all_images.extend(images)
                     
+                    if len(all_images) == 0:
+                        print('KẾT QUẢ CẮT PDF SANG ẢNH LÀ 0 TRANG: ', pdf_path)
+                        error_pdf.append({
+                            'Path': pdf_path,
+                            'status': "Kết quả cắt pdf sang ảnh là 0"
+                        })
+                        continue
+
                     image_PIL = all_images
 
                     print("\n=== Chi tiết biến image_PIL và itemKichBan ===")
@@ -370,12 +425,14 @@ async def document_extract(
                             loaiVanBan = 'GIAI_NGAN_GRV'
                         elif 'giay_de_nghi_thu_hoi_von\\' in path:
                             loaiVanBan = 'GIAI_NGAN_THV'
-                        elif 'nghiem_thu_ban_giao\\' in path:
-                            loaiVanBan = 'QDPDDT_CBDT'
-                        elif 'bc_quyet_toan_daht\\' in path:
-                            loaiVanBan = 'BC_QTDAHT'
-                        elif 'vb_khac\\' in path:
-                            loaiVanBan = 'VanBanKhac'
+                        else:
+                            continue
+                        # elif 'nghiem_thu_ban_giao\\' in path:
+                        #     loaiVanBan = 'QDPDDT_CBDT'
+                        # elif 'bc_quyet_toan_daht\\' in path:
+                        #     loaiVanBan = 'BC_QTDAHT'
+                        # elif 'vb_khac\\' in path:
+                        #     loaiVanBan = 'VanBanKhac'
                         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
                         van_ban_id = str(uuid.uuid4())
                         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
@@ -384,12 +441,12 @@ async def document_extract(
                         # print("*"*30)
                         # CHUYỂN PDF SANG DANH SÁCH ẢNH
                         
-                        print(f"\n{'='*50}")
-                        print(f"Đang xử lý kịch bản: {itemKichBan}")
-                        print(f"Thời gian bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                        print(f"Đường dẫn file: {itemKichBan['Path']}")
-                        print(f"Đường dẫn file CHÍNH: {pathPDF}")
-                        print(f"{'='*50}\n")
+                        # print(f"\n{'='*50}")
+                        # print(f"Đang xử lý kịch bản: {itemKichBan}")
+                        # print(f"Thời gian bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        # print(f"Đường dẫn file: {itemKichBan['Path']}")
+                        # print(f"Đường dẫn file CHÍNH: {pathPDF}")
+                        # print(f"{'='*50}\n")
                         try:
                             # Process each file with Azure Form Recognizer
                             combined_text = ""
@@ -928,7 +985,8 @@ async def document_extract(
                     "status": "success",
                     "message": "Trích xuất dữ liệu từ file Excel thành công.",
                     "data": {
-                        "info_pdf": listFinalPath
+                        "info_pdf": listFinalPath,
+                        "error_pdf": error_pdf
                     }
                 }
             )
@@ -1343,8 +1401,6 @@ async def extract_multiple_images(
                     "DonViID": don_vi_id
                 }
             elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
-                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
-            
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -1603,12 +1659,23 @@ async def standardized_data(
             if not df_temp.empty:
                 for _, row in df_temp.iterrows():
                     chuoi_markdown_tenkmcp += f"| {row['TenKMCP']} |\n"
+                    # tìm kiếm bằng mô hình offline
+                    # ket_qua_tim_offline = await find_content_similarity(loaiDuLieu='kmcp', duLieuCanTim=row['TenKMCP'])
+                    # if isinstance(ket_qua_tim_offline, JSONResponse):
+                    #     ket_qua_tim_offline = ket_qua_tim_offline.body.decode('utf-8')
+                    #     ket_qua_tim_offline = json.loads(ket_qua_tim_offline)
+                    #     if ket_qua_tim_offline.get('status') == 'success' and ket_qua_tim_offline['data']['success'] == 1:
+                    #         dataTimKiemOffline.append(ket_qua_tim_offline['data']['results'][0])
         # print("="*20)
         # print(chuoi_markdown_tenkmcp)
         # print("="*20)
 
+        # print("="*20)
+        # print(str(dataTimKiemOffline))
+        # print("="*20)
+        # print(dataTimKiemOffline)
 
-            promt_anh_xa_noi_dung_tuong_dong = """
+        promt_anh_xa_noi_dung_tuong_dong = """
 Bạn là chuyên gia AI trong lĩnh vực xây dựng cơ bản. Nhiệm vụ của bạn là ánh xạ từng khoản mục chi phí từ danh sách nhập vào (`DanhSachCanAnhXa`) với danh mục khoản mục chi phí chuẩn (`DanhMucChuan`). Hãy thực hiện theo các quy tắc dưới đây:
 ### QUY TẮC ÁNH XẠ
 
@@ -1616,7 +1683,7 @@ Bạn là chuyên gia AI trong lĩnh vực xây dựng cơ bản. Nhiệm vụ c
 2. **So khớp từ khóa gần đúng**: Cho phép sai lệch chính tả, viết hoa/thường, từ dư thừa hoặc thiếu, nhưng phải đảm bảo nghĩa gốc tương đương.
 3. **Loại bỏ ký tự nhiễu**: Bỏ dấu chấm cuối câu, dấu cách thừa.
 4. **Tự động phát hiện và hợp nhất các trường hợp viết khác nhau** (ví dụ: "Chi phí lập Báo cáo kinh tế - kỹ thuật" và "Chí phí lập báo cáo Kinh tế - kỹ thuật").
-5. Nếu không tìm được ánh xạ phù hợp, ghi rõ `"KHÔNG TÌM ĐƯỢC"`.
+5. Nếu không tìm được ánh xạ phù hợp, ghi rõ trong cột `GhiChu` = "KHÔNG TÌM ĐƯỢC"
 
 #### Bảng 1 - Danh mục chuẩn chi phí (`DanhSachCanAnhXa`)
 """+chuoi_markdown_tenkmcp+"""
@@ -1762,7 +1829,8 @@ Bạn là chuyên gia AI trong lĩnh vực xây dựng cơ bản. Nhiệm vụ c
 | CP58220 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC)                                                                            | bản, phí, công, Chi, thẩm, tra, BVTC, kế, vẽ, thi, thiết                                                                     |
 | CP58231 | Chi phí thẩm tra thiết kế bản vẽ thi công (BVTC) (Phát sinh)                                                                | bản, phí, công, Chi, Phát, thẩm, tra, BVTC, sinh, kế, vẽ, thi, thiết                                                         |
 | CP583   | Tư vấn đầu tư xây dựng                                                                                                      | xây, vấn, Tư, tư, dựng, đầu                                                                                                  |
-| CP584   | Chi phí đăng báo đấu thầu                                                                                                   | phí, Chi, thầu, đăng, đấu, báo                                                                                               |
+| CP584   | Chi phí đăng báo đấu thầu                                                                                                   | phí, Chi, thầu, đăng, đấu, báo                                                                                               |                                                                                                                                                                                           |
+| CP585   | Chi phí đo vẽ hiện trạng                                                                                                    | phí, Chi, vẽ, do, hiện, trạng                                                                                                |                                                                                                                                                                                           |
 | CP599   | Chi phí đo đạc thu hồi đất                                                                                                  | đo, phí, Chi, đất, thu, hồi, đạc                                                                                             |
 | CP6     | Chi phí khác                                                                                                                | khác, phí, Chi                                                                                                               |
 | CP601   | Phí thẩm định dự án đầu tư xây dựng                                                                                         | án, xây, Phí, dự, thẩm, định, tư, dựng, đầu                                                                                  |
@@ -1830,6 +1898,9 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
 ```
 
 """
+        # print("+"*20+"promt_anh_xa_noi_dung_tuong_dong")
+        # print(promt_anh_xa_noi_dung_tuong_dong)
+        # print("+"*20)
         # Gọi OpenAI API để xử lý
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         response = client.chat.completions.create(
@@ -1845,11 +1916,9 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                 }
             ],
             temperature=0,
-            max_completion_tokens=5000
+            max_tokens=15000
         )
-        print("+"*20+"promt_anh_xa_noi_dung_tuong_dong")
-        print(promt_anh_xa_noi_dung_tuong_dong)
-        print("+"*20)
+
         try:
             # Xử lý response từ OpenAI
             response_text = response.choices[0].message.content
@@ -1879,8 +1948,45 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
             # Duyệt qua từng dòng trong DataFrame để xử lý trường hợp GhiChu='Không có thông tin'
             for index, row in dfBangGhepKMCP.iterrows():
                 if row['GhiChu'] == 'KHÔNG TÌM ĐƯỢC':
-                    dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
-                    dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
+                    print("+"*20+"tim_kmcp_offline")
+                    print(row['TenKMCP'])
+                    print("+"*20)
+                    ket_qua_tim_offline = await find_content_similarity(loaiDuLieu='kmcp', duLieuCanTim=row['TenKMCP'])
+                    if isinstance(ket_qua_tim_offline, JSONResponse):
+                        ket_qua_tim_offline = ket_qua_tim_offline.body.decode('utf-8')
+                        ket_qua_tim_offline = json.loads(ket_qua_tim_offline)
+                        print("+"*20+"ket_qua_tim_offline")
+                        print(str(ket_qua_tim_offline))
+                        print("+"*20)
+                        # Kiểm tra kết quả tìm kiếm offline có thành công không
+                        if ket_qua_tim_offline.get('status') == 'success' and ket_qua_tim_offline['data']['success'] == 1:
+                            # Kiểm tra có kết quả tìm được không
+                            if len(ket_qua_tim_offline['data']['results']) > 0:
+                                # Truy vấn lấy mã KMCP từ database dựa trên KMCPID tìm được
+                                query_ma_kmcp = f"select MaKMCP=replace(MaKMCP, '.', '') from dbo.KMCP where KMCPID='{ket_qua_tim_offline['data']['results'][0]['KMCPID']}'"
+                                df_ma_kmcp = lay_du_lieu_tu_sql_server(query_ma_kmcp)
+                                # Lấy mã KMCP từ kết quả truy vấn, nếu không có thì gán chuỗi rỗng
+                                chuoiMaKMCP = df_ma_kmcp.iloc[0]['MaKMCP'] if not df_ma_kmcp.empty else ''
+                                
+                                # Nếu tìm được mã KMCP
+                                if chuoiMaKMCP != '':
+                                    # Cập nhật thông tin vào DataFrame
+                                    dfBangGhepKMCP.at[index, 'MaKMCP'] = chuoiMaKMCP
+                                    dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ket_qua_tim_offline['data']['results'][0]['TenKMCP']
+                                    dfBangGhepKMCP.at[index, 'GhiChu'] = 'Ánh xạ bằng thuật toán'
+                                else:
+                                    # Nếu không tìm được mã KMCP, cập nhật các trường thành rỗng
+                                    dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
+                                    dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
+                                    dfBangGhepKMCP.at[index, 'GhiChu'] = 'KHÔNG TÌM ĐƯỢC'
+                            else:
+                                # Nếu không có kết quả tìm kiếm, cập nhật các trường thành rỗng
+                                dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
+                                dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
+                        else:                    
+                            # Nếu tìm kiếm không thành công, cập nhật các trường thành rỗng
+                            dfBangGhepKMCP.at[index, 'TenKMCP_Moi'] = ''
+                            dfBangGhepKMCP.at[index, 'MaKMCP'] = ''
             
             #print(dfBangGhepKMCP)
 
@@ -2079,7 +2185,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                 "status": "error",
                 "code": 500,
                 "message": "Lỗi hệ thống",
-                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
+                "detail": f"Lỗi: {str(e)}\nLoại lỗi: {type(e).__name__}\nChi tiết: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}\nDòng bị lỗi: {traceback.format_exc()}"
             }
         )
 
@@ -2193,6 +2299,7 @@ async def image_extract_multi_azure(
         for temp_file in temp_files:
             try:
                 # Extract data with Azure Form Recognizer
+                combined_text += process_multiple_documents([temp_file])
                 with open(temp_file, "rb") as f:
                     poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
                     result = poller.result()
@@ -2212,27 +2319,28 @@ async def image_extract_multi_azure(
             except Exception as e:
                 print(f"Error processing file {temp_file}: {str(e)}")
                 continue
-        
-        print("&"*30)
-        print(combined_text)
-        print("&"*30)
+        pattern = r"===\s*END_BANG_CHI_TIET===\s*?[\s\n]+?===\s*START_BANG_CHI_TIET==="
+        # Thay thế bằng chuỗi rỗng để nối các bảng lại
+        combined_text = re.sub(pattern, "", combined_text, flags=re.DOTALL)
+        # print("&"*30)
+        # print(combined_text)
+        # print("&"*30)
+        #return
         # Process extracted text with OpenAI
         try:
             # Prepare messages for OpenAI
             messages = [
                 {
                     "role": "system",
-                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                    "content": """Bạn là một AI kiểm duyệt dữ liệu bảng chi tiết chi phí trong văn bản hành chính đầu tư xây dựng. """
                 },
                 {
                     "role": "user",
                     "content": f"""
                     {prompt}
-
-                    Data extracted from images:
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     {combined_text}
-
-                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     """
                 }
             ]
@@ -2260,7 +2368,7 @@ async def image_extract_multi_azure(
             print("+"*20)
             print(response_text)
             print("+"*20)
-
+            # return
             # Xử lý response
             if "error" in response_text.lower() or "không thể" in response_text.lower():
                 return JSONResponse(
@@ -2706,6 +2814,156 @@ async def image_extract_multi_azure(
                 except Exception as e:
                     print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
 
+@router.post("/image_extract_azure_mapping")
+async def extract_multiple_images_azure_mapping(
+    files: List[UploadFile] = File(...),
+    loaiVanBan: Optional[str] = None,
+    duAnID: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    temp_files = []
+    try:
+        # Get prompt from prompt service
+        prompt = prompt_service.get_prompt(loaiVanBan)
+        if not prompt:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "code": 400,
+                    "message": "Không tìm thấy prompt cho loại văn bản",
+                    "detail": f"Loại văn bản '{loaiVanBan}' không tồn tại trong hệ thống"
+                }
+            )
+
+        # Process each file
+        for file in files:
+            if file.content_type not in ALLOWED_IMAGE_TYPES:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "code": 400,
+                        "message": f"File {file.filename} không đúng định dạng ảnh",
+                        "detail": f"File {file.filename} có content_type {file.content_type} không phải là ảnh hợp lệ."
+                    }
+                )
+
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                content = await file.read()
+                temp_file.write(content)
+                temp_file.flush()
+                temp_files.append(temp_file.name)
+
+        # Process each file with Azure Form Recognizer
+        combined_text = ""
+        for temp_file in temp_files:
+            try:
+                # Extract data with Azure Form Recognizer
+                with open(temp_file, "rb") as f:
+                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
+                    result = poller.result()
+
+                # Collect text and tables
+                for page in result.pages:
+                    for line in page.lines:
+                        combined_text += line.content + "\n"
+
+                # Process tables if any
+                for table in result.tables:
+                    combined_text += "\nBảng:\n"
+                    for row_index in range(table.row_count):
+                        row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
+                        combined_text += " | ".join(row_cells) + "\n"
+
+            except Exception as e:
+                print(f"Error processing file {temp_file}: {str(e)}")
+                continue
+
+        # Process extracted text with OpenAI
+        try:
+            # Prepare messages for OpenAI
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an AI assistant that extracts information from documents. You MUST return a valid JSON object containing the mapped fields. Do not include any other text or explanation in your response."
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    {prompt}
+
+                    Data extracted from images:
+                    {combined_text}
+
+                    Remember: Return ONLY the JSON object, no other text or explanation.
+                    """
+                }
+            ]
+
+            # Call OpenAI API
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                max_tokens=4096,
+                temperature=0,
+                response_format={"type": "json_object"}
+            )
+
+            # Process response
+            response_text = response.choices[0].message.content.strip()
+            
+            # Clean up response text
+            if response_text.strip().startswith("```json"):
+                response_text = response_text.strip()[7:-3].strip()
+            elif response_text.strip().startswith("```"):
+                response_text = response_text.strip()[3:-3].strip()
+
+            # Parse JSON response
+            data = json.loads(response_text)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "code": 200,
+                    "message": "Xử lý văn bản thành công",
+                    "data": data
+                }
+            )
+
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi xử lý văn bản",
+                    "detail": str(e)
+                }
+            )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi hệ thống",
+                "detail": str(e)
+            }
+        )
+    finally:
+        # Clean up temporary files
+        for temp_file in temp_files:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception as e:
+                    print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
+
 @router.get("/find_content_similarity")
 async def find_content_similarity(
     loaiDuLieu: Optional[str] = None, # KMCP; NguonVon; HinhThucDTh; LoaiHopDong
@@ -2717,7 +2975,7 @@ async def find_content_similarity(
         try:
             # Truy vấn lấy danh sách KMCP
             query = """
-            select KMCPID, TenKMCP 
+            select KMCPID=convert(nvarchar(36), KMCPID), TenKMCP 
             from dbo.KMCP 
             order by TenKMCP
             """
@@ -2771,7 +3029,7 @@ async def find_content_similarity(
             nguonvon_data = lay_du_lieu_tu_sql_server(query)
             
             try:
-                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, nguonvon_data, 0.70)
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, nguonvon_data, 0.80)
                 # print(ket_qua_tim)
                 return JSONResponse(
                     status_code=200,

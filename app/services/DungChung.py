@@ -19,6 +19,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import jwt
 from sentence_transformers import SentenceTransformer, util
 import unidecode
+from app.services.tesseract import image_to_text_pytesseract_from_image
 # %%
 # --- 2. Tải và cấu hình API Keys từ file .env ---
 # Tải các biến môi trường từ file .env trong cùng thư mục
@@ -111,7 +112,10 @@ def pdf_to_images(pdf_path, zoom=2.0, pageRange=""):
             pages_to_process = parse_page_string(pageRange)
             # Điều chỉnh index (trừ 1 vì parse_page_string trả về số trang bắt đầu từ 1)
             pages_to_process = [p-1 for p in pages_to_process if p-1 < len(doc)]
-
+        # Kiểm tra số trang của file PDF
+        if len(doc) > 10:
+            print(f"\033[91mCảnh báo: File PDF '{os.path.basename(pdf_path)}' có {len(doc)} trang, vượt quá giới hạn 10 trang. Bỏ qua xử lý.\033[0m")
+            return []
         # Xử lý từng trang được chỉ định
         for page_num in pages_to_process:
             if page_num >= len(doc) or page_num < 0:
@@ -122,7 +126,13 @@ def pdf_to_images(pdf_path, zoom=2.0, pageRange=""):
             mat = fitz.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=mat, alpha=False) # alpha=False để bỏ kênh alpha nếu không cần
             img_data = pix.tobytes("png")  # Lấy dữ liệu ảnh dạng bytes (PNG)
+            # image là đối tượng PIL.Image.Image
             image = Image.open(BytesIO(img_data))
+            # print('=============CHUYỂN ẢNH SANG TEXT=========')
+            # print("Kết quả: ", image_to_text_pytesseract_from_image(image))
+            # print('=============kết thúc CHUYỂN ẢNH SANG TEXT=========')
+            if len(image_to_text_pytesseract_from_image(image)) <= 10: #LOẠI RA CÁC TRANG RỖNG
+                continue
             images.append(image)
     except FileNotFoundError:
         print(f"Lỗi: Không tìm thấy tệp PDF tại '{pdf_path}'")

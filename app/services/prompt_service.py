@@ -53,10 +53,10 @@ class PromptService:
 - 5 dễ nhầm với S → nếu nằm trong số hiệu thì ưu tiên là 5.
 - 8 dễ nhầm với B, 3 → nếu ký tự đi kèm là “Công văn” thì chọn B, ngược lại chọn 8.
 - 9 dễ nhầm với g, q, 4 → nếu trong cụm số hiệu thì chọn 9.
-- Chỉ chấp nhận kết quả nếu thỏa mãn regex định dạng chuẩn: ^\d{1,6}(/\d{1,4})?(/)?(QĐ|TTr|BC|TB|CV|KH|PA)-UBND$
+- Chỉ chấp nhận kết quả nếu thỏa mãn regex định dạng chuẩn: ^\d{1,6}(/[A-Z0-9]{1,6})?/QĐ-UBND(\.\w+|-?\w+)?$
 - Trả về duy nhất chuỗi số hiệu văn bản hợp lệ. Nếu không nhận diện được đúng mẫu, trả về chuỗi rỗng ""
 
-4. Kết quả xuất ra dạng JSON duy nhất có dạng
+4. Bạn PHẢI trả về **duy nhất một chuỗi JSON hợp lệ**, KHÔNG thêm văn bản, giải thích hoặc định dạng khác
 ```
 {
     "ThongTinChung": {
