@@ -4072,3 +4072,70 @@ async def image_extract_multi_cloud(
                 "detail": str(e)
             }
         )
+
+
+@router.get("/xu_ly_dau_thau")
+async def xu_ly_dau_thau(
+    duAnID: Optional[str] = None
+):
+    try:
+        # Truy vấn lấy dữ liệu đấu thầu
+        query = f"""
+            select 
+            BangDuLieuChiTietAIID = convert(nvarchar(36), BangDuLieuChiTietAIID)
+            , VanBanAIID = convert(nvarchar(36), ai.VanBanAIID)
+            , TenLoaiVanBan=isnull(TenLoaiVanBan, ''),
+            TenDauThau=isnull(TenDauThau, ''),
+            TenKMCP=isnull(TenKMCP, ''),
+            KMCPID = convert(nvarchar(36), KMCPID), 
+            DauThauID = convert(nvarchar(36), ai.DauThauID), 
+            DauThauCTID = convert(nvarchar(36), DauThauCTID)
+            from dbo.BangDuLieuChiTietAI ct 
+            left join dbo.VanBanAI ai on ai.VanBanAIID = ct.VanBanAIID
+            where ct.VanBanAIID in (select VanBanAIID from dbo.VanBanAI vb where convert(nvarchar(36), vb.DuAnID)='{duAnID}' and vb.TenLoaiVanBan IN ('QDPD_KHLCNT_CBDT','QDPD_KHLCNT_THDT', 'QDPD_KQLCNT_CBDT','QDPD_KQLCNT_THDT')
+                and isnull(TrangThai, 0) = 0) order by ct.stt
+        """
+        #print(query)
+        # Thực thi truy vấn
+        data = lay_du_lieu_tu_sql_server(query)
+        #print("Data từ SQL Server:", data)
+        # Duyệt qua từng dòng trong data
+        # Lọc các dòng có TenLoaiVanBan là QDPD_KHLCNT_CBDT hoặc QDPD_KHLCNT_THDT
+        filtered_data = data[data['TenLoaiVanBan'].isin(['QDPD_KHLCNT_CBDT', 'QDPD_KHLCNT_THDT'])]
+        # Nhóm theo VanBanAIID và tạo UUID mới cho mỗi nhóm
+        for van_ban_id, group in filtered_data.groupby('VanBanAIID'):
+            print(f"\n=== Xử lý nhóm với VanBanAIID: {van_ban_id} ===")
+            print(f"Số lượng bản ghi trong nhóm: {len(group)}")
+            
+            if len(group) > 1:
+                new_uuid = str(uuid.uuid4())
+                print(f"Tạo UUID mới: {new_uuid}")
+                
+                # Cập nhật DauThauID cho tất cả các dòng trong nhóm
+                data.loc[data['VanBanAIID'] == van_ban_id, 'DauThauID'] = new_uuid
+                print(f"Đã cập nhật DauThauID thành {new_uuid} cho {len(group)} bản ghi")
+            else:
+                print("Nhóm chỉ có 1 bản ghi, không cần cập nhật DauThauID")
+                
+            print("=== Kết thúc xử lý nhóm ===\n")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "code": 200, 
+                "message": "Lấy dữ liệu đấu thầu thành công",
+                "data": data.to_dict(orient='records')
+            }
+        )
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "code": 500,
+                "message": "Lỗi khi lấy dữ liệu đấu thầu",
+                "detail": f"Lỗi: {str(e)}\nDòng lỗi: {e.__traceback__.tb_lineno}\nNội dung lỗi: {e.__cause__}\nDòng bị lỗi: {e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}"
+            }
+        )
