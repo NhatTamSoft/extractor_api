@@ -3872,8 +3872,31 @@ async def image_extract_multi_cloud(
         print("======================end prompt==================")
 
         # Initialize Cloud Vision client with API key
-        client_options = ClientOptions(api_key=os.getenv('GOOGLE_API_KEY'))
-        client = vision.ImageAnnotatorClient(client_options=client_options)
+        # Initialize Cloud Vision client with service account
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not credentials_path:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi cấu hình",
+                    "detail": "Không tìm thấy đường dẫn đến file credentials trong biến môi trường GOOGLE_APPLICATION_CREDENTIALS"
+                }
+            )
+
+        if not os.path.exists(credentials_path):
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi cấu hình",
+                    "detail": f"Không tìm thấy file credentials tại đường dẫn: {credentials_path}"
+                }
+            )
+
+        client = vision.ImageAnnotatorClient()
 
         # Process each file
         temp_files = []
@@ -3917,7 +3940,7 @@ async def image_extract_multi_cloud(
 
                 # Perform text detection
                 print("Calling Cloud Vision API...")
-                response = client.text_detection(image=image)
+                response = client.document_text_detection(image=image)
                 texts = response.text_annotations
                 print(f"Number of text annotations: {len(texts) if texts else 0}")
 
