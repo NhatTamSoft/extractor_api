@@ -44,10 +44,9 @@ def analyze_document_and_format_markdown(document_path: str, client: DocumentInt
                     body=f.read(),
                     output_content_format=DocumentContentFormat.MARKDOWN, # Yêu cầu đầu ra Markdown
                 )
-
         result: AnalyzeResult = poller.result()
         print("-------------------")
-        
+        # print(result.content)
         markdown_table = ""
         if result.tables is not None:  # Kiểm tra xem result.tables có tồn tại không
             for table in result.tables:
@@ -88,8 +87,9 @@ def analyze_document_and_format_markdown(document_path: str, client: DocumentInt
                 else:
                     markdown_table += f"=== END_BANG_TONG_HOP===\n"
         #print(markdown_table)
+        # print("-------------------")
+        # print(result.content)
         print("-------------------")
-        #print(result.content)
         # --- Trích xuất và định dạng văn bản và bảng (đã có sẵn trong result.content) ---
         #markdown_result += "### Nội dung trích xuất (định dạng Markdown):\n"
         if result.content:

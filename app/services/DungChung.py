@@ -21,10 +21,9 @@ from sentence_transformers import SentenceTransformer, util
 import unidecode
 from app.services.tesseract import image_to_text_pytesseract_from_image
 from typing import List
-from azure.ai.formrecognizer import DocumentAnalysisClient
-from azure.core.credentials import AzureKeyCredential
 import google.cloud.vision as vision
 import traceback
+from azure.core.exceptions import HttpResponseError
 # %%
 # --- 2. Tải và cấu hình API Keys từ file .env ---
 # Tải các biến môi trường từ file .env trong cùng thư mục
@@ -923,8 +922,15 @@ def parse_page_string(page_string):
 # Azure credentials
 azure_endpoint = os.getenv("AZURE_FORM_RECOGNIZER_ENDPOINT")
 azure_key = os.getenv("AZURE_FORM_RECOGNIZER_KEY")
+
 # Initialize Azure client
-azure_client = DocumentAnalysisClient(azure_endpoint, AzureKeyCredential(azure_key))
+from azure.ai.documentintelligence import DocumentIntelligenceClient
+from azure.ai.documentintelligence.models import AnalyzeResult, DocumentTable, DocumentLine, AnalyzeDocumentRequest, DocumentContentFormat
+from azure.core.credentials import AzureKeyCredential
+
+azure_client = DocumentIntelligenceClient(
+    endpoint=azure_endpoint, credential=AzureKeyCredential(azure_key)
+)
 def extract_text_from_images_azure(image_files: List[str]) -> str:
     """
     Extract text and table data from images using Azure Form Recognizer.
@@ -936,38 +942,84 @@ def extract_text_from_images_azure(image_files: List[str]) -> str:
         str: Extracted content including text and tables.
     """
     combined_text = ""
-
-    for file_path in image_files:
-        print(f"\n=== Processing file: {file_path} ===")
+    for document_path in image_files:
+        print(f"\n=== Processing file: {document_path} ===")
         try:
-            with open(file_path, "rb") as f:
-                poller = azure_client.begin_analyze_document("prebuilt-layout", document=f)
+            if document_path.startswith("http://") or document_path.startswith("https://"):
+                # Phân tích tài liệu từ URL
+                print(f"Đang phân tích tài liệu từ URL: {document_path}...")
+                poller = azure_client.begin_analyze_document(
+                    "prebuilt-layout",
+                    AnalyzeDocumentRequest(url_source=document_path),
+                    output_content_format=DocumentContentFormat.MARKDOWN, # Yêu cầu đầu ra Markdown
+                )
+            else:
+                # Phân tích tài liệu từ tệp cục bộ
+                if not os.path.exists(document_path):
+                    return f"### Lỗi: Tệp `{document_path}` không tồn tại.\n\n"
+                print(f"Đang phân tích tài liệu từ tệp cục bộ: {document_path}...")
+                with open(document_path, "rb") as f:
+                    poller = azure_client.begin_analyze_document(
+                        "prebuilt-layout", 
+                        body=f.read(),
+                        output_content_format=DocumentContentFormat.MARKDOWN, # Yêu cầu đầu ra Markdown
+                    )
+            with open(document_path, "rb") as f:
+                poller = azure_client.begin_analyze_document("prebuilt-layout", body=f)
                 result = poller.result()
+            result: AnalyzeResult = poller.result()
+            print("-------------------")
+            # print(result.content)
+            markdown_table = ""
+            if result.tables is not None:  # Kiểm tra xem result.tables có tồn tại không
+                for table in result.tables:
+                    # print(table)
+                    column_count = table['columnCount']
+                    if column_count > 3:
+                        markdown_table += f"=== START_BANG_CHI_TIET===\n"
+                    else:
+                        markdown_table += f"=== START_BANG_TONG_HOP===\n"
+                    row_count = table['rowCount']
+                    cells_data = table['cells']
 
-            # Text extraction
-            text_lines = []
-            for page in result.pages:
-                for line in page.lines:
-                    text_lines.append(line.content)
-            if text_lines:
-                combined_text += f"\n--- Text from {file_path} ---\n"
-                combined_text += "\n".join(text_lines) + "\n"
+                    # Tạo một cấu trúc dữ liệu để lưu trữ nội dung của các ô,
+                    # ví dụ: một danh sách các danh sách (mảng 2D)
+                    table_content = [['' for _ in range(column_count)] for _ in range(row_count)]
+
+                    # Điền nội dung vào cấu trúc bảng
+                    for cell in cells_data:
+                        r_idx = cell['rowIndex']
+                        c_idx = cell['columnIndex']
+                        content = cell['content']
+                        if 0 <= r_idx < row_count and 0 <= c_idx < column_count:
+                            table_content[r_idx][c_idx] = content
+                    # Tạo các hàng dữ liệu
+                    for row in table_content:
+                        markdown_table += "| " + " | ".join(row) + " |\n"
+                    if column_count > 3:
+                        markdown_table += f"=== END_BANG_CHI_TIET===\n"
+                    else:
+                        markdown_table += f"=== END_BANG_TONG_HOP===\n"
+            print(markdown_table)
+            # print("-------------------")
+            # print(result.content)
+            print("-------------------")
+            # --- Trích xuất và định dạng văn bản và bảng (đã có sẵn trong result.content) ---
+            #markdown_result += "### Nội dung trích xuất (định dạng Markdown):\n"
+            if result.content:
+                # markdown_result += result.content
+                # Xóa phần table trong nội dung
+                markdown_result = re.sub(r'<table>.*?</table>', '', str(result.content), flags=re.DOTALL)
+                markdown_result += markdown_table
             else:
-                combined_text += f"\n--- No text found in {file_path} ---\n"
-
-            # Table extraction
-            if result.tables:
-                combined_text += f"\n--- Tables from {file_path} ---\n"
-                for i, table in enumerate(result.tables, 1):
-                    combined_text += f"\nTable {i} (Rows: {table.row_count}, Columns: {table.column_count}):\n"
-                    for row_index in range(table.row_count):
-                        row = [cell.content or "" for cell in table.cells if cell.row_index == row_index]
-                        combined_text += " | ".join(row) + "\n"
-            else:
-                combined_text += f"\n--- No tables found in {file_path} ---\n"
-
+                markdown_result += "Không tìm thấy nội dung nào trong tài liệu.\n"
+        except HttpResponseError as error:
+            print(error)
+            # Xử lý các lỗi HTTP cụ thể từ dịch vụ Azure
+            #markdown_result += f"### Lỗi phản hồi HTTP khi phân tích tài liệu: {error.error.code} - {error.message}\n\n"
         except Exception as e:
-            combined_text += f"\n[Error processing {file_path}]: {str(e)}\n"
+            print(e)
+            #combined_text += f"\n[Error processing {document_path}]: {str(e)}\n"
 
     return combined_text
 

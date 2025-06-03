@@ -423,15 +423,17 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `TenNhaThau`: Trích từ dòng "tên nhà thầu", tại dòng "Tên giao dịch (Nhà thầu): ..." hoặc "Nhà thầu: ..." hoặc "Bên B: ..." hoặc "Tên đơn vị nhận thầu:..."
 `NguoiKy_NhaThau`: Trích tên người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
-`TrichYeu`: Lấy trích yếu văn bản
+`TrichYeu`: Lấy trích yếu hợp đồng, thường bắt đầu bằng "Về việc..." hoặc "V/v..."
 ### Bảng khối lượng công việc của hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cum từ "Hợp đồng ... " tại trạng 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
-- Nếu sau cum từ "Gói thầu ... " tại trạng 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
-- Nếu sau cum từ "Căn cứ Quyết định số ... kết quả lựa chọn nhà thầu ..." có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cụm từ "Hợp đồng ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cụm từ "Gói thầu ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cụm từ "Căn cứ Quyết định số ... kết quả lựa chọn nhà thầu ..." có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
 - Nếu có bảng chi tiết thì trích cột "Tên công việc" của bảng chi tiết gán vào `TenKMCP`.
+- Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
+- Nếu "Tên công việc" có chưa cụm từ "Làm tròn" hoặc "(Làm tròn)" thì loại bỏ cụm từ "Làm tròn" hoặc "(Làm tròn)"
 `GiaTriHopDong`:  Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cụm từ "Hợp đồng ... " tại trạng 1 có chứa cụm từ "bảo hiểm" thì `GiaTriHopDong` trích số tiền tại dòng có cụm từ "phí bảo hiểm làm tròn:"
+- Nếu sau cụm từ "Hợp đồng ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `GiaTriHopDong` trích số tiền tại dòng có cụm từ "phí bảo hiểm làm tròn:"
 - Nếu có bảng chi tiết thì trích cột "Thành tiền" hoặc cột "Số tiền" của bảng chi tiết gán vào `GiaTriHopDong`, ngược lại thì lấy bằng "0".
 ### Yêu cầu xử lý:
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
@@ -442,7 +444,7 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 {{CHUCNANG11}} Chức năng `Phụ lục hợp đồng`
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "PL_HOP_DONG"
-`SoVanBan`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:..."
+`SoVanBan`: Trích số phụ lục hợp đồng, thường bắt đầu bằng "Phụ lục hợp đồng số:..." hoặc "Số phụ lục:..." hoặc "Phụ lục số:...", chỉ lấy sau dấu ":"
 `SoPLHopDong`: Giống cột `SoVanBan`
 `NgayKy`: Lấy ngày ký phụ lục hợp đồng, sau dòng "Hôm nay ..., ngày ..." định dạng (dd/MM/yyyy)
 `SoVanBanCanCu`: Trích `số hợp đồng`, tại dòng "Căn cứ Hợp đồng..."
@@ -456,12 +458,13 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `TrichYeu`: Lấy trích yếu phụ lục hợp đồng, thường bắt đầu bằng "Về việc..." hoặc "V/v..."
 ### Bảng khối lượng công việc của phụ lục hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cum từ "Gói thầu... " tại trạng 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng", nếu trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm".
-- Nếu sau cum từ "Căn cứ Hợp đồng số ..." có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng", nếu trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm".
+- Nếu sau cum từ "Gói thầu... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cum từ "Căn cứ Hợp đồng số ..." có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
 - Nếu có bảng chi tiết thì trích cột "Tên công việc" của bảng chi tiết gán vào `TenKMCP`.
-- Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Làm tròn", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
+- Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
+- Nếu "Tên công việc" có chưa cụm từ "Làm tròn" hoặc "(Làm tròn)" thì loại bỏ cụm từ "Làm tròn" hoặc "(Làm tròn)"
 `GiaTriHopDong`:  Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cụm từ "Gói thầu... " tại trạng 1 có chứa cụm từ "bảo hiểm" thì `GiaTriHopDong` trích số tiền tại dòng có cụm từ "phí bảo hiểm làm tròn:"
+- Nếu sau cụm từ "Gói thầu... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `GiaTriHopDong` trích số tiền tại dòng có cụm từ "phí bảo hiểm làm tròn:"
 - Nếu có bảng chi tiết thì trích cột "Thành tiền" hoặc cột "Số tiền" của bảng chi tiết gán vào `GiaTriHopDong`, ngược lại thì lấy bằng "0".
 ### Yêu cầu xử lý:
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
@@ -479,7 +482,7 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)
 `SoHopDong`: Giống cột `SoVanBanCanCu`
 `SoPLHopDong`: Số phụ lục hợp đồng (nếu có, trích sau cụm "Phụ lục số..." hoặc "Phụ lục bổ sung số...")
-`LanThanhToan`: Lần thanh toán (trích sau cụm từ "Thanh toán lần thứ..."). Ví dụ: "01", "02", "03"
+`LanThanhToan`: Lần thanh toán (trích sau cụm từ "Thanh toán lần thứ..."). Ví dụ: "01", "02", "03". 
 `TenNhaThau`: Tên nhà thầu (trích sau dòng "Nhà thầu:" hoặc "Đơn vị thi công...")
 `NguoiKy`: Trích tên người ký văn bản:
             - Tìm tại phần cuối trang, thường ngay dưới dòng "ĐẠI DIỆN CHỦ ĐẦU TƯ" hoặc "ĐẠI DIỆN NHÀ THẦU"
@@ -503,8 +506,8 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
 - Nếu sau cum từ "Gói thầu... " tại trạng 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng", nếu trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm".
 - Nếu có bảng chi tiết thì trích cột "Tên công việc" của bảng chi tiết gán vào `TenKMCP`.
-- Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Làm tròn", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
-`GiaTriNghiemThu`: Trích giá trị `thực hiện kỳ này` trong bảng dữ liệu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+- Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
+`GiaTriNghiemThu`: Trích giá trị `thực hiện kỳ này` trong bảng dữ liệu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn), nếu giá trị `thực hiện kỳ này` có dòng "làm tròn" thì lấy giá trị `làm tròn` 
 ### Yêu cầu xử lý:
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền

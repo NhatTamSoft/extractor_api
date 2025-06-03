@@ -598,7 +598,7 @@ async def document_extract(
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                             or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                             or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                            or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                            or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                                 try:
                                     data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
                                 except Exception as e:
@@ -619,7 +619,7 @@ async def document_extract(
                                         if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                             or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                             or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                            or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                            or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                                             item[col] = convert_currency_to_int(str(item[col]))
                                 except Exception as e:
                                     print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
@@ -1200,7 +1200,7 @@ async def extract_multiple_images(
                 if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                 or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                     try:
                         data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
                     except Exception as e:
@@ -1220,7 +1220,7 @@ async def extract_multiple_images(
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                 or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                                 item[col] = convert_currency_to_int(str(item[col]))
                     except Exception as e:
                         print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
@@ -2316,7 +2316,7 @@ async def image_extract_multi_azure(
                     {prompt}
                     ===BẮT ĐẦU_VĂN_BẢN_OCR===
                     {combined_text}
-                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
+                    ===KẾT_THÚC_VĂN_BẢN_OCR===
                     """
                 }
             ]
@@ -2402,7 +2402,7 @@ async def image_extract_multi_azure(
                 if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                 or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                     try:
                         data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
                     except Exception as e:
@@ -2427,7 +2427,7 @@ async def image_extract_multi_azure(
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                 or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                                 item[col] = convert_currency_to_int(str(item[col]))
                     except Exception as e:
                         print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
@@ -3853,7 +3853,7 @@ async def image_extract_multi_cloud_vision(
                 if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                 or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                     try:
                         data_json["ThongTinChung"][col] = convert_currency_to_int(str(data_json["ThongTinChung"][col]))
                     except Exception as e:
@@ -3878,7 +3878,7 @@ async def image_extract_multi_cloud_vision(
                             if (col.startswith('GiaTri') or col.startswith('SoTien') or col.startswith('ThanhToanDenCuoiKyTruoc') or col.startswith('LuyKeDenCuoiKy')
                                 or col.startswith('GiaTriNghiemThu') or col.startswith('TamUngChuaThuaHoi') or col.startswith('TamUngGiaiNganKyNayKyTruoc') or col.startswith('GiaTrungThau')
                                 or col.startswith('ThanhToanThuHoiTamUng') or col.startswith('GiaiNganKyNay') or col.startswith('TamUngGiaiNganKyTruoc')
-                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT')):
+                                or col.startswith('LuyKe') or col.startswith('TamUngThanhToan') or col.startswith('ThanhToanKLHT') or col.startswith('LanThanhToan')):
                                 item[col] = convert_currency_to_int(str(item[col]))
                     except Exception as e:
                         print(f"\033[31m[ERROR] Lỗi khi xử lý item trong BangDuLieu:\033[0m")
