@@ -118,7 +118,7 @@ def pdf_to_images(pdf_path, zoom=2.0, pageRange=""):
             # Điều chỉnh index (trừ 1 vì parse_page_string trả về số trang bắt đầu từ 1)
             pages_to_process = [p-1 for p in pages_to_process if p-1 < len(doc)]
         # Kiểm tra số trang của file PDF
-        if len(doc) > 10:
+        if len(doc) >= 10 and len(pageRange.split(';')) >= 10:
             print(f"\033[91mCảnh báo: File PDF '{os.path.basename(pdf_path)}' có {len(doc)} trang, vượt quá giới hạn 10 trang. Bỏ qua xử lý.\033[0m")
             return []
         # Xử lý từng trang được chỉ định

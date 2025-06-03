@@ -836,7 +836,7 @@ async def document_extract(
                         if not result.get("success", False):
                             print("Lỗi khi lưu dữ liệu vào database\n" + result.get("error", "Unknown error"))
                             item['ghiChu'] = "Lỗi khi lưu dữ liệu vào database\n" + result.get("error", "Unknown error")
-
+                        print("Dảng dữ liệu các cột >>>>>>>>>> : ", required_columns)
                         # Insert BangDuLieu data if it exists
                         if "BangDuLieu" in data_json and data_json["BangDuLieu"] and len(data_json["BangDuLieu"]) > 0:
                             bang_du_lieu_data = []
@@ -4060,7 +4060,6 @@ async def image_extract_multi_cloud_vision(
                 }
             elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
                 print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
-            
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -4090,8 +4089,6 @@ async def image_extract_multi_cloud_vision(
                 }
             van_ban_data["UserID"] = user_id
             van_ban_data["DonViID"] = don_vi_id
-
-            
 
             db_service = DatabaseService()
             result = await db_service.insert_van_ban_ai(db, van_ban_data, loaiVanBan)
