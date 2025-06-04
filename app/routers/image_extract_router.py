@@ -421,6 +421,10 @@ async def document_extract(
                             loaiVanBan = 'GIAI_NGAN_THV'
                         else:
                             continue
+                        print("======================LOAI VAN BAN===================")
+                        print(loaiVanBan)
+                        print("======================END LOAI VAN BAN===================")
+
                         # elif 'nghiem_thu_ban_giao\\' in path:
                         #     loaiVanBan = 'QDPDDT_CBDT'
                         # elif 'bc_quyet_toan_daht\\' in path:
@@ -428,6 +432,12 @@ async def document_extract(
                         # elif 'vb_khac\\' in path:
                         #     loaiVanBan = 'VanBanKhac'
                         prompt, required_columns = prompt_service.get_prompt(loaiVanBan)
+                        if prompt.strip() == "":
+                            error_pdf.append({
+                                'Path': pdf_path,
+                                'status': "Loại văn bản chưa được khai báo"
+                            })
+                            break
                         van_ban_id = str(uuid.uuid4())
                         bang_du_lieu_chi_tiet_id = str(uuid.uuid4())
                         # print("*"*30)
@@ -451,9 +461,6 @@ async def document_extract(
                                         output_content_format=DocumentContentFormat.MARKDOWN
                                     )
                                     result: AnalyzeResult = poller.result()
-                                    print("======================begin_analyze_document==================")
-                                    print(result)
-                                    print("======================end begin_analyze_document==================")
                                     markdown_table = ""
                                     if result.tables is not None:  # Kiểm tra xem result.tables có tồn tại không
                                         for table in result.tables:
@@ -814,15 +821,15 @@ async def document_extract(
                                 "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                                 "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                                 "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
-                                "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
-                                "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                                "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
+                                "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                                 "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                                 "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
                                 "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                                 "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
-                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                                "GiaTri": data_json["ThongTinChung"].get("SoTien", "0"),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
                                 "DuAnID": duAnID,
@@ -1412,8 +1419,8 @@ async def extract_multiple_images(
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
-                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
-                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
@@ -2621,15 +2628,15 @@ async def image_extract_multi_azure(
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
-                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
-                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
                     "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                     "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
-                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "GiaTri": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
@@ -4139,15 +4146,15 @@ async def image_extract_multi_cloud_vision(
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
-                    "LoaiKHVonID": data_json["ThongTinChung"].get("NienDo", "2"), # mặc định là 2 (năm nay)
-                    "SoTien": data_json["ThongTinChung"].get("NienDo", "0"),
+                    "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
+                    "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
                     "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                     "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
-                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
+                    "GiaTri": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
