@@ -17,10 +17,11 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Import and include routers
-from app.routers import image_router, auth_router, health_router, extract_router, image_extract_router
+from app.routers import image_router, auth_router, health_router, extract_router, image_extract_router, so_hoa
 
 app.include_router(auth_router.router, prefix="/auth", tags=["Authentication"])
 app.include_router(image_router.router, prefix="/images", tags=["Images"])
 app.include_router(health_router.router, tags=["Health Check"])
 app.include_router(extract_router.router, tags=["PDF Extraction"])
 app.include_router(image_extract_router.router, tags=["Image Extraction"]) 
+app.include_router(so_hoa.router, tags=["SoHoa"])
