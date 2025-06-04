@@ -3277,21 +3277,21 @@ async def extract_document_SoHoa(
                 continue
 
             # Check for mapping table header
-            if '| Mã | Giá trị |' in line:
+            if '| ID | Mã | Giá trị |' in line:
                 if current_field and 'mapping' not in current_field["extractionRules"]:
                     current_field["extractionRules"]["mapping"] = {}
                 in_mapping_table = True
                 continue
 
-            # Check for mapping table rows
             if in_mapping_table and line.startswith('|'):
                 if current_field:
                     parts = [p.strip() for p in line.split('|')]
-                    if len(parts) >= 3:  # Ensure we have enough parts
-                        code = parts[1].strip()
-                        value = parts[2].strip()
-                        if code and value:  # Only add if both code and value exist
-                            current_field["extractionRules"]["mapping"][code] = value
+                    if len(parts) >= 4:
+                        id_value = parts[1]
+                        code = parts[2]
+                        value = parts[3]
+                        if id_value and code and value:
+                            current_field["extractionRules"]["mapping"][value] = id_value
                 continue
 
             # Reset mapping table flag if we encounter a non-table line
@@ -3420,6 +3420,13 @@ def get_code_from_mapping(value: str, mapping_table: Dict[str, str]) -> str:
     # If no direct match, return the original value
     return value
 
+def get_id_from_mapping(value: str, mapping_table: Dict[str, str]) -> str:
+    value = value.strip().lower()
+    for mapped_value, id_value in mapping_table.items():
+        if mapped_value.lower() == value:
+            return id_value
+    return value
+
 async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict):
     """Process a single image file"""
     try:
@@ -3476,7 +3483,7 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
             field_name = field["tenTruong"]
             if "extractionRules" in field and "mapping" in field["extractionRules"]:
                 if field_name in data and data[field_name]:
-                    data[field_name] = get_code_from_mapping(
+                    data[field_name] = get_id_from_mapping(
                         data[field_name], 
                         field["extractionRules"]["mapping"]
                     )
@@ -3616,7 +3623,7 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                     field_name = field["tenTruong"]
                     if "extractionRules" in field and "mapping" in field["extractionRules"]:
                         if field_name in data and data[field_name]:
-                            data[field_name] = get_code_from_mapping(
+                            data[field_name] = get_id_from_mapping(
                                 data[field_name], 
                                 field["extractionRules"]["mapping"]
                             )
