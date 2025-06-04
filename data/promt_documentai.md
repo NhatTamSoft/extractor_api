@@ -159,10 +159,11 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản (VD: "CHỦ TỊCH", "PHÓ CHỦ TỊCH", "KT. CHỦ TỊCH – PHÓ CHỦ TỊCH").
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
+`GiaTri`: Trích cột giá gói thầu, thường tại dòng "Tổng cộng..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenDauThau`: Trích tên đầy đủ của gói thầu
-`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
+`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
 `GiaTriGoiThau`: Trích cột giá gói thầu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNguonVon`: Trích cột nguồn vốn, nếu không có để ""
 `HinhThucLCNT`: Trích cột hình thức lựa chọn nhà thầu
@@ -196,7 +197,7 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
-`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
+`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
 `TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
 `ThoiGianTHHopDong`: Trích từ dòng "Thời gian thực hiện hợp đồng: ... ngày"
 `LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
@@ -365,10 +366,11 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `ChucDanhNguoiKy`: Trích phần ghi rõ chức vụ người ký văn bản.
 `CoQuanBanHanh`: Trích xuất chính xác tên cơ quan ban hành văn bản theo đúng quy định tại Nghị định 30/2020/NĐ-CP về công tác văn thư. Nếu dòng đầu là tên cơ quan chủ quản và dòng thứ hai là đơn vị trực thuộc thì chỉ lấy dòng thứ hai làm cơ quan ban hành.
 `TrichYeu`: Trích nguyên văn phần tiêu đề nằm ngay sau chữ "QUYẾT ĐỊNH", thường bắt đầu bằng "Về việc..." hoặc "V/v..." hoặc "Về việc phê duyệt Báo cáo...".
+`GiaTri`: Trích cột giá gói thầu, thường tại dòng "Tổng cộng..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `DieuChinh`: Gán `1` nếu trích yếu văn bản có chứa nội dung "điều chỉnh...", ngược lại gán `0`.
 **Bảng Phụ lục gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): `BangDuLieu`:
 `TenDauThau`: Trích tên đầy đủ của gói thầu
-`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
+`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
 `GiaTriGoiThau`: Trích cột giá gói thầu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNguonVon`: Trích cột nguồn vốn
 `HinhThucLCNT`: Trích cột hình thức lựa chọn nhà thầu
@@ -402,7 +404,7 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `DieuChinh`: Gán giá trị `1` nếu nội dung phần tiêu đề văn bản có cụm từ chứa "điều chỉnh". Nếu không có, gán `0`.
 ### Bảng dữ liệu gói thầu, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenDauThau`: Trích `tên gói thầu`, sau cụm từ "Nội dung gói thầu:..." hoặc "Tên gói thầu:..."
-`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
+`TenKMCP`: Nếu `TenDauThau` có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu `TenDauThau` có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng" ngược lại gán `TenDauThau` vào cột `TenKMCP`
 `TenNhaThau`: Trích từ dòng "đơn vị chỉ định thầu" hoặc "đơn vị trúng thầu"
 `ThoiGianTHHopDong`: Trích từ dòng "Thời gian thực hiện hợp đồng: ... ngày"
 `LoaiHopDong`: Trích từ dòng "Loại hợp đồng: ..."
@@ -430,10 +432,13 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `NguoiKy_NhaThau`: Trích tên người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `TrichYeu`: Lấy trích yếu hợp đồng, thường bắt đầu bằng "Về việc..." hoặc "V/v..."
+`GiaTri`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
+- Nếu sau cụm từ "Hợp đồng ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `GiaTriHopDong` trích số tiền tại dòng có cụm từ "phí bảo hiểm làm tròn:"
+- Nếu có bảng chi tiết thì trích cột "Thành tiền" hoặc cột "Số tiền" của bảng chi tiết gán vào `GiaTriHopDong`, ngược lại thì lấy bằng "0".
 ### Bảng khối lượng công việc của hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cụm từ "Hợp đồng ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
-- Nếu sau cụm từ "Gói thầu ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cụm từ "Hợp đồng ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cụm từ "Gói thầu ... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
 - Nếu sau cụm từ "Căn cứ Quyết định số ... kết quả lựa chọn nhà thầu ..." có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
 - Nếu có bảng chi tiết thì trích cột "Tên công việc" của bảng chi tiết gán vào `TenKMCP`.
 - Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này
@@ -462,10 +467,13 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `NguoiKy_NhaThau`: Trích tên người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `ChucDanhNguoiKy_NhaThau`: Trích tên chức vụ người đại diện "Nhà thầu" hoặc "Bên B: ..." hoặc "Đơn vị nhận thầu:..."
 `TrichYeu`: Lấy trích yếu phụ lục hợp đồng, thường bắt đầu bằng "Về việc..." hoặc "V/v..."
+`GiaTri`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
+- Nếu sau cụm từ "Gói thầu... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `GiaTriHopDong` trích số tiền tại dòng có cụm từ "phí bảo hiểm làm tròn:"
+- Nếu có bảng chi tiết thì trích cột "Thành tiền" hoặc cột "Số tiền" của bảng chi tiết gán vào `GiaTriHopDong`, ngược lại thì lấy bằng "0".
 ### Bảng khối lượng công việc của phụ lục hợp đồng, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cum từ "Gói thầu... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
-- Nếu sau cum từ "Căn cứ Hợp đồng số ..." có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cum từ "Gói thầu... " tại trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
+- Nếu sau cum từ "Căn cứ Hợp đồng số ..." có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm", nếu trang 1 có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng".
 - Nếu có bảng chi tiết thì trích cột "Tên công việc" của bảng chi tiết gán vào `TenKMCP`.
 - Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
 - Nếu "Tên công việc" có chứa cụm từ "làm tròn" hoặc "(làm tròn)", hãy loại bỏ phần "làm tròn", chỉ giữ lại phần gốc. Ví dụ: "Tên chi phí (làm tròn)" ➜ "Tên chi phí". Dòng "Tên công việc" vẫn phải được đưa vào danh sách, ngay cả khi nội dung có ghi "(làm tròn)" hoặc các biến thể tương tự.
@@ -482,41 +490,46 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.a/TT"
 ### Thông tin chung của văn bản, tên đối tượng (object) "ThongTinChung":
 `KyHieu`: "KLCVHT_THD"
-`SoVanBan`: Số biên bản nghiệm thu (trích sau dòng "Biên bản nghiệm thu số..." hoặc trích sau cụm "Giấy chứng nhận bảo hiểm...:")
-`NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ..." hoặc trích sau cụm "Giấy chứng nhận bảo hiểm số ..., ngày ... tháng ... năm ...") định dạng (dd/MM/yyyy)
-`SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm "Hợp đồng số..." hoặc trích sau cụm "Giấy chứng nhận bảo hiểm...:")
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)
+`SoVanBan`: Trích số biên bản nghiệm thu sau dòng "Biên bản nghiệm thu số..." hoặc trích sau cụm từ "Giấy chứng nhận bảo hiểm...:"
+`NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ..." hoặc trích sau cụm từ "Giấy chứng nhận bảo hiểm số ..., ngày ... tháng ... năm ...") định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Trích số hợp đồng chính sau cụm từ "Hợp đồng số..." hoặc trích sau cụm từ "Giấy chứng nhận bảo hiểm...:"
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm từ "Hợp đồng số..." định dạng (dd/MM/yyyy)
 `SoHopDong`: Giống cột `SoVanBanCanCu`
-`SoPLHopDong`: Số phụ lục hợp đồng (nếu có, trích sau cụm "Phụ lục số..." hoặc "Phụ lục bổ sung số...")
-`LanThanhToan`: Lần thanh toán (trích sau cụm từ "Thanh toán lần thứ..."). Ví dụ: "01", "02", "03". 
-`TenNhaThau`: Tên nhà thầu (trích sau dòng "Nhà thầu:" hoặc "Đơn vị thi công...")
+`SoPLHopDong`: Trích số phụ lục hợp đồng sau cụm từ "Phụ lục số..." hoặc "Phụ lục bổ sung số..."
+`LanThanhToan`: Trích lần thanh toán sau cụm từ "Thanh toán lần thứ...". Ví dụ: "01", "02", "03". 
+`TenNhaThau`: Trích tên nhà thầu sau dòng "Nhà thầu:" hoặc "Đơn vị thi công..."
 `NguoiKy`: Trích tên người ký văn bản:
             - Tìm tại phần cuối trang, thường ngay dưới dòng "ĐẠI DIỆN CHỦ ĐẦU TƯ" hoặc "ĐẠI DIỆN NHÀ THẦU"
             - Là dòng chữ `in hoa hoặc in thường có họ tên đầy đủ`, nằm trên chữ ký tay
             - Nếu có đóng dấu, tên người ký nằm bên dưới
 `ChucDanhNguoiKy`: Trích dòng nằm "ngay phía trên tên người ký", ví dụ: "Giám đốc", "Phó giám đốc", "Kế toán trưởng", "Chủ tịch", "KT. Chủ tịch – Phó Chủ tịch".
-`CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư")
+`CoQuanBanHanh`: Trích tên chủ đầu tư sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư"
 `TrichYeu`: Gán "Bảng xác định khối lượng công việc hoàn thành theo Hợp đồng số: ", kết hợp tất cả các số hiệu từ `SoVanBanCanCu` và `NgayKyCanCu` thành một chuỗi.
+`GiaTri`: Trích `giá trị đề nghị giải ngân kỳ này` tại dòng "6. giá trị đề nghị giải ngân kỳ này" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `GiaTriHopDong`: Trích `giá trị hợp đồng` tại dòng "`1. Giá trị hợp đồng (giá trị dự toán được duyệt...)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TamUngChuaThuaHoi`: Trích `giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước` tại dòng "2. Giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `ThanhToanDenCuoiKyTruoc`: Trích `số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước` tại dòng "3. Số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `LuyKeDenCuoiKy`: Trích `luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này` tại dòng "4. Luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `ThanhToanThuHoiTamUng`: Trích `thanh toán để thu hồi tạm ứng` tại dòng "5. Thanh toán để thu hồi tạm ứng" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
-`GiaiNganKyNay`: Trích `giá trị đề nghị giải ngân kỳ này` tại dòng "6. giá trị đề nghị giải ngân kỳ này" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaiNganKyNay`: Lấy giá trị cột `GiaTri`
 `TamUngGiaiNganKyNayKyTruoc`: Trích `số tiền tạm ứng` ngay dưới dòng "số tiền bằng chữ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `ThanhToanKLHTKyTruoc`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "số tiền bằng chữ..." (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `LuyKeGiaiNgan`: Trích `số tiền` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TamUngThanhToan`: Trích `số tiền tạm ứng` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `ThanhToanKLHT`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`LoaiGiaiNgan`: Nếu `SoVanBanCanCu` có giá trị thì gán "1" ngược lại gán "2"
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
-- Nếu sau cum từ "Gói thầu... " tại trạng 1 có chứa cụm từ "xây dựng" hoặc "xây lắp" thì `TenKMCP` = "Chi phí xây dựng", nếu trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm".
+- Nếu sau cum từ "Gói thầu... " tại trạng 1 có chứa cụm từ "thi công xây dựng" hoặc "thi công xây lắp" thì `TenKMCP` = "Chi phí xây dựng", nếu trang 1 có chứa cụm từ "bảo hiểm" thì `TenKMCP` = "Chi phí bảo hiểm".
 - Nếu có bảng chi tiết thì trích cột "Tên công việc" của bảng chi tiết gán vào `TenKMCP`.
 - Nếu "Tên công việc" có chứa cụm từ sau: "Tổng số", "Thuế GTGT", "Thuế VAT" thì không lấy dòng thông tin này.
-`GiaTriNghiemThu`: Trích giá trị `thực hiện kỳ này` trong bảng dữ liệu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn), nếu giá trị `thực hiện kỳ này` có dòng "làm tròn" thì lấy giá trị `làm tròn` 
+`GiaTriNTVAT`: Nếu giá trị `thực hiện kỳ này` có dòng "làm tròn" thì lấy giá trị `làm tròn` ngược lại trích giá trị `thực hiện kỳ này` trong bảng dữ liệu (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn). 
+`GiaTriNTTruVAT`: Nếu giá trị `thực hiện kỳ này` có dòng "Giảm thuế" hoặc "thuế VAT" thì lấy giá trị "Giảm thuế" hoặc "thuế VAT" ngược lại gán "0"
+`GiaTriNghiemThu`: Tính bằng công thức `GiaTriNTVAT` trừ `GiaTriNTTruVAT`
 ### Yêu cầu xử lý:
 - Không suy diễn hoặc bổ sung thông tin không có trong văn bản
 - Tự động loại bỏ dấu chấm phân cách hàng nghìn trong số tiền
+
 
 {{CHUCNANG13}} Chức năng `Khối lượng công việc hoàn thành (viết tắt KLCVHT) không thông qua hợp đồng`
 ### Văn bản để nhận dạng thông tin là: "Bảng xác định giá trị khối lượng công việc hoàn thành, mẫu số 03.b/TT"
@@ -524,10 +537,10 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `KyHieu`: "KLCVHT_NHD"
 `SoVanBan`: Số biên bản nghiệm thu (trích sau dòng "Biên bản nghiệm thu số..." hoặc dòng tương đương)
 `NgayKy`: Ngày ký chứng từ trích sau dòng "Biên bản nghiệm thu số ..., ngày ... tháng ... năm ..." định dạng (dd/MM/yyyy)
-`SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm "Hợp đồng số...")
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm "Hợp đồng số..." định dạng (dd/MM/yyyy)
+`SoVanBanCanCu`: Số hợp đồng chính (trích sau cụm từ "Hợp đồng số...")
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." hợp đồng, trích sau cụm từ "Hợp đồng số..." định dạng (dd/MM/yyyy)
 `SoHopDong`: Giống cột `SoVanBanCanCu`
-`SoPLHopDong`: Số phụ lục hợp đồng (nếu có, trích sau cụm "Phụ lục số..." hoặc "Phụ lục bổ sung số...")
+`SoPLHopDong`: Trích số phụ lục hợp đồng sau cụm từ "Phụ lục số..." hoặc "Phụ lục bổ sung số..."
 `LanThanhToan`: Lần thanh toán (trích sau cụm từ "Thanh toán lần thứ...")
 `TenNhaThau`: Tên nhà thầu (trích sau dòng "Nhà thầu:" hoặc "Đơn vị thi công...")
 `NguoiKy`: Trích tên người ký văn bản:
@@ -537,17 +550,19 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `ChucDanhNguoiKy`: Trích dòng nằm "ngay phía trên tên người ký", ví dụ: "Giám đốc", "Phó giám đốc", "Kế toán trưởng", "Chủ tịch", "KT. Chủ tịch – Phó Chủ tịch".
 `CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư")
 `TrichYeu`: Trích cụm từ "Khối lượng công việc hoàn thành theo Hợp đồng số: ..." Trích sau cụm từ "Thanh toán lần thứ:"
+`GiaTri`: Trích `giá trị đề nghị giải ngân kỳ này` tại dòng "6. giá trị đề nghị giải ngân kỳ này"
 `GiaTriHopDong`: Trích `giá trị hợp đồng` tại dòng "`1. Giá trị hợp đồng (giá trị dự toán được duyệt...)" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TamUngChuaThuaHoi`: Trích `giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước` tại dòng "2. Giá trị tạm ứng còn lại chưa thu hồi đến cuối kỳ trước"
 `ThanhToanDenCuoiKyTruoc`: Trích `số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước` tại dòng "3. Số tiền đã thanh toán khối lượng hoàn thành đến cuối kỳ trước"
 `LuyKeDenCuoiKy`: Trích `luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này` tại dòng "4. Luỹ kế giá trị khối lượng thực hiện đến cuối kỳ này"
 `ThanhToanThuHoiTamUng`: Trích `thanh toán để thu hồi tạm ứng` tại dòng "5. Thanh toán để thu hồi tạm ứng"
-`GiaiNganKyNay`: Trích `giá trị đề nghị giải ngân kỳ này` tại dòng "6. giá trị đề nghị giải ngân kỳ này"
+`GiaiNganKyNay`: Lấy giá trị cột `GiaTri`
 `TamUngGiaiNganKyNayKyTruoc`: Trích `số tiền tạm ứng` ngay dưới dòng "số tiền bằng chữ..."
 `ThanhToanKLHTKyTruoc`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "số tiền bằng chữ..."
 `LuyKeGiaiNgan`: Trích `số tiền` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:"
 `TamUngThanhToan`: Trích `số tiền tạm ứng` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:"
 `ThanhToanKLHT`: Trích `số tiền thanh toán khối lượng hoàn thành` ngay dưới dòng "7. Luỹ kế giá trị giải ngân:"
+`LoaiGiaiNgan`: Nếu `SoVanBanCanCu` có giá trị thì gán "1" ngược lại gán "2"
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `TenKMCP`: Tên công việc được ghi trong cột "Tên công việc"
 `GiaTriNghiemThu`: Đơn vị tính (ví dụ: m2, đồng...) (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
@@ -574,17 +589,18 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `SoVanBan`: Trích số hiệu ở đầu văn bản sau chữ "Số:"
 `NgayKy`: Trích ngày ở góc trên bên phải văn bản (dưới dòng "Độc lập - Tự do - Hạnh phúc"), định dạng (dd/MM/yyyy)
 `SoHopDong`: Trích số hợp đồng sau cụm từ "Căn cứ hợp đồng số:..."
-`SoVanBanCanCu`: Giống cột `SoHopDong`
-`NgayKyCanCu`: Trích "ngày...tháng...năm ..." của hợp đồng, cùng dòng `SoHopDong` định dạng (dd/MM/yyyy)
-`SoPLHopDong`: Trích số phụ lục hợp đồng sau cụm từ "Phụ lục bổ sung hợp đồng số:..."
+`SoVanBanCanCu`: Trích số hợp đồng sau cụm từ "Căn cứ hợp đồng số:..." hoặc trích sau cụm từ "Căn cứ quyết định phê duyệt dự toán..."
+`NgayKyCanCu`: Trích "ngày...tháng...năm ..." cùng dòng `SoVanBanCanCu` định dạng (dd/MM/yyyy)
+`SoPLHopDong`: Trích số phụ lục hợp đồng sau cụm từ "Phụ lục số..." hoặc "Phụ lục bổ sung số..."
 `TenNguonVon`: Trích sau dòng "Thuộc nguồn vốn:"
 `NienDo`: Trích sau dòng "Năm:", phía trên dòng tiêu đề của bảng số liệu
 `LoaiKHVonID`: Trích sau dòng "Thuộc kế hoạch:", nếu `NienDo` bằng `LoaiKHVonID` thì gán `2`, nếu `NienDo` lơn hơn `LoaiKHVonID`  thì gán `1` ngược lại gán `3`
-`SoTien`: Lấy giá trị tổng số tiền đề nghị tạm ứng, thanh toán bằng số, tại dòng "Tổng số tiền đề nghị tạm ứng, thanh toán bằng số:"
+`GiaTri`: Lấy giá trị tổng số tiền đề nghị tạm ứng, thanh toán bằng số, tại dòng "Tổng số tiền đề nghị tạm ứng, thanh toán bằng số:"
 `NguoiKy`: Trích tên người ký tại mục "LÃNH ĐẠO ĐƠN VỊ" hoặc "BAN QUẢN LÝ DỰ ÁN", dưới chữ ký
 `ChucDanhNguoiKy`: Trích dòng nằm ngay phía trên tên người ký
 `CoQuanBanHanh`: Trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Chủ đầu tư/Ban QLDA:"
 `TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
+`LoaiGiaiNgan`: Nếu `SoHopDong` hoặc `SoPLHopDong` có giá trị thì gán "1" ngược lại gán "2"
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `NoiDung`: Trích từ cột "Nội dung thanh toán"
 `TenKMCP`: Trích khoản mục chi phí tại `NoiDung` gán vào cột `TenKMCP` và loại bỏ cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn...", viết hoa chữ cái đầu của từ đầu tiên sau khi loại bỏ cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn..."
@@ -606,7 +622,7 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `NienDo`: Trích từ dòng “Năm NS: ...” (Năm ngân sách)
 `NghiepVuID`: Nếu checkbox [x] nằm ở mục “Thực chi” ghi `010`, nếu checkbox [x] nằm ở mục “Tạm ứng” ghi `011`, nếu checkbox [x] nằm ở mục “Ứng trước đủ điều kiện thanh toán” ghi `013`, nếu checkbox [x] nằm ở mục “Ứng trước chưa đủ điều kiện thanh toán” ghi `014`, ngược lại ghi `""`
 `LoaiKHVonID`: Trích Năm kế hoạch vốn (cột 6), nếu `NienDo` bằng `LoaiKHVonID` thì gán `2`, nếu `NienDo` lơn hơn `LoaiKHVonID`  thì gán `1` ngược lại gán `3`
-`SoTien`: Lấy giá trị tổng số tiền đề nghị tạm ứng, thanh toán bằng số, tại dòng "Tổng số tiền đề nghị tạm ứng, thanh toán bằng số:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTri`: Lấy giá trị tổng số tiền đề nghị tạm ứng, thanh toán bằng số, tại dòng "Tổng số tiền đề nghị tạm ứng, thanh toán bằng số:" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `TenNhaThau`: Trích từ dòng “Đơn vị nhận tiền” hoặc “THANH TOÁN CHO ĐƠN VỊ HƯỞNG”.
 `NguoiKy`: Trích tên người ký tại mục "LÃNH ĐẠO ĐƠN VỊ" hoặc “BAN QUẢN LÝ DỰ ÁN”, dưới chữ ký
 `ChucDanhNguoiKy`: Trích dòng nằm `ngay phía trên tên người ký`
@@ -614,7 +630,10 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `TrichYeu`: Lấy nội dung thanh toán của bảng dữ liệu (nếu nhiều nội dung thì nối chuỗi lại cách nhau dấu chấm phẩy `; `)
 ### Bảng khối lượng công việc hoàn thành, mỗi dòng là một bản ghi với các cột sau, tên đối tượng (object): "BangDuLieu":
 `NoiDung`: Tên nội dung chi, trích từ (cột 1)
-`TenKMCP`: Trích khoản mục chi phí tại `NoiDung` gán vào cột `TenKMCP` và loại bỏ cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn...", viết hoa chữ cái đầu của từ đầu tiên sau khi loại bỏ cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn..."
+`TenKMCP`: Bạn PHẢI xử lý theo đúng theo yêu cầu sau:
+- Nếu `NoiDung` có chứa cụm từ "Bảo hành công trình" thì `TenKMCP` = "Chi phí xây dựng" ngược lại trích khoản mục chi phí tại `NoiDung` gán vào cột `TenKMCP`. 
+- Nếu `TenKMCP` có chứa cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn..." thì loại bỏ cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn...".
+- Viết hoa chữ cái đầu của từ đầu tiên sau khi loại bỏ cụm từ "Thanh toán" hoặc "Tạm ứng" hoặc "hoàn thành" hoặc "giai đoạn...".
 `MaNDKT`: Mã nội dung kinh tế (cột 2)
 `MaChuong`: Mã chương (cột 3)
 `MaNganhKT`: Mã ngành kinh tế (cột 4)
@@ -637,7 +656,7 @@ Nếu khoản mục chi phí nằm ở một dòng, còn số tiền nằm ở d
 `NgayKyCanCu`: Trích "ngày .../.../..." của "Căn cứ Giấy đề nghị thanh toán vốn đầu tư", cùng dòng `SoVanBanCanCu` định dạng (dd/MM/yyyy)
 `NienDo`: Trích từ dòng “Năm NS: ...” (Năm ngân sách)
 `NghiepVuID`: Nếu checkbox [x] nằm ở mục “Tạm ứng sang thực chi” ghi `012`, nếu checkbox [x] nằm ở mục “Ứng trước chưa đủ ĐKTT sang ứng trước đủ ĐKTT” ghi `015`, ngược lại ghi `""`
-`SoTien`: Lấy số tiền tổng cộng tại cột "Số cơ quan kiểm soát, thanh toán duyệt thanh toán" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
+`GiaTri`: Lấy số tiền tổng cộng tại cột "Số cơ quan kiểm soát, thanh toán duyệt thanh toán" (định dạng dưới dạng số nguyên, không chứa dấu chấm ngăn cách hàng nghìn)
 `NguoiKy`: Trích tên người ký tại mục "LÃNH ĐẠO ĐƠN VỊ" hoặc "BAN QUẢN LÝ DỰ ÁN", dưới chữ ký
 `ChucDanhNguoiKy`: Trích dòng nằm `ngay phía trên tên người ký`
 `CoQuanBanHanh`: Tên chủ đầu tư (trích sau dòng có cụm từ "Chủ đầu tư:" hoặc "Đại diện chủ đầu tư")	

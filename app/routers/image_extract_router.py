@@ -503,9 +503,10 @@ async def document_extract(
                                     item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}"
                                     print(f"Error processing file {temp_file}: {str(e)}")
 
-                            print("&"*30 + "BEGIN markdown_result")
-                            print(combined_text)
-                            print("&"*30+ " END markdown_result")
+                            # print("&"*30 + "BEGIN markdown_result")
+                            # print(combined_text)
+                            # print("&"*30+ " END markdown_result")
+
                         #break
                         # Ghi combined_text ra file text
                         except Exception as e:
@@ -685,6 +686,7 @@ async def document_extract(
                                 "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
                                 "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                                 "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                                 "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
@@ -732,6 +734,7 @@ async def document_extract(
                                 "ChucDanhNguoiKy_NhaThau": data_json["ThongTinChung"].get("ChucDanhNguoiKy_NhaThau", ""),
                                 "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
                                 "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
@@ -762,7 +765,6 @@ async def document_extract(
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
-                                
                                 "DuAnID": duAnID,
                                 "DieuChinh": "0",
                                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -798,6 +800,7 @@ async def document_extract(
                                 "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
                                 "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
                                 "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                                "LoaiGiaiNgan": data_json["ThongTinChung"].get("LoaiGiaiNgan", "1"),
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
@@ -810,7 +813,53 @@ async def document_extract(
                                 "DonViID": don_vi_id
                             }
                         elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
-                            print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+                            loaiGiaiNgan = "1"
+                            try:
+                                NgayKyCanCu = data_json["ThongTinChung"].get("NgayKyCanCu", "")
+                                if NgayKyCanCu and NgayKyCanCu.strip():
+                                    try:
+                                        NgayKyCanCu = datetime.strptime(NgayKyCanCu, '%d/%m/%Y').strftime('%Y-%m-%d')
+                                    except ValueError:
+                                        print(f"Lỗi định dạng ngày: {NgayKyCanCu}")
+                                        NgayKyCanCu = ""
+                                chuoiKiemTra = f"""
+                --Lấy giấy đền nghị TT (@SoVanBanCanCu_DNTT, @NgayKyCanCu_DNTT) => Lấy số hợp đồng 
+                declare @SoVanBanCanCu_GRV nvarchar(50), @NgayKyCanCu_GRV datetime, 
+                @SoVanBanCanCu_DNTT nvarchar(50), @NgayKyCanCu_DNTT datetime, 
+                @SoVanBanCanCu_HD nvarchar(50), @NgayKyCanCu_HD datetime, @DuAnID uniqueidentifier
+                set @SoVanBanCanCu_GRV = dbo.GetPrefixBeforeSlash(N'{data_json["ThongTinChung"].get("SoVanBanCanCu", "")}') -- Số văn bản căn cứ của giấy rút vốn
+                set @NgayKyCanCu_GRV = '{NgayKyCanCu}' -- Ngày ký văn bản căn cứ của giấy rút vốn
+                set @DuAnID = '{duAnID}'
+                if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '') <> ''
+                begin
+                    -- lấy Đề nghị thanh toán
+                    set @SoVanBanCanCu_DNTT = ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '')
+                    set @NgayKyCanCu_DNTT = ISNULL((select top 1 NgayKyCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), NULL)
+                    --select * from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'
+                    --print(@SoVanBanCanCu_DNTT)
+                    --print(@NgayKyCanCu_DNTT)
+                    if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'), '') <> ''
+                    begin
+                        --select * from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'
+                        -- lấy Hợp đồng
+                        select LoaiGiaiNgan='1' 
+                    end
+                    else
+                    begin select LoaiGiaiNgan='2' 
+                    end
+                end
+                else
+                begin
+                    select LoaiGiaiNgan='2' 
+                end
+                """
+                                print(chuoiKiemTra)
+                                dfVanBan = thuc_thi_truy_van(chuoiKiemTra)            
+                                if not dfVanBan.empty:
+                                    loaiGiaiNgan = dfVanBan.iloc[0]['LoaiGiaiNgan']
+                            except Exception as e:
+                                print(f"Lỗi khi xử lý loại giải ngân: {str(e)}")
+                                loaiGiaiNgan = "1"  # Giá trị mặc định nếu có lỗi
                             van_ban_data = {
                                 "VanBanAIID": van_ban_id,
                                 "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -822,14 +871,14 @@ async def document_extract(
                                 "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                                 "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
                                 "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
-                                "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                                 "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                                 "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                                "LoaiGiaiNgan": loaiGiaiNgan,
                                 "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                                 "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
-                                "GiaTri": data_json["ThongTinChung"].get("SoTien", "0"),
+                                "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
                                 "DuAnID": duAnID,
@@ -1285,6 +1334,7 @@ async def extract_multiple_images(
                     "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
@@ -1397,6 +1447,7 @@ async def extract_multiple_images(
                     "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
                     "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
                     "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "LoaiGiaiNgan": data_json["ThongTinChung"].get("LoaiGiaiNgan", "1"),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
@@ -1409,6 +1460,53 @@ async def extract_multiple_images(
                     "DonViID": don_vi_id
                 }
             elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
+                loaiGiaiNgan = "1"
+                try:
+                    NgayKyCanCu = data_json["ThongTinChung"].get("NgayKyCanCu", "")
+                    if NgayKyCanCu and NgayKyCanCu.strip():
+                        try:
+                            NgayKyCanCu = datetime.strptime(NgayKyCanCu, '%d/%m/%Y').strftime('%Y-%m-%d')
+                        except ValueError:
+                            print(f"Lỗi định dạng ngày: {NgayKyCanCu}")
+                            NgayKyCanCu = ""
+                    chuoiKiemTra = f"""
+    --Lấy giấy đền nghị TT (@SoVanBanCanCu_DNTT, @NgayKyCanCu_DNTT) => Lấy số hợp đồng 
+    declare @SoVanBanCanCu_GRV nvarchar(50), @NgayKyCanCu_GRV datetime, 
+    @SoVanBanCanCu_DNTT nvarchar(50), @NgayKyCanCu_DNTT datetime, 
+    @SoVanBanCanCu_HD nvarchar(50), @NgayKyCanCu_HD datetime, @DuAnID uniqueidentifier
+    set @SoVanBanCanCu_GRV = dbo.GetPrefixBeforeSlash(N'{data_json["ThongTinChung"].get("SoVanBanCanCu", "")}') -- Số văn bản căn cứ của giấy rút vốn
+    set @NgayKyCanCu_GRV = '{NgayKyCanCu}' -- Ngày ký văn bản căn cứ của giấy rút vốn
+    set @DuAnID = '{duAnID}'
+    if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '') <> ''
+    begin
+        -- lấy Đề nghị thanh toán
+        set @SoVanBanCanCu_DNTT = ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '')
+        set @NgayKyCanCu_DNTT = ISNULL((select top 1 NgayKyCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), NULL)
+        --select * from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'
+        --print(@SoVanBanCanCu_DNTT)
+        --print(@NgayKyCanCu_DNTT)
+        if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'), '') <> ''
+        begin
+            --select * from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'
+            -- lấy Hợp đồng
+            select LoaiGiaiNgan='1' 
+        end
+        else
+        begin select LoaiGiaiNgan='2' 
+        end
+    end
+    else
+    begin
+        select LoaiGiaiNgan='2' 
+    end
+    """
+                    print(chuoiKiemTra)
+                    dfVanBan = thuc_thi_truy_van(chuoiKiemTra)            
+                    if not dfVanBan.empty:
+                        loaiGiaiNgan = dfVanBan.iloc[0]['LoaiGiaiNgan']
+                except Exception as e:
+                    print(f"Lỗi khi xử lý loại giải ngân: {str(e)}")
+                    loaiGiaiNgan = "1"  # Giá trị mặc định nếu có lỗi
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -1420,11 +1518,11 @@ async def extract_multiple_images(
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
                     "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
-                    "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "LoaiGiaiNgan": loaiGiaiNgan,
                     "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                     "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
                     "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
@@ -2492,6 +2590,7 @@ async def image_extract_multi_azure(
                     "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
@@ -2604,6 +2703,7 @@ async def image_extract_multi_azure(
                     "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
                     "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
                     "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "LoaiGiaiNgan": data_json["ThongTinChung"].get("LoaiGiaiNgan", "1"),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
@@ -2616,8 +2716,53 @@ async def image_extract_multi_azure(
                     "DonViID": don_vi_id
                 }
             elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
-                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
-            
+                loaiGiaiNgan = "1"
+                try:
+                    NgayKyCanCu = data_json["ThongTinChung"].get("NgayKyCanCu", "")
+                    if NgayKyCanCu and NgayKyCanCu.strip():
+                        try:
+                            NgayKyCanCu = datetime.strptime(NgayKyCanCu, '%d/%m/%Y').strftime('%Y-%m-%d')
+                        except ValueError:
+                            print(f"Lỗi định dạng ngày: {NgayKyCanCu}")
+                            NgayKyCanCu = ""
+                    chuoiKiemTra = f"""
+    --Lấy giấy đền nghị TT (@SoVanBanCanCu_DNTT, @NgayKyCanCu_DNTT) => Lấy số hợp đồng 
+    declare @SoVanBanCanCu_GRV nvarchar(50), @NgayKyCanCu_GRV datetime, 
+    @SoVanBanCanCu_DNTT nvarchar(50), @NgayKyCanCu_DNTT datetime, 
+    @SoVanBanCanCu_HD nvarchar(50), @NgayKyCanCu_HD datetime, @DuAnID uniqueidentifier
+    set @SoVanBanCanCu_GRV = dbo.GetPrefixBeforeSlash(N'{data_json["ThongTinChung"].get("SoVanBanCanCu", "")}') -- Số văn bản căn cứ của giấy rút vốn
+    set @NgayKyCanCu_GRV = '{NgayKyCanCu}' -- Ngày ký văn bản căn cứ của giấy rút vốn
+    set @DuAnID = '{duAnID}'
+    if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '') <> ''
+    begin
+        -- lấy Đề nghị thanh toán
+        set @SoVanBanCanCu_DNTT = ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '')
+        set @NgayKyCanCu_DNTT = ISNULL((select top 1 NgayKyCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), NULL)
+        --select * from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'
+        --print(@SoVanBanCanCu_DNTT)
+        --print(@NgayKyCanCu_DNTT)
+        if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'), '') <> ''
+        begin
+            --select * from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'
+            -- lấy Hợp đồng
+            select LoaiGiaiNgan='1' 
+        end
+        else
+        begin select LoaiGiaiNgan='2' 
+        end
+    end
+    else
+    begin
+        select LoaiGiaiNgan='2' 
+    end
+    """
+                    print(chuoiKiemTra)
+                    dfVanBan = thuc_thi_truy_van(chuoiKiemTra)            
+                    if not dfVanBan.empty:
+                        loaiGiaiNgan = dfVanBan.iloc[0]['LoaiGiaiNgan']
+                except Exception as e:
+                    print(f"Lỗi khi xử lý loại giải ngân: {str(e)}")
+                    loaiGiaiNgan = "1"  # Giá trị mặc định nếu có lỗi
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -2629,14 +2774,14 @@ async def image_extract_multi_azure(
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
                     "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
-                    "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "LoaiGiaiNgan": loaiGiaiNgan,
                     "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                     "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
-                    "GiaTri": data_json["ThongTinChung"].get("SoTien", "0"),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
@@ -4008,6 +4153,7 @@ async def image_extract_multi_cloud_vision(
                     "NgayKy": data_json["ThongTinChung"].get("NgayKy", ""),
                     "NgayKyCanCu": data_json["ThongTinChung"].get("NgayKyCanCu", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
@@ -4122,6 +4268,7 @@ async def image_extract_multi_cloud_vision(
                     "LuyKeGiaiNgan": data_json["ThongTinChung"].get("LuyKeGiaiNgan", "0"),
                     "TamUngThanhToan": data_json["ThongTinChung"].get("TamUngThanhToan", "0"),
                     "ThanhToanKLHT": data_json["ThongTinChung"].get("ThanhToanKLHT", "0"),
+                    "LoaiGiaiNgan": data_json["ThongTinChung"].get("LoaiGiaiNgan", "1"),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
@@ -4135,7 +4282,53 @@ async def image_extract_multi_cloud_vision(
                     "DonViID": don_vi_id
                 }
             elif  f"[{loaiVanBan}]" in "[GIAI_NGAN_DNTT];[GIAI_NGAN_GRV];[GIAI_NGAN_THV]":
-                print("van_ban_data>>>>>>>>>>>>>>>>>>>>")
+                loaiGiaiNgan = "1"
+                try:
+                    NgayKyCanCu = data_json["ThongTinChung"].get("NgayKyCanCu", "")
+                    if NgayKyCanCu and NgayKyCanCu.strip():
+                        try:
+                            NgayKyCanCu = datetime.strptime(NgayKyCanCu, '%d/%m/%Y').strftime('%Y-%m-%d')
+                        except ValueError:
+                            print(f"Lỗi định dạng ngày: {NgayKyCanCu}")
+                            NgayKyCanCu = ""
+                    chuoiKiemTra = f"""
+    --Lấy giấy đền nghị TT (@SoVanBanCanCu_DNTT, @NgayKyCanCu_DNTT) => Lấy số hợp đồng 
+    declare @SoVanBanCanCu_GRV nvarchar(50), @NgayKyCanCu_GRV datetime, 
+    @SoVanBanCanCu_DNTT nvarchar(50), @NgayKyCanCu_DNTT datetime, 
+    @SoVanBanCanCu_HD nvarchar(50), @NgayKyCanCu_HD datetime, @DuAnID uniqueidentifier
+    set @SoVanBanCanCu_GRV = dbo.GetPrefixBeforeSlash(N'{data_json["ThongTinChung"].get("SoVanBanCanCu", "")}') -- Số văn bản căn cứ của giấy rút vốn
+    set @NgayKyCanCu_GRV = '{NgayKyCanCu}' -- Ngày ký văn bản căn cứ của giấy rút vốn
+    set @DuAnID = '{duAnID}'
+    if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '') <> ''
+    begin
+        -- lấy Đề nghị thanh toán
+        set @SoVanBanCanCu_DNTT = ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), '')
+        set @NgayKyCanCu_DNTT = ISNULL((select top 1 NgayKyCanCu from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'), NULL)
+        --select * from vanbanai where NgayKy=@NgayKyCanCu_GRV and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = dbo.GetPrefixBeforeSlash(@SoVanBanCanCu_GRV) and TenLoaiVanBan=N'GIAI_NGAN_DNTT'
+        --print(@SoVanBanCanCu_DNTT)
+        --print(@NgayKyCanCu_DNTT)
+        if ISNULL((select top 1 SoVanBanCanCu from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'), '') <> ''
+        begin
+            --select * from vanbanai where NgayKy=@NgayKyCanCu_DNTT and DuAnID=@DuAnID and dbo.GetPrefixBeforeSlash(SoVanBan) = SUBSTRING(@SoVanBanCanCu_DNTT, 1, CHARINDEX('/', @SoVanBanCanCu_DNTT) - 1) and DuAnID=@DuAnID and TenLoaiVanBan=N'HOP_DONG'
+            -- lấy Hợp đồng
+            select LoaiGiaiNgan='1' 
+        end
+        else
+        begin select LoaiGiaiNgan='2' 
+        end
+    end
+    else
+    begin
+        select LoaiGiaiNgan='2' 
+    end
+    """
+                    print(chuoiKiemTra)
+                    dfVanBan = thuc_thi_truy_van(chuoiKiemTra)            
+                    if not dfVanBan.empty:
+                        loaiGiaiNgan = dfVanBan.iloc[0]['LoaiGiaiNgan']
+                except Exception as e:
+                    print(f"Lỗi khi xử lý loại giải ngân: {str(e)}")
+                    loaiGiaiNgan = "1"  # Giá trị mặc định nếu có lỗi
                 van_ban_data = {
                     "VanBanAIID": van_ban_id,
                     "SoVanBan": data_json["ThongTinChung"].get("SoVanBan", ""),
@@ -4147,14 +4340,14 @@ async def image_extract_multi_cloud_vision(
                     "TenNguonVon": data_json["ThongTinChung"].get("TenNguonVon", ""),
                     "NienDo": data_json["ThongTinChung"].get("NienDo", ""),
                     "LoaiKHVonID": data_json["ThongTinChung"].get("LoaiKHVonID", "2"), # mặc định là 2 (năm nay)
-                    "SoTien": data_json["ThongTinChung"].get("SoTien", "0"),
                     "NguoiKy": data_json["ThongTinChung"].get("NguoiKy", ""),
                     "ChucDanhNguoiKy": data_json["ThongTinChung"].get("ChucDanhNguoiKy", ""),
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "TrichYeu": data_json["ThongTinChung"].get("TrichYeu", ""),
+                    "LoaiGiaiNgan": loaiGiaiNgan,
                     "NghiepVuID": data_json["ThongTinChung"].get("NghiepVuID", ""),
                     "TenNhaThau": data_json["ThongTinChung"].get("TenNhaThau", ""),
-                    "GiaTri": data_json["ThongTinChung"].get("SoTien", "0"),
+                    "GiaTri": data_json["ThongTinChung"].get("GiaTri", "0"),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
                     "DuAnID": duAnID,
