@@ -26,7 +26,8 @@ import re
 from app.services.DungChung import encode_image_to_base64 
 from openai import OpenAI
 from unidecode import unidecode
-from azure.ai.formrecognizer import DocumentAnalysisClient
+from azure.ai.documentintelligence import DocumentIntelligenceClient
+from azure.ai.documentintelligence.models import AnalyzeResult, DocumentTable, DocumentLine, AnalyzeDocumentRequest, DocumentContentFormat
 from azure.core.credentials import AzureKeyCredential
 import tempfile
 import fitz  # PyMuPDF for PDF processing
@@ -69,7 +70,9 @@ AZURE_ENDPOINT = os.getenv('AZURE_FORM_RECOGNIZER_ENDPOINT')
 AZURE_KEY = os.getenv('AZURE_FORM_RECOGNIZER_KEY')
 
 # Initialize Azure client
-azure_client = DocumentAnalysisClient(AZURE_ENDPOINT, AzureKeyCredential(AZURE_KEY))
+azure_client = DocumentIntelligenceClient(
+    endpoint=AZURE_ENDPOINT, credential=AzureKeyCredential(AZURE_KEY)
+)
 
 class MultiImageExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
@@ -440,60 +443,72 @@ async def document_extract(
                         # print(prompt)
                         # print("*"*30)
                         # CHUYỂN PDF SANG DANH SÁCH ẢNH
-                        
-                        # print(f"\n{'='*50}")
-                        # print(f"Đang xử lý kịch bản: {itemKichBan}")
-                        # print(f"Thời gian bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                        # print(f"Đường dẫn file: {itemKichBan['Path']}")
-                        # print(f"Đường dẫn file CHÍNH: {pathPDF}")
-                        # print(f"{'='*50}\n")
+                    
                         try:
                             # Process each file with Azure Form Recognizer
-                            combined_text = ""
+                            combined_text = "" #extract_text_from_images_azure(image_PIL)
                             for temp_file in image_PIL:
                                 try:
-                                    # Chuyển đổi PIL Image thành bytes
                                     img_byte_arr = BytesIO()
                                     temp_file.save(img_byte_arr, format='PNG')
                                     img_byte_arr = img_byte_arr.getvalue()
-                                    # print(img_byte_arr)
-                                    # Extract data with Azure Form Recognizer
-                                    poller = azure_client.begin_analyze_document("prebuilt-layout", document=img_byte_arr)
-                                    result = poller.result()
+                                    
+                                    # Phân tích tài liệu với Azure Form Recognizer
+                                    poller = azure_client.begin_analyze_document(
+                                        "prebuilt-layout",
+                                        body=img_byte_arr,
+                                        output_content_format=DocumentContentFormat.MARKDOWN
+                                    )
+                                    result: AnalyzeResult = poller.result()
+                                    print("======================begin_analyze_document==================")
+                                    print(result)
+                                    print("======================end begin_analyze_document==================")
+                                    markdown_table = ""
+                                    if result.tables is not None:  # Kiểm tra xem result.tables có tồn tại không
+                                        for table in result.tables:
+                                            # print(table)
+                                            column_count = table['columnCount']
+                                            if column_count > 3:
+                                                markdown_table += f"=== START_BANG_CHI_TIET===\n"
+                                            else:
+                                                markdown_table += f"=== START_BANG_TONG_HOP===\n"
+                                            row_count = table['rowCount']
+                                            cells_data = table['cells']
 
-                                    # Collect text and tables
-                                    for page in result.pages:
-                                        for line in page.lines:
-                                            combined_text += line.content + "\n"
+                                            # Tạo một cấu trúc dữ liệu để lưu trữ nội dung của các ô,
+                                            # ví dụ: một danh sách các danh sách (mảng 2D)
+                                            table_content = [['' for _ in range(column_count)] for _ in range(row_count)]
 
-                                    # Process tables if any
-                                    for table in result.tables:
-                                        combined_text += "\nBảng:\n"
-                                        for row_index in range(table.row_count):
-                                            row_cells = [cell.content if cell.content else "" for cell in table.cells if cell.row_index == row_index]
-                                            combined_text += " | ".join(row_cells) + "\n"
-
+                                            # Điền nội dung vào cấu trúc bảng
+                                            for cell in cells_data:
+                                                r_idx = cell['rowIndex']
+                                                c_idx = cell['columnIndex']
+                                                content = cell['content']
+                                                if 0 <= r_idx < row_count and 0 <= c_idx < column_count:
+                                                    table_content[r_idx][c_idx] = content
+                                            # Tạo các hàng dữ liệu
+                                            for row in table_content:
+                                                markdown_table += "| " + " | ".join(row) + " |\n"
+                                            if column_count > 3:
+                                                markdown_table += f"=== END_BANG_CHI_TIET===\n"
+                                            else:
+                                                markdown_table += f"=== END_BANG_TONG_HOP===\n"
+                                    if result.content:
+                                        # markdown_result += result.content
+                                        # Xóa phần table trong nội dung
+                                        combined_text += re.sub(r'<table>.*?</table>', '', str(result.content), flags=re.DOTALL)
+                                        combined_text += markdown_table
+                                    else:
+                                        combined_text += "Không tìm thấy nội dung nào trong tài liệu.\n"
+                                 
                                 except Exception as e:
                                     item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}"
                                     print(f"Error processing file {temp_file}: {str(e)}")
-                            # print("&"*30)
-                            # print(combined_text)
-                            # print("&"*30)
-                            # break
-                            # try:
-                            #     # Tạo tên file text dựa trên tên file PDF
-                            #     text_file_path = os.path.splitext(pathPDF)[0] + '.txt'
-                                
-                            #     # Ghi nội dung combined_text vào file
-                            #     with open(text_file_path, 'w', encoding='utf-8') as f:
-                            #         f.write(combined_text)
-                                    
-                            #     print(f"Đã ghi nội dung text vào file: {text_file_path}")
-                                
-                            # except Exception as e:
-                            #     print(f"Lỗi khi ghi file text: {str(e)}")
-                            #     item['ghiChu'] = f"Lỗi khi ghi file text: {str(e)}"
-                            
+
+                            print("&"*30 + "BEGIN markdown_result")
+                            print(combined_text)
+                            print("&"*30+ " END markdown_result")
+                        #break
                         # Ghi combined_text ra file text
                         except Exception as e:
                             item['ghiChu'] = f"Error processing file {temp_file}: {str(e)}\nDòng lỗi: {e.__traceback__.tb_lineno}\nNội dung lỗi: {e.__dict__ if hasattr(e, '__dict__') else 'Không có thông tin chi tiết'}"
@@ -722,7 +737,6 @@ async def document_extract(
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
-                                "GiaiDoanID": "",
                                 "DuAnID": duAnID,
                                 "DieuChinh": "0",
                                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -750,7 +764,7 @@ async def document_extract(
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
-                                "GiaiDoanID": "",
+                                
                                 "DuAnID": duAnID,
                                 "DieuChinh": "0",
                                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -789,7 +803,7 @@ async def document_extract(
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
-                                "GiaiDoanID": "",
+                                
                                 "DuAnID": duAnID,
                                 "DieuChinh": "0",
                                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -1674,7 +1688,6 @@ async def standardized_data(
         # print(str(dataTimKiemOffline))
         # print("="*20)
         # print(dataTimKiemOffline)
-
         promt_anh_xa_noi_dung_tuong_dong = """
 Bạn là chuyên gia AI trong lĩnh vực xây dựng cơ bản. Nhiệm vụ của bạn là ánh xạ từng khoản mục chi phí từ danh sách nhập vào (`DanhSachCanAnhXa`) với danh mục khoản mục chi phí chuẩn (`DanhMucChuan`). Hãy thực hiện theo các quy tắc dưới đây:
 ### QUY TẮC ÁNH XẠ
@@ -1951,7 +1964,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                     print("+"*20+"tim_kmcp_offline")
                     print(row['TenKMCP'])
                     print("+"*20)
-                    ket_qua_tim_offline = await find_content_similarity(loaiDuLieu='kmcp', duLieuCanTim=row['TenKMCP'])
+                    ket_qua_tim_offline = await find_content_similarity(loaiDuLieu='kmcp', duLieuCanTim=row['TenKMCP'], authorization=authorization)
                     if isinstance(ket_qua_tim_offline, JSONResponse):
                         ket_qua_tim_offline = ket_qua_tim_offline.body.decode('utf-8')
                         ket_qua_tim_offline = json.loads(ket_qua_tim_offline)
@@ -2110,7 +2123,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
                 # print(f"Row data: {row}")
                 # Xử lý PhuongThucLCNT
                 if str(row['PhuongThucLCNT']).strip() != "":
-                    result_pt = await find_content_similarity(loaiDuLieu='phuongthucdth', duLieuCanTim=row['PhuongThucLCNT'])
+                    result_pt = await find_content_similarity(loaiDuLieu='phuongthucdth', duLieuCanTim=row['PhuongThucLCNT'], authorization=authorization)
                     # Chuyển đổi JSONResponse thành dict trước khi serialize
                     if isinstance(result_pt, JSONResponse):
                         result_pt = result_pt.body.decode('utf-8')
@@ -2123,7 +2136,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
 
                 # Xử lý LoaiHopDong
                 if str(row['LoaiHopDong']).strip() != "":
-                    result_lhd = await find_content_similarity(loaiDuLieu='loaihopdong', duLieuCanTim=row['LoaiHopDong'])
+                    result_lhd = await find_content_similarity(loaiDuLieu='loaihopdong', duLieuCanTim=row['LoaiHopDong'], authorization=authorization)
                     # Chuyển đổi JSONResponse thành dict trước khi serialize
                     if isinstance(result_lhd, JSONResponse):
                         result_lhd = result_lhd.body.decode('utf-8')
@@ -2136,7 +2149,7 @@ Xuất dạng chuỗi JSON duy nhất, không cần giải thích, gồm các tr
 
                 # Xử lý HinhThucLCNT
                 if str(row['HinhThucLCNT']).strip() != "":
-                    result_ht = await find_content_similarity(loaiDuLieu='hinhthucdth', duLieuCanTim=row['HinhThucLCNT'])
+                    result_ht = await find_content_similarity(loaiDuLieu='hinhthucdth', duLieuCanTim=row['HinhThucLCNT'], authorization=authorization)
                     # Chuyển đổi JSONResponse thành dict trước khi serialize
                     if isinstance(result_ht, JSONResponse):
                         result_ht = result_ht.body.decode('utf-8')
@@ -2285,16 +2298,20 @@ async def image_extract_multi_azure(
 
         # Process each file with Azure Form Recognizer
         combined_text = ""
-        for temp_file in temp_files:
-            try:
-                # Extract data with Azure Form Recognizer
-                # Extract text from all files using Azure OCR
-                combined_text = extract_text_from_images_azure(temp_files)
+        combined_text += extract_text_from_images_azure(temp_files)
+        print("======================combined_text==================")
+        print(combined_text)
+        print("======================end combined_text==================")
+
+        # for temp_file in temp_files:
+        #     try:
+        #         # Extract data with Azure Form Recognizer
+        #         # Extract text from all files using Azure OCR
 
 
-            except Exception as e:
-                print(f"Error processing file {temp_file}: {str(e)}")
-                continue
+        #     except Exception as e:
+        #         print(f"Error processing file {temp_file}: {str(e)}")
+        #         continue
         pattern = r"===\s*END_BANG_CHI_TIET===\s*?[\s\n]+?===\s*START_BANG_CHI_TIET==="
         # Thay thế bằng chuỗi rỗng để nối các bảng lại
         combined_text = re.sub(pattern, "", combined_text, flags=re.DOTALL)
@@ -2943,8 +2960,29 @@ async def extract_multiple_images_azure_mapping(
 @router.get("/find_content_similarity")
 async def find_content_similarity(
     loaiDuLieu: Optional[str] = None, # KMCP; NguonVon; HinhThucDTh; LoaiHopDong
-    duLieuCanTim: Optional[str] = None
+    duLieuCanTim: Optional[str] = None,
+    authorization: str = Header(...)
 ):
+    user_id = ""
+    don_vi_id = ""
+    # 1. Xác thực token (giữ nguyên logic cũ)
+    try:
+        if authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+            token_data = decode_jwt_token(token)
+            user_id = token_data["userID"]
+            don_vi_id = token_data["donViID"]
+            print(f"Token validated for userID: {user_id}, donViID: {don_vi_id}")
+    except Exception as e:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status": "error",
+                "code": 401,
+                "message": "Lỗi xác thực",
+                "detail": str(e)
+            }
+        )
     # print("loaiDuLieu:", loaiDuLieu)
     # print("duLieuCanTim:", duLieuCanTim)
     if loaiDuLieu.lower() == "kmcp":
@@ -2996,7 +3034,7 @@ async def find_content_similarity(
         try:
             # Truy vấn lấy danh sách KMCP
             query = """
-            select NguonVonID, TenNguonVon 
+            select NguonVonID=convert(nvarchar(36), NguonVonID), TenNguonVon 
             from dbo.NguonVon 
             order by TenNguonVon
             """
@@ -3220,6 +3258,53 @@ async def find_content_similarity(
                     "detail": str(e)
                 }
             )
+    if loaiDuLieu.lower() == "doituong":
+        try:
+            # Truy vấn lấy danh sách KMCP
+            query = f"""
+            select DoiTuongID=convert(nvarchar(36), DoiTuongID), TenDoiTuong from DoiTuong where DonViID=N'{don_vi_id}'
+            """
+            
+            # Thực thi truy vấn
+            data_gui = lay_du_lieu_tu_sql_server(query)
+            
+            # VIET_TAT = {
+            #     "xskt": "Xổ số kiến thiết",
+            # }
+            try:
+                ket_qua_tim = tim_kiem_tuong_dong(duLieuCanTim, data_gui, 0.70)
+                # print(ket_qua_tim)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success", 
+                        "code": 200,
+                        "message": "Tìm kiếm thành công",
+                        "data": ket_qua_tim
+                    }
+                )
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "code": 500,
+                        "message": "Lỗi khi tìm kiếm",
+                        "detail": f"Lỗi chi tiết: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    }
+                )
+            
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "code": 500,
+                    "message": "Lỗi khi tìm kiếm",
+                    "detail": str(e)
+                }
+            )
+
 @router.post("/document_extract_SoHoa")
 async def extract_document_SoHoa(
     files: List[UploadFile] = File(...),

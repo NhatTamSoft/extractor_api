@@ -941,7 +941,10 @@ def extract_text_from_images_azure(image_files: List[str]) -> str:
     Returns:
         str: Extracted content including text and tables.
     """
-    combined_text = ""
+    print("======================extract_text_from_images_azure image_files==================")
+    print(image_files)
+    print("======================extract_text_from_images_azure end image_files==================")
+    combiletext = ""
     for document_path in image_files:
         print(f"\n=== Processing file: {document_path} ===")
         try:
@@ -1013,6 +1016,7 @@ def extract_text_from_images_azure(image_files: List[str]) -> str:
                 markdown_result += markdown_table
             else:
                 markdown_result += "Không tìm thấy nội dung nào trong tài liệu.\n"
+            combiletext += markdown_result
         except HttpResponseError as error:
             print(error)
             # Xử lý các lỗi HTTP cụ thể từ dịch vụ Azure
@@ -1020,8 +1024,10 @@ def extract_text_from_images_azure(image_files: List[str]) -> str:
         except Exception as e:
             print(e)
             #combined_text += f"\n[Error processing {document_path}]: {str(e)}\n"
-
-    return combined_text
+    # print("======================markdown_result==================")
+    # print(markdown_result)
+    # print("======================end markdown_result==================")
+    return combiletext
 
 def extract_text_from_images_google_cloud(image_files: List[str]) -> str:
     """

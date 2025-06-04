@@ -171,7 +171,7 @@ class DatabaseService:
                 van_ban_data.setdefault('GiaiDoan', "3")
             elif f"[{loaiVanBan}]" == "[HOP_DONG]": # Hợp đồng giai đoạn thực hiện dự án
                 van_ban_data.setdefault('LoaiVanBanID', "3F278B7B-6E81-4480-BFC6-80885DAEAFF1")
-                van_ban_data.setdefault('GiaiDoanID', "B0F363A5-3421-4439-B7E7-52452178E21E")
+                van_ban_data.setdefault('GiaiDoanID', "A6671AF3-F6C3-436B-85BE-71A0BEC3E2F5")
                 van_ban_data.setdefault('GiaiDoan', "3")
             elif f"[{loaiVanBan}]" == "[PL_HOP_DONG]": # Phụ lục hợp đồng giai đoạn thực hiện đầu tư
                 van_ban_data.setdefault('LoaiVanBanID', "750CAD7D-BAED-4F61-988A-824B1AF8B0CA")
@@ -182,8 +182,8 @@ class DatabaseService:
                 van_ban_data.setdefault('GiaiDoanID', "DF70801A-78BE-431D-86D7-4ACFD882B20E")
                 van_ban_data.setdefault('GiaiDoan', "3")
             elif f"[{loaiVanBan}]" == "[KLCVHT_NHD]": # Bảng xác nhận KLCV hoàn thành thông qua hợp đồng giai đoạn chuẩn bị đầu tư
-                van_ban_data.setdefault('LoaiVanBanID', "D3956185-6DF4-4DEE-BF5C-F6B89416BD91")
-                van_ban_data.setdefault('GiaiDoanID', "748EFF1A-3FCE-4E67-BBB4-F5486E1980C1")
+                van_ban_data.setdefault('LoaiVanBanID', "1BB503D3-79C0-48BE-818A-2D8D3F71EF20")
+                van_ban_data.setdefault('GiaiDoanID', "DF70801A-78BE-431D-86D7-4ACFD882B20E")
                 van_ban_data.setdefault('GiaiDoan', "2")
             # [GIAI_NGAN_DNTT]	13. Giải ngân (Giấy đề nghị thanh toán vốn 04.a/TT)
             # [GIAI_NGAN_GRV]	14. Giải ngân (Giấy rút vốn 05/TT)
@@ -195,7 +195,7 @@ class DatabaseService:
             else: # Ngược lại
                 van_ban_data.setdefault('LoaiVanBanID', "00000000-0000-0000-0000-000000000000")
                 van_ban_data.setdefault('GiaiDoanID', "00000000-0000-0000-0000-000000000000")
-                van_ban_data.setdefault('GiaiDoan', "")
+                van_ban_data.setdefault('GiaiDoan', "2")
             
             # Đảm bảo các trường cơ bản luôn có giá trị mặc định nếu chưa được cung cấp
             # (Những trường này có trong ví dụ `van_ban_data` ban đầu của bạn)
