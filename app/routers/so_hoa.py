@@ -395,6 +395,8 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                             "content": """You are an AI assistant that extracts information from documents. 
                             For fields with mapping tables, you MUST return the ID (not the code or value).
                             For example, if the language is 'Tiếng Việt', return '92CD991B-B7DB-4AA6-B217-F345954B91C6' instead of '01'.
+                            For process field, return '99148241-C26C-4971-A18C-385AF2556606' for 'Có' or 'A8670461-25BB-404C-9E2B-C3D871E36605' for 'Không'.
+                            For riskRecovery field, return '61E501D0-D32B-48D6-AECA-45D829574B9D' for 'Có' or '3D207EDF-3901-48B8-98C8-39ED9E75D0BF' for 'Không'.
                             You MUST return a valid JSON object containing the mapped fields. 
                             Do not include any other text or explanation in your response."""
                         },
@@ -437,15 +439,15 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
 
                                     IMPORTANT: For fields with mapping tables, return the ID (not the code or value).
                                     For example:
-                                    - For language: return '92CD991B-B7DB-4AA6-B217-F345954B91C6' for 'Tiếng Việt', '02' for 'Tiếng Anh'
-                                    - For maintenance: return '01' for 'Vĩnh viễn', '02' for '70 năm'
-                                    - For typeName: return '01' for 'Nghị quyết', '02' for 'Quyết định'
-                                    - For mode: return '01' for 'Công khai', '02' for 'Sử dụng có điều kiện'
-                                    - For confidenceLevel: return '01' for 'Gốc điện tử', '02' for 'Số hóa'
-                                    - For format: return '01' for 'Tốt', '02' for 'Bình thường'
-                                    - For process: return '0' for 'Không có quy trình xử lý đi kèm', '1' for 'Có quy trình xử lý đi kèm'
-                                    - For riskRecovery: return '0' for 'Không', '1' for 'Có'
-                                    - For riskRecoveryStatus: return '01' for 'Đã dự phòng', '02' for 'Chưa dự phòng'
+                                    - For language: return '92CD991B-B7DB-4AA6-B217-F345954B91C6' for 'Tiếng Việt'
+                                    - For maintenance: return '6D7A48A2-C35B-41B7-A639-DA2DB6319803' for 'Vĩnh viễn'
+                                    - For typeName: return 'B5C9432D-2707-4659-AF56-2D63AC5E85B3' for 'Quyết định'
+                                    - For mode: return '7AF46CF8-E1D9-4294-92D8-18D3D7C0D2BA' for 'Hạn chế'
+                                    - For confidenceLevel: return '4464F593-7189-4784-A7CB-B5D23095D0FC' for 'Bản chính'
+                                    - For format: return '4FC4186D-393F-4F6A-9DDF-D9F964071430' for 'Bình thường'
+                                    - For process: return '99148241-C26C-4971-A18C-385AF2556606' for 'Có' or 'A8670461-25BB-404C-9E2B-C3D871E36605' for 'Không'
+                                    - For riskRecovery: return '61E501D0-D32B-48D6-AECA-45D829574B9D' for 'Có' or '3D207EDF-3901-48B8-98C8-39ED9E75D0BF' for 'Không'
+                                    - For riskRecoveryStatus: return '63A03F14-091C-4A1B-A1B6-9E5CB10B5103' for 'Đã dự phòng' or '48BBB1D1-FB36-4CC6-9750-D16CEBBDF4FB' for 'Chưa dự phòng'
                                     """
                                 },
                                 {
