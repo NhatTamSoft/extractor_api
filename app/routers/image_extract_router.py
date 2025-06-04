@@ -357,15 +357,6 @@ async def document_extract(
                             # Chuyển PDF thành ảnh với các trang được chỉ định
                             images = pdf_to_images(pdf_path, 2.0, page_range)
                         
-                        # print("\n=== Thông tin chi tiết biến images ===")
-                        # print(f"Số lượng ảnh: {len(images)}")
-                        # print("\nChi tiết từng ảnh:")
-                        # for idx, img in enumerate(images):
-                        #     print(f"\nẢnh thứ {idx + 1}:")
-                        #     print(f"Kích thước: {img.size}")
-                        #     print(f"Mode: {img.mode}")
-                        #     print(f"Format: {img.format if hasattr(img, 'format') else 'N/A'}")
-                        # print("=======================================\n")
                         # Thêm các ảnh vào danh sách kết quả
                         all_images.extend(images)
                     
@@ -803,7 +794,6 @@ async def document_extract(
                                 "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                                 "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "TenLoaiVanBan": loaiVanBan,
-                                
                                 "DuAnID": duAnID,
                                 "DieuChinh": "0",
                                 "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -1338,7 +1328,6 @@ async def extract_multiple_images(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -1366,7 +1355,6 @@ async def extract_multiple_images(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -1405,7 +1393,6 @@ async def extract_multiple_images(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -2548,7 +2535,6 @@ async def image_extract_multi_azure(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -2576,7 +2562,6 @@ async def image_extract_multi_azure(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json, ensure_ascii=False),
@@ -2615,7 +2600,6 @@ async def image_extract_multi_azure(
                     "CoQuanBanHanh": data_json["ThongTinChung"].get("CoQuanBanHanh", ""),
                     "NgayThaotac": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "TenLoaiVanBan": loaiVanBan,
-                    "GiaiDoanID": "",
                     "DuAnID": duAnID,
                     "DieuChinh": "0",
                     "JsonAI": json.dumps(data_json, ensure_ascii=False),
