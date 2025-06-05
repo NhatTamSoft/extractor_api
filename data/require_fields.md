@@ -158,7 +158,7 @@
 **Mô tả:** Chế độ sử dụng
 
 **Quy tắc trích xuất:**
-- **Vị trí:** Thường xuất hiện ở đầu văn bản
+- **Giá trị mặc định:** 7AF46CF8-E1D9-4294-92D8-18D3D7C0D2BA
 - **Bảng ánh xạ:**
 | ID                                   | Mã | Giá trị       |
 | ------------------------------------ | -- | ------------- |
