@@ -84,96 +84,6 @@ async def extract_document_SoHoa(
     ocr_type: str = Form("azure"),  # 'azure' or 'google_cloud'
     chat_type: str = Form("gemini")  # 'gemini' or 'chatgpt'
 ):
-    # Load require_fields from Markdown file
-    try:
-        with open('data/require_fields.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        # Parse markdown content to extract field information
-        require_fields = []
-        current_field = None
-        in_mapping_table = False
-        
-        for line in content.split('\n'):
-            line = line.strip()
-            if not line:  # Skip empty lines
-                continue
-                
-            # Check for field headers (## number. fieldName)
-            if line.startswith('## '):
-                if current_field:
-                    require_fields.append(current_field)
-                parts = line.split('. ', 1)  # Split only on first occurrence
-                if len(parts) == 2:
-                    field_name = parts[1].strip()
-                    current_field = {
-                        "tenTruong": field_name,
-                        "moTa": "",
-                        "extractionRules": {}
-                    }
-                    in_mapping_table = False
-                continue
-
-            # Check for description
-            if line.startswith('**Mô tả:**'):
-                if current_field:
-                    current_field["moTa"] = line.replace('**Mô tả:**', '').strip()
-                continue
-
-            # Check for extraction rules section
-            if line.startswith('**Quy tắc trích xuất:**'):
-                continue
-
-            # Check for rule items
-            if line.startswith('- **'):
-                if current_field:
-                    parts = line.split(':**', 1)  # Split only on first occurrence
-                    if len(parts) == 2:
-                        key = parts[0].replace('- **', '').strip()
-                        value = parts[1].strip()
-                        current_field["extractionRules"][key] = value
-                continue
-
-            # Check for mapping table header
-            if '| Mã | Giá trị |' in line:
-                if current_field and 'mapping' not in current_field["extractionRules"]:
-                    current_field["extractionRules"]["mapping"] = {}
-                in_mapping_table = True
-                continue
-
-            # Check for mapping table rows
-            if in_mapping_table and line.startswith('|'):
-                if current_field:
-                    parts = [p.strip() for p in line.split('|')]
-                    if len(parts) >= 3:  # Ensure we have enough parts
-                        code = parts[1].strip()
-                        value = parts[2].strip()
-                        if code and value:  # Only add if both code and value exist
-                            current_field["extractionRules"]["mapping"][code] = value
-                continue
-
-            # Reset mapping table flag if we encounter a non-table line
-            if in_mapping_table and not line.startswith('|'):
-                in_mapping_table = False
-
-        # Add the last field if exists
-        if current_field:
-            require_fields.append(current_field)
-
-        if not require_fields:
-            raise ValueError("No fields were parsed from require_fields.md")
-            
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "code": 500,
-                "message": "Lỗi đọc file require_fields.md",
-                "detail": f"Error parsing file: {str(e)}"
-            }
-        )
-
     # Validate file type
     if file_type not in ['image', 'pdf']:
         return JSONResponse(
@@ -268,10 +178,10 @@ async def extract_document_SoHoa(
         if file_type == 'image':
             # Process each image file
             for file in files:
-                await process_image_file(file, require_fields, combined_data, ocr_type, chat_type)
+                await process_image_file(file, combined_data, ocr_type, chat_type)
         else:
             # Process PDF file
-            await process_pdf_file(files[0], selected_pages, require_fields, combined_data, ocr_type, chat_type)
+            await process_pdf_file(files[0], selected_pages, combined_data, ocr_type, chat_type)
 
         return {
             "status": "success",
@@ -288,22 +198,8 @@ async def extract_document_SoHoa(
                 "detail": str(e)
             }
         )
-    
-def get_code_from_mapping(value: str, mapping_table: Dict[str, str]) -> str:
-    """Convert a value to its corresponding ID from a mapping table"""
-    # Normalize the input value
-    value = value.strip().lower()
-    
-    # Try direct mapping
-    for code, mapped_value in mapping_table.items():
-        if mapped_value.lower() == value:
-            # Return the ID instead of the code
-            return code
-            
-    # If no direct match, return the original value
-    return value
 
-async def process_image_file(file: UploadFile, require_fields: List[Dict], combined_data: Dict, ocr_type: str, chat_type: str):
+async def process_image_file(file: UploadFile, combined_data: Dict, ocr_type: str, chat_type: str):
     """Process a single image file"""
     try:
         # Read file content
@@ -327,12 +223,17 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
             # Load prompt template
             system_message, user_message = load_prompt_template()
             
-            # Format user message with OCR text
-            formatted_user_message = f"""
+            # Format complete prompt
+            complete_prompt = f"""
+            {system_message}
+
             {user_message}
+
             ===BẮT ĐẦU_VĂN_BẢN_OCR===
             {extracted_text}
             ===KẾT_THÚC_VĂN_BẢN_OCR===
+
+            Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
             """
 
             # Process with selected chat model
@@ -342,7 +243,7 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
                     {
                         "parts": [
                             {
-                                "text": formatted_user_message
+                                "text": complete_prompt
                             },
                             {
                                 "inline_data": {
@@ -368,7 +269,15 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": formatted_user_message
+                                    "text": f"""
+                                    {user_message}
+
+                                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
+                                    {extracted_text}
+                                    ===KẾT_THÚC_VĂN_BẢN_OCR===
+
+                                    Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
+                                    """
                                 },
                                 {
                                     "type": "image_url",
@@ -426,7 +335,7 @@ async def process_image_file(file: UploadFile, require_fields: List[Dict], combi
     except Exception as e:
         raise Exception(f"Error processing image file {file.filename}: {str(e)}")
 
-async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], require_fields: List[Dict], combined_data: Dict, ocr_type: str, chat_type: str):
+async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], combined_data: Dict, ocr_type: str, chat_type: str):
     """Process a PDF file"""
     temp_file_path = None
     doc = None
@@ -474,11 +383,18 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                     # Load prompt template
                     system_message, user_message = load_prompt_template()
                     
-                    # Format user message with actual data
-                    formatted_user_message = user_message.format(
-                        extracted_text=extracted_text,
-                        require_fields=json.dumps(require_fields, ensure_ascii=False, indent=2)
-                    )
+                    # Format complete prompt
+                    complete_prompt = f"""
+                    {system_message}
+
+                    {user_message}
+
+                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
+                    {extracted_text}
+                    ===KẾT_THÚC_VĂN_BẢN_OCR===
+
+                    Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
+                    """
 
                     # Process with selected chat model
                     if chat_type == 'gemini':
@@ -487,7 +403,7 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                             {
                                 "parts": [
                                     {
-                                        "text": formatted_user_message
+                                        "text": complete_prompt
                                     },
                                     {
                                         "inline_data": {
@@ -513,7 +429,15 @@ async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]]
                                     "content": [
                                         {
                                             "type": "text",
-                                            "text": formatted_user_message
+                                            "text": f"""
+                                            {user_message}
+
+                                            ===BẮT ĐẦU_VĂN_BẢN_OCR===
+                                            {extracted_text}
+                                            ===KẾT_THÚC_VĂN_BẢN_OCR===
+
+                                            Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
+                                            """
                                         },
                                         {
                                             "type": "image_url",
