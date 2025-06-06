@@ -44,6 +44,5 @@ Danh sách nơi nhận trong văn bản, mỗi nơi là 1 phần tử (nếu kh�
 - Chỉ trả về JSON, không giải thích, không có bất kỳ ký tự thừa nào ngoài JSON.
 - Tuyệt đối không ghi chú thích hoặc lặp lại đề bài.
 
-
 # User Message
-Trích xuất thông tin từ văn bản sau theo các định nghĩa và quy tắc trường, Đây là văn bản cần trích xuất:
+Đây là văn bản cần trích xuất:

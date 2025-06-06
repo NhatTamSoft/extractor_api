@@ -58,6 +58,55 @@ azure_client = DocumentIntelligenceClient(
     endpoint=AZURE_ENDPOINT, credential=AzureKeyCredential(AZURE_KEY)
 )
 
+# Định nghĩa bảng tham chiếu loại văn bản
+LOAI_VAN_BAN_MAPPING = {
+    "Báo cáo": {"ID": "BDFEA00E-7B16-4255-BCFA-0128E508ABD7", "Ma": "BC", "Ten": "Báo cáo"},
+    "Công văn": {"ID": "2FE8CDD1-3CEF-4E62-B9CA-09A16D272D91", "Ma": "CV", "Ten": "Công văn"},
+    "Giấy giới thiệu": {"ID": "A6E4DAA0-6875-494D-B41A-11851EE0AC8D", "Ma": "GGT", "Ten": "Giấy giới thiệu"},
+    "Quy định": {"ID": "8D0C9303-A674-43D6-A8CE-13323B52D0E6", "Ma": "QyĐ", "Ten": "Quy định"},
+    "Giấy nghỉ phép": {"ID": "9137AADF-92D5-4926-86CF-16127E833C91", "Ma": "GNP", "Ten": "Giấy nghỉ phép"},
+    "Thông báo": {"ID": "6C0A6267-ED4E-4142-BD81-25D2CC71C63A", "Ma": "TB", "Ten": "Thông báo"},
+    "Quy chế": {"ID": "D97AF75A-6EED-4995-BD2D-25EF2B61960F", "Ma": "QC", "Ten": "Quy chế"},
+    "Quyết định": {"ID": "B5C9432D-2707-4659-AF56-2D63AC5E85B3", "Ma": "QĐ", "Ten": "Quyết định"},
+    "Kế hoạch": {"ID": "7373AB32-EF2E-4E92-A9CD-31B9E3183EE8", "Ma": "KH", "Ten": "Kế hoạch"},
+    "Dự án": {"ID": "8443CDC1-CAD3-4A78-93CF-381E74AF1DD3", "Ma": "DA", "Ten": "Dự án"},
+    "Giấy mời": {"ID": "40C9A198-4102-4BB2-A974-4DA48795B6D6", "Ma": "GM", "Ten": "Giấy mời"},
+    "Giấy ủy quyền": {"ID": "E2F57662-2551-417E-85CC-737951547CE8", "Ma": "GUQ", "Ten": "Giấy ủy quyền"},
+    "Chỉ thị": {"ID": "82C61CD1-A634-4C61-9CDA-81C5E1E436E7", "Ma": "CT", "Ten": "Chỉ thị"},
+    "Bản thỏa thuận": {"ID": "D612665A-F0E6-4F70-B64D-89B6DCB09E40", "Ma": "BTT", "Ten": "Bản thỏa thuận"},
+    "Bản ghi nhớ": {"ID": "819D56E3-DA2C-4069-863D-8BAF00B34B20", "Ma": "BGN", "Ten": "Bản ghi nhớ"},
+    "Tờ trình": {"ID": "A56C2E2E-573B-4E8D-8C21-8C145BC1395A", "Ma": "TTr", "Ten": "Tờ trình"},
+    "Thông cáo": {"ID": "9BF462C1-5303-407E-B0D2-8F6B9E6D1AF0", "Ma": "TC", "Ten": "Thông cáo"},
+    "Chương trình": {"ID": "F2E1B209-BD3E-4EBF-8DCE-900A0AFD8BCE", "Ma": "CTr", "Ten": "Chương trình"},
+    "Thông tư": {"ID": "6603EA6B-5D0F-4A2B-861A-96661DD89754", "Ma": "TT", "Ten": "Thông tư"},
+    "Phiếu chuyển": {"ID": "98409C41-378F-4F5E-BEFB-A5B6165B85B1", "Ma": "PC", "Ten": "Phiếu chuyển"},
+    "Đề án": {"ID": "12A85372-4A91-49AB-8A9B-B66A8999FD60", "Ma": "ĐA", "Ten": "Đề án"},
+    "Công điện": {"ID": "2426DC13-FF84-4253-A677-BB481DDC470B", "Ma": "CĐ", "Ten": "Công điện"},
+    "Nghị quyết": {"ID": "57955C8A-36DF-402E-9EFA-BE6643955E13", "Ma": "NQ", "Ten": "Nghị quyết"},
+    "Hợp đồng": {"ID": "238B4EEC-E25D-48A3-A767-C0FBF43FA586", "Ma": "HĐ", "Ten": "Hợp đồng"},
+    "Phương án": {"ID": "4DE9032C-2D29-4F67-802B-C94768C0DD25", "Ma": "PA", "Ten": "Phương án"},
+    "Nghị Định": {"ID": "948E34AE-8218-4FEA-9820-C9DF552C9765", "Ma": "NĐ", "Ten": "Nghị Định"},
+    "Phiếu gửi": {"ID": "18098372-C9B0-4D81-84D0-D744CECA7264", "Ma": "PG", "Ten": "Phiếu gửi"},
+    "Hướng dẫn": {"ID": "C230E772-4AC5-4639-8BEA-DAA3347196CA", "Ma": "HD", "Ten": "Hướng dẫn"},
+    "Biên bản": {"ID": "ABFAA963-F282-4D4C-9C21-E0796457AC1E", "Ma": "BB", "Ten": "Biên bản"},
+    "Phiếu báo": {"ID": "D5FD393B-0352-400C-A565-E714CB6C6881", "Ma": "PB", "Ten": "Phiếu báo"}
+}
+
+def map_loai_van_ban(ten_loai_van_ban: str) -> Dict[str, str]:
+    """
+    Map tên loại văn bản sang object chứa ID, Ma, Ten
+    
+    Args:
+        ten_loai_van_ban (str): Tên loại văn bản cần map
+        
+    Returns:
+        Dict[str, str]: Object chứa ID, Ma, Ten của loại văn bản
+    """
+    # Nếu không có trong mapping, trả về object rỗng
+    if not ten_loai_van_ban or ten_loai_van_ban not in LOAI_VAN_BAN_MAPPING:
+        return {"ID": "", "Ma": "", "Ten": ""}
+    return LOAI_VAN_BAN_MAPPING[ten_loai_van_ban]
+
 class MultiImageExtractRequest(BaseModel):
     pages: Optional[List[int]] = None
 
@@ -173,15 +222,193 @@ async def extract_document_SoHoa(
 
     # Initialize combined data
     combined_data = {}
+    all_extracted_text = ""
+    first_image_base64 = None
 
     try:
         if file_type == 'image':
-            # Process each image file
-            for file in files:
-                await process_image_file(file, combined_data, ocr_type, chat_type)
-        else:
+            # Process each image file to get OCR text
+            temp_file_paths = []
+            try:
+                for file in files:
+                    # Read file content
+                    content = await file.read()
+                    
+                    # Save to temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                        temp_file.write(content)
+                        temp_file_paths.append(temp_file.name)
+                    
+                    # Save first image for chat model
+                    if first_image_base64 is None:
+                        first_image_base64 = base64.b64encode(content).decode('utf-8')
+
+                # Extract text from all images at once
+                if ocr_type == 'azure':
+                    all_extracted_text = extract_text_from_images_azure(temp_file_paths)
+                else:  # google_cloud
+                    all_extracted_text = extract_text_from_images_google_cloud(temp_file_paths)
+
+            finally:
+                # Clean up temporary files
+                for temp_file_path in temp_file_paths:
+                    if os.path.exists(temp_file_path):
+                        try:
+                            os.remove(temp_file_path)
+                        except Exception as e:
+                            print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
+
+        else:  # PDF
             # Process PDF file
-            await process_pdf_file(files[0], selected_pages, combined_data, ocr_type, chat_type)
+            temp_file_path = None
+            doc = None
+            try:
+                # Create a temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    content = await files[0].read()
+                    temp_file.write(content)
+                    temp_file.flush()
+                    temp_file_path = temp_file.name
+
+                # Read PDF pages
+                doc = fitz.open(temp_file_path)
+                total_pages = len(doc)
+
+                if selected_pages is None:
+                    selected_pages = list(range(1, total_pages + 1))
+
+                # Process each selected page
+                temp_img_paths = []
+                try:
+                    for page_num in selected_pages:
+                        if 1 <= page_num <= total_pages:
+                            page = doc.load_page(page_num - 1)
+                            
+                            # Convert page to image
+                            pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                            img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
+                            
+                            # Save page image to temporary file
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_img_file:
+                                img.save(temp_img_file.name, format="PNG")
+                                temp_img_paths.append(temp_img_file.name)
+
+                            # Save first page image for chat model
+                            if first_image_base64 is None:
+                                buffered = BytesIO()
+                                img.save(buffered, format="PNG")
+                                first_image_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+                    # Extract text from all selected pages at once
+                    if ocr_type == 'azure':
+                        all_extracted_text = extract_text_from_images_azure(temp_img_paths)
+                    else:  # google_cloud
+                        all_extracted_text = extract_text_from_images_google_cloud(temp_img_paths)
+
+                finally:
+                    # Clean up temporary image files
+                    for temp_img_path in temp_img_paths:
+                        if os.path.exists(temp_img_path):
+                            try:
+                                os.remove(temp_img_path)
+                            except Exception as e:
+                                print(f"Warning: Could not delete temporary file {temp_img_path}: {str(e)}")
+
+            finally:
+                # Close the PDF document if it's open
+                if doc:
+                    doc.close()
+                
+                # Delete the temporary file if it exists
+                if temp_file_path and os.path.exists(temp_file_path):
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception as e:
+                        print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
+
+        # Load prompt template
+        system_message, user_message = load_prompt_template()
+        
+        # Format complete prompt
+        complete_prompt = f"""
+        {system_message}
+        {user_message}
+        {all_extracted_text}
+        """
+        print(complete_prompt)
+
+        # Process with selected chat model
+        if chat_type == 'gemini':
+            client = genai.GenerativeModel('gemini-2.0-flash')
+            response = client.generate_content(complete_prompt)
+            response_text = response.text
+        else:  # chatgpt
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_message
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"""
+                                {user_message}
+                                {all_extracted_text}
+                                """
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{first_image_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=4000,
+                temperature=0,
+                response_format={"type": "json_object"}
+            )
+            response_text = response.choices[0].message.content
+
+        # Clean up response text
+        if response_text.strip().startswith("```json"):
+            response_text = response_text.strip()[7:-3].strip()
+        elif response_text.strip().startswith("```"):
+            response_text = response_text.strip()[3:-3].strip()
+
+        # Parse JSON response
+        try:
+            # Nếu có ```json ``` bao ngoài
+            match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if not match:
+                # Nếu chỉ có ``` bao ngoài
+                match = re.search(r'```\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if not match:
+                # Nếu không có markdown block, cố parse toàn bộ
+                match = re.search(r'(\{.*\})', response_text, re.DOTALL)
+
+            if match:
+                clean_json = match.group(1)
+                data = json.loads(clean_json)
+            else:
+                raise ValueError("Không tìm thấy JSON hợp lệ trong phản hồi AI")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Lỗi parse JSON từ AI: {str(e)}")
+        
+        # Map TenLoaiTaiLieu to object with ID, Ma, Ten
+        if "TenLoaiTaiLieu" in data:
+            data["TenLoaiTaiLieu"] = map_loai_van_ban(data["TenLoaiTaiLieu"])
+        
+        # Update combined data
+        for key, value in data.items():
+            if key not in combined_data or not combined_data[key]:
+                combined_data[key] = value
 
         return {
             "status": "success",
@@ -198,297 +425,6 @@ async def extract_document_SoHoa(
                 "detail": str(e)
             }
         )
-
-async def process_image_file(file: UploadFile, combined_data: Dict, ocr_type: str, chat_type: str):
-    """Process a single image file"""
-    try:
-        # Read file content
-        content = await file.read()
-        
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-            temp_file.write(content)
-            temp_file_path = temp_file.name
-
-        try:
-            # Extract text using selected OCR type
-            if ocr_type == 'azure':
-                extracted_text = extract_text_from_images_azure([temp_file_path])
-            else:  # google_cloud
-                extracted_text = extract_text_from_images_google_cloud([temp_file_path])
-
-            # Convert image to base64 for chat model
-            image_base64 = base64.b64encode(content).decode('utf-8')
-
-            # Load prompt template
-            system_message, user_message = load_prompt_template()
-            
-            # Format complete prompt
-            complete_prompt = f"""
-            {system_message}
-
-            {user_message}
-
-            ===BẮT ĐẦU_VĂN_BẢN_OCR===
-            {extracted_text}
-            ===KẾT_THÚC_VĂN_BẢN_OCR===
-
-            Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
-            """
-
-            # Process with selected chat model
-            if chat_type == 'gemini':
-                client = genai.GenerativeModel('gemini-2.0-flash')
-                response = client.generate_content([
-                    {
-                        "parts": [
-                            {
-                                "text": complete_prompt
-                            },
-                            {
-                                "inline_data": {
-                                    "mime_type": "image/jpeg",
-                                    "data": image_base64
-                                }
-                            }
-                        ]
-                    }
-                ])
-                response_text = response.text
-            else:  # chatgpt
-                client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": system_message
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": f"""
-                                    {user_message}
-
-                                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
-                                    {extracted_text}
-                                    ===KẾT_THÚC_VĂN_BẢN_OCR===
-
-                                    Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
-                                    """
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{image_base64}"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=4000,
-                    temperature=0,
-                    response_format={"type": "json_object"}
-                )
-                response_text = response.choices[0].message.content
-
-            # Clean up response text
-            if response_text.strip().startswith("```json"):
-                response_text = response_text.strip()[7:-3].strip()
-            elif response_text.strip().startswith("```"):
-                response_text = response_text.strip()[3:-3].strip()
-
-            # Parse JSON response
-            try:
-                # Nếu có ```json ``` bao ngoài
-                match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
-                if not match:
-                    # Nếu chỉ có ``` bao ngoài
-                    match = re.search(r'```\s*(\{.*?\})\s*```', response_text, re.DOTALL)
-                if not match:
-                    # Nếu không có markdown block, cố parse toàn bộ
-                    match = re.search(r'(\{.*\})', response_text, re.DOTALL)
-
-                if match:
-                    clean_json = match.group(1)
-                    data = json.loads(clean_json)
-                else:
-                    raise ValueError("Không tìm thấy JSON hợp lệ trong phản hồi AI")
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Lỗi parse JSON từ AI: {str(e)}")
-            
-            # Update combined data
-            for key, value in data.items():
-                if key not in combined_data or not combined_data[key]:
-                    combined_data[key] = value
-
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                except Exception as e:
-                    print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
-
-    except Exception as e:
-        raise Exception(f"Error processing image file {file.filename}: {str(e)}")
-
-async def process_pdf_file(file: UploadFile, selected_pages: Optional[List[int]], combined_data: Dict, ocr_type: str, chat_type: str):
-    """Process a PDF file"""
-    temp_file_path = None
-    doc = None
-    try:
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_file.flush()
-            temp_file_path = temp_file.name
-
-        # Read PDF pages
-        doc = fitz.open(temp_file_path)
-        total_pages = len(doc)
-
-        if selected_pages is None:
-            selected_pages = list(range(1, total_pages + 1))
-
-        # Process each selected page
-        for page_num in selected_pages:
-            if 1 <= page_num <= total_pages:
-                page = doc.load_page(page_num - 1)
-                
-                # Convert page to image
-                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
-                img = Image.frombuffer("RGB", [pix.width, pix.height], pix.samples, "raw", "RGB", 0, 1)
-                
-                # Save page image to temporary file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_img_file:
-                    img.save(temp_img_file.name, format="PNG")
-                    temp_img_path = temp_img_file.name
-
-                try:
-                    # Extract text using selected OCR type
-                    if ocr_type == 'azure':
-                        extracted_text = extract_text_from_images_azure([temp_img_path])
-                    else:  # google_cloud
-                        extracted_text = extract_text_from_images_google_cloud([temp_img_path])
-
-                    # Convert image to base64
-                    buffered = BytesIO()
-                    img.save(buffered, format="PNG")
-                    image_base64 = base64.b64encode(buffered.getvalue()).decode()
-
-                    # Load prompt template
-                    system_message, user_message = load_prompt_template()
-                    
-                    # Format complete prompt
-                    complete_prompt = f"""
-                    {system_message}
-
-                    {user_message}
-
-                    ===BẮT ĐẦU_VĂN_BẢN_OCR===
-                    {extracted_text}
-                    ===KẾT_THÚC_VĂN_BẢN_OCR===
-
-                    Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
-                    """
-
-                    # Process with selected chat model
-                    if chat_type == 'gemini':
-                        client = genai.GenerativeModel('gemini-2.0-flash')
-                        response = client.generate_content([
-                            {
-                                "parts": [
-                                    {
-                                        "text": complete_prompt
-                                    },
-                                    {
-                                        "inline_data": {
-                                            "mime_type": "image/png",
-                                            "data": image_base64
-                                        }
-                                    }
-                                ]
-                            }
-                        ])
-                        response_text = response.text
-                    else:  # chatgpt
-                        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-                        response = client.chat.completions.create(
-                            model="gpt-4o",
-                            messages=[
-                                {
-                                    "role": "system",
-                                    "content": system_message
-                                },
-                                {
-                                    "role": "user",
-                                    "content": [
-                                        {
-                                            "type": "text",
-                                            "text": f"""
-                                            {user_message}
-
-                                            ===BẮT ĐẦU_VĂN_BẢN_OCR===
-                                            {extracted_text}
-                                            ===KẾT_THÚC_VĂN_BẢN_OCR===
-
-                                            Lưu ý: Chỉ trả về JSON object, không thêm bất kỳ text nào khác.
-                                            """
-                                        },
-                                        {
-                                            "type": "image_url",
-                                            "image_url": {
-                                                "url": f"data:image/png;base64,{image_base64}"
-                                            }
-                                        }
-                                    ]
-                                }
-                            ],
-                            max_tokens=4000,
-                            temperature=0,
-                            response_format={"type": "json_object"}
-                        )
-                        response_text = response.choices[0].message.content
-
-                    # Clean up response text
-                    if response_text.strip().startswith("```json"):
-                        response_text = response_text.strip()[7:-3].strip()
-                    elif response_text.strip().startswith("```"):
-                        response_text = response_text.strip()[3:-3].strip()
-
-                    # Parse JSON response
-                    data = json.loads(response_text)
-                    
-                    # Update combined data
-                    for key, value in data.items():
-                        if key not in combined_data or not combined_data[key]:
-                            combined_data[key] = value
-
-                finally:
-                    # Clean up temporary image file
-                    if os.path.exists(temp_img_path):
-                        try:
-                            os.remove(temp_img_path)
-                        except Exception as e:
-                            print(f"Warning: Could not delete temporary file {temp_img_path}: {str(e)}")
-
-    except Exception as e:
-        raise Exception(f"Error processing PDF file {file.filename}: {str(e)}")
-    finally:
-        # Close the PDF document if it's open
-        if doc:
-            doc.close()
-        
-        # Delete the temporary file if it exists
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception as e:
-                print(f"Warning: Could not delete temporary file {temp_file_path}: {str(e)}")
 
 def extract_text_from_images_azure(image_files: List[str]) -> str:
     """
