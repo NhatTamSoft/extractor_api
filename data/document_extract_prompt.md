@@ -48,4 +48,4 @@ Danh sách nơi nhận trong văn bản, mỗi nơi là 1 phần tử (nếu kh�
 Đây là văn bản cần trích xuất:
 
 # User Message
-Trích xuất thông tin từ văn bản sau theo các định nghĩa và quy tắc trường, sau đây là văn bản cần trích xuất:
+Sau đây là văn bản cần trích xuất:
