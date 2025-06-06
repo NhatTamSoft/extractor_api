@@ -5,7 +5,7 @@
 NTSOFT API Document AI (tên repository: `extractor_api`) là một giải pháp mạnh mẽ được xây dựng bằng FastAPI, chuyên dùng để xử lý và chuyển đổi văn bản từ tài liệu giấy (hoặc hình ảnh/PDF của tài liệu giấy) thành các tài liệu thông minh, có cấu trúc và dễ dàng khai thác. API này giúp tự động hóa quy trình nhập liệu, trích xuất thông tin quan trọng và số hóa tài liệu một cách hiệu quả.
 
 Dự án này được phát triển nhằm mục đích:
-testtttttt
+testtttttttessst
 
 - Giảm thiểu thời gian và công sức xử lý tài liệu thủ công.
 - Nâng cao độ chính xác trong việc trích xuất dữ liệu.
